@@ -1,0 +1,6 @@
+# Runtime dependencies. See pyproject.toml for the authoritative list.
+# np.trapezoid, used by the energy integration, arrived in numpy 2.0.
+numpy>=2.0
+pandas>=2.0
+openpyxl>=3.1
+XlsxWriter>=3.1

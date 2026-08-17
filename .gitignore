@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+env/
+
+.vscode/
+.idea/
+.DS_Store
+
+# Workspaces produced by the tool. raw_input/ is an immutable archive of
+# instrument exports and processed_output/ is regenerated from it; neither
+# belongs in version control.
+data/
+raw_input/
+processed_output/
+knowledge_base.db
+
+# Real instrument exports used by the regression pins. Drop them in locally;
+# they are not redistributed here.
+tests/data/*.xlsx
+tests/data/*.xls

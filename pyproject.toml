@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compression-tool"
+version = "0.2.0"
+description = "Ingestion, metrics and persistence for cyclic / multi-stage compression tests"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # np.trapezoid, used by the energy integration, arrived in numpy 2.0.
+    "numpy>=2.0",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "XlsxWriter>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+compression-tool = "compression_tool.cli:main"
+
+[tool.setuptools]
+packages = ["compression_tool"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# core.TestData is a data container, not a test class; without this pytest
+# tries to collect it and warns on every run.
+python_classes = ["Check*"]
+filterwarnings = ["error::DeprecationWarning"]
