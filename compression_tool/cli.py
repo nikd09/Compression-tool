@@ -50,6 +50,15 @@ def _config_from_args(args: argparse.Namespace) -> Config:
     return cfg
 
 
+def _distinct_warnings(payloads) -> list[dict]:
+    seen: dict[str, dict] = {}
+    for payload in payloads:
+        for w in payload.get("analysis", {}).get("warnings", []) or []:
+            seen.setdefault(w.get("code", ""), w)
+    rank = {"critical": 0, "caution": 1, "info": 2}
+    return sorted(seen.values(), key=lambda w: rank.get(w.get("severity"), 9))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="compression_tool",
@@ -61,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_prev = sub.add_parser("preview", help="analyse without writing anything")
     p_prev.add_argument("files", nargs="+")
+    p_prev.add_argument("--gauge-length-confirmed", action="store_true",
+                        help="assert that the displacement channel spans only h0")
     _add_config_args(p_prev)
 
     p_ing = sub.add_parser("ingest", help="archive, analyse, persist and index")
@@ -69,6 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="material name; defaults to the file stem")
     p_ing.add_argument("--no-index", action="store_true",
                        help="write the records but leave the database untouched")
+    p_ing.add_argument("--gauge-length-confirmed", action="store_true",
+                       help="assert that the displacement channel spans only h0; "
+                            "without it, strain and modulus are marked provisional")
     _add_config_args(p_ing)
 
     p_list = sub.add_parser("list", help="list indexed specimens")
@@ -85,7 +99,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ws = Workspace.at(args.workspace)
 
     if args.command == "preview":
-        rows = preview(args.files, _config_from_args(args))
+        rows = preview(args.files, _config_from_args(args),
+                       gauge_length_confirmed=args.gauge_length_confirmed)
         for row in rows:
             if "error" in row:
                 print(f"{Path(row['source_file']).name}: FAILED - {row['error']}")
@@ -100,6 +115,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             for note in row["notes"]:
                 print(f"    note: {note}")
+            for w in row.get("warnings", []):
+                print(f"    [{w['severity'].upper()}] {w['message']}")
         return 0 if any("error" not in r for r in rows) else 1
 
     if args.command == "ingest":
@@ -108,8 +125,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             material=args.material,
             cfg=_config_from_args(args),
             update_index=not args.no_index,
+            gauge_length_confirmed=args.gauge_length_confirmed,
         )
         print(result.summary())
+        for w in _distinct_warnings(result.payloads):
+            print(f"  [{w['severity'].upper()}] {w['message']}")
         return 0 if result.specimens else 1
 
     if args.command == "rebuild":

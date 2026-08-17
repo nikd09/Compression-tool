@@ -37,6 +37,7 @@ from typing import Any, Iterable, Optional
 import numpy as np
 import pandas as pd
 
+from . import diagnostics
 from .core import Config, TestData
 from .schema import SCHEMA_VERSION
 
@@ -211,6 +212,7 @@ def build_payload(
     raw_path: Optional[Path],
     source_sha256: str,
     workspace: Optional[Workspace] = None,
+    gauge_length_confirmed: bool = False,
 ) -> dict:
     """Assemble everything needed to reproduce and index one specimen's result.
 
@@ -250,6 +252,16 @@ def build_payload(
             "h0_mm": jsonable(attrs.get("h0_mm")),
             "has_strain": bool(attrs.get("h0_mm")),
             "notes": list(attrs.get("notes", [])),
+            # What the strain columns were divided by, and whether anyone has
+            # checked it. Travels with the record so a stored result can never
+            # be read as validated strain when nobody confirmed the gauge length.
+            "strain_basis": diagnostics.strain_basis(
+                test, gauge_length_confirmed=gauge_length_confirmed
+            ),
+            # Conditions that change how these numbers should be read.
+            "warnings": diagnostics.collect(
+                test, df, cfg, gauge_length_confirmed=gauge_length_confirmed
+            ),
         },
         "config": {k: jsonable(v) for k, v in asdict(cfg).items()},
         "cycles": cycle_records(df),

@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
-from . import excel_export, html_report, knowledge_base
+from . import diagnostics, excel_export, html_report, knowledge_base
 from .core import Config, analyse_test, load_tests
 from .persistence import (
     Workspace,
@@ -73,7 +73,12 @@ class IngestResult:
         return "\n".join(lines)
 
 
-def preview(paths: Sequence[str | os.PathLike], cfg: Optional[Config] = None) -> list[dict]:
+def preview(
+    paths: Sequence[str | os.PathLike],
+    cfg: Optional[Config] = None,
+    *,
+    gauge_length_confirmed: bool = False,
+) -> list[dict]:
     """Load and analyse without writing anything.
 
     Exists for the Ingest screen: the user should see the detected format,
@@ -103,6 +108,11 @@ def preview(paths: Sequence[str | os.PathLike], cfg: Optional[Config] = None) ->
                 "global_peak_mpa": df.attrs.get("global_peak_mpa") if not df.empty else None,
                 "multi_stage": bool(df.attrs.get("multi_stage", False)) if not df.empty else False,
                 "notes": list(test.notes),
+                # Shown on the Ingest screen so threshold and gauge-length
+                # problems surface BEFORE anything is committed to the archive.
+                "warnings": diagnostics.collect(
+                    test, df, cfg, gauge_length_confirmed=gauge_length_confirmed
+                ),
             })
     return out
 
@@ -115,8 +125,15 @@ def ingest(
     cfg: Optional[Config] = None,
     when: Optional[datetime] = None,
     update_index: bool = True,
+    gauge_length_confirmed: bool = False,
 ) -> IngestResult:
-    """Archive, analyse, persist and index one or more exports."""
+    """Archive, analyse, persist and index one or more exports.
+
+    `gauge_length_confirmed` asserts that the displacement channel spans only
+    the specimen height h0. It defaults to False, which marks every strain and
+    modulus figure provisional: nothing in an export proves what the
+    extensometer was clamped across, so the tool will not assume it.
+    """
     cfg = cfg or Config()
     ws = workspace if isinstance(workspace, Workspace) else Workspace.at(workspace)
     ws.ensure()
@@ -170,6 +187,7 @@ def ingest(
                 raw_path=Path(source["archived_abs"]),
                 source_sha256=source["sha256"],
                 workspace=ws,
+                gauge_length_confirmed=gauge_length_confirmed,
             )
             stem = _unique_stem(slugify(test.label), used_names)
             paths_written = _write_specimen_artifacts(payload, run_dir, stem)

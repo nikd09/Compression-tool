@@ -52,6 +52,14 @@ border-left:3px solid var(--accent);padding:.7rem .9rem;border-radius:0 6px 6px 
 margin:.75rem 0;color:var(--muted);font-size:13.5px}
 footer{margin-top:3rem;color:var(--muted);font-size:12.5px;
 border-top:1px solid var(--line);padding-top:1rem}
+.warn{display:flex;gap:.75rem;align-items:baseline;padding:.7rem .9rem;
+margin:.5rem 0;border-radius:6px;font-size:13.5px;border-left:3px solid currentColor}
+.warn .sev{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+flex:0 0 auto;opacity:.85}
+.warn span:last-child{color:var(--fg)}
+.warn-critical{background:var(--bad-bg);color:var(--bad-fg)}
+.warn-caution{background:var(--warn-bg);color:var(--warn-fg)}
+.warn-info{background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent)}
 """
 
 
@@ -105,6 +113,22 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
             cells.append(f"<td>{_esc(value)}</td>")
         parts.append(f"<tr><td>{_esc(key)}</td>{''.join(cells)}</tr>")
     parts.append("</tbody></table></div>")
+
+    # --- warnings, ahead of the numbers they qualify -------------------------
+    seen: dict[str, dict] = {}
+    for payload in payloads:
+        for w in payload.get("analysis", {}).get("warnings", []) or []:
+            seen.setdefault(w.get("code", ""), w)
+    if seen:
+        parts.append("<h2>Read this before quoting the numbers</h2>")
+        rank = {"critical": 0, "caution": 1, "info": 2}
+        for w in sorted(seen.values(), key=lambda w: rank.get(w.get("severity"), 9)):
+            sev = w.get("severity", "info")
+            parts.append(
+                f"<div class='warn warn-{_esc(sev)}'>"
+                f"<span class='sev'>{_esc(sev)}</span>"
+                f"<span>{_esc(w.get('message', ''))}</span></div>"
+            )
 
     notes = [n for p in payloads for n in p.get("specimen", {}).get("notes", [])]
     for note in dict.fromkeys(notes):

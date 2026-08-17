@@ -459,7 +459,11 @@ def _stiffness(stress, disp, lo_mpa, hi_mpa) -> tuple[Optional[float], int, Opti
 
 
 def _energies(stress, disp) -> tuple[Optional[float], Optional[float], Optional[float]]:
-    """Work in / recovered / dissipated per unit volume (MPa*mm).
+    """Work in / recovered / dissipated, per unit CROSS-SECTIONAL AREA (MPa*mm).
+
+    Integrating stress over displacement gives (1/A) * integral(F dx), which is
+    work per unit area, NOT per unit volume. Divide by h0 for work per unit
+    volume, which lands in MPa.
 
     The path is split at MAXIMUM DISPLACEMENT, not maximum stress. In a
     load-controlled test with a dwell, the specimen keeps creeping while
@@ -519,7 +523,15 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
             {
                 "Cycle": n,
                 "PeakStress_MPa": peak,
+                # Displacement at the instant of MAXIMUM STRESS. Not the same
+                # as the largest displacement in the cycle -- see MaxDisp_mm.
                 "PeakDisp_mm": float(cx[peak_idx]),
+                # Largest displacement reached in the cycle. It occurs at the
+                # END of the dwell, later than the stress peak, because the
+                # specimen keeps creeping while stress is already held constant.
+                # This is the point the energy integrals split the loop at, and
+                # on a long dwell it can exceed PeakDisp_mm by 20% or more.
+                "MaxDisp_mm": float(np.nanmax(cx)),
                 # --- residual / permanent deformation -----------------------
                 # Read on the loading branch at a LOW common stress, not at
                 # zero: at zero stress the specimen loses contact and the
@@ -570,6 +582,7 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
             ("PermDef_cumulative_mm", "PermDef_cumulative_pct"),
             ("PermDef_incremental_mm", "PermDef_incremental_pct"),
             ("PeakDisp_mm", "PeakStrain_pct"),
+            ("MaxDisp_mm", "MaxStrain_pct"),
             ("Creep_during_hold_mm", "Creep_pct"),
         ]:
             df[dst] = df[src] / test.h0_mm * 100.0

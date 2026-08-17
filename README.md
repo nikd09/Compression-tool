@@ -4,9 +4,17 @@ Ingestion, metrics and persistence for load-controlled cyclic / multi-stage
 compression tests exported from a Zwick Z100.
 
 The calculation engine (`compression_tool/core.py`) is the validated reference
-implementation described in [HANDOFF.md](HANDOFF.md) and is used unmodified.
-This repository adds the persistence layer and the Excel export around it —
-steps 1 and 2 of the build order in that brief.
+implementation described in [HANDOFF.md](HANDOFF.md). This repository adds the
+persistence layer and the Excel export around it — steps 1 and 2 of the build
+order in that brief.
+
+Two deliberate changes have been made to the engine since the handoff, both
+requested after review against the real T050E1 export:
+
+- `MaxDisp_mm` (and `MaxStrain_pct`) added — the largest displacement in the
+  cycle, distinct from `PeakDisp_mm`, which is displacement at maximum *stress*.
+- The energy docstring corrected: `MPa·mm` is work per unit cross-sectional
+  area, not per unit volume. No computed value changed.
 
 ## Install
 
@@ -97,8 +105,16 @@ deformation column that is **not** compression set in the ASTM D395 / ISO 815
 sense. Anyone reading the workbook without the surrounding conversation needs
 those distinctions in the file itself.
 
+The JSON contract is frozen at schema_version 2 — see
+[docs/JSON_CONTRACT.md](docs/JSON_CONTRACT.md). Build the UI against that.
+
 ### Reading the numbers
 
+- **Displacement, two meanings** — *displacement at peak stress* is taken at
+  maximum stress; *maximum displacement* is the largest in the cycle, at the end
+  of the dwell, and is where the energy integrals split. The second exceeds the
+  first by however much the specimen crept under load — 37% in cycle 8 of the
+  T050E1 export. Quote maximum displacement for how far the specimen moved.
 - **Stiffness (common band)** — fitted over an identical stress window in every
   cycle (25–75% of the smallest cycle peak). This is the one that may be
   compared across stages, specimens and materials.
@@ -109,14 +125,26 @@ those distinctions in the file itself.
   from the fit's n and R². A slope from a handful of points on a fast machine
   ramp is not trustworthy; the flag says so instead of letting it be plotted as
   solid.
-- **Hysteresis loss** — dissipated ÷ input. The cross-test comparable form;
-  absolute loss scales with stress amplitude.
+- **Energy** — `MPa·mm` is work per unit **cross-sectional area**, not per unit
+  volume; divide by h0 for per-volume in MPa. **Hysteresis loss** — dissipated ÷
+  input — is a ratio, immune to that conversion, and is the cross-test
+  comparable form; absolute loss scales with stress amplitude.
 - **Permanent deformation** — residual displacement read on the *loading*
   branch at a low common stress, not at zero, because the specimen loses
   contact at zero and the signal falls back to a few-micrometre baseline.
-- **Hold length** — in **samples**, not seconds. Neither export carries a time
-  channel, so creep *rate* cannot be computed, only total creep across the
-  dwell. Enabling a time channel in the export settings would lift that.
+- **Hold displacement and hold length** — always read together. Hold
+  displacement is a **total, not a rate**, so a longer dwell accumulates more at
+  identical material behaviour; the T050E1 dwell varies 3.5× across its cycles.
+  The per-1000-samples column removes that distortion so cycles can be *ranked*,
+  but it is **not a creep rate** and must never be plotted as one: converting
+  samples to seconds needs a constant sampling interval, which the export does
+  not record. A real rate requires a time channel enabled at export.
+- **Strain and modulus are conditional.** Both depend on h0 being the gauge
+  length the displacement channel actually spans, which no export proves. Every
+  record carries a `strain_basis` block with `gauge_length_confirmed` (default
+  **false**) and `strain_valid`; until someone asserts it via
+  `--gauge-length-confirmed`, strain is marked provisional and a `critical`
+  warning travels with the result. Stress-based metrics are unaffected.
 
 ## Tests
 
@@ -124,13 +152,17 @@ those distinctions in the file itself.
 pytest
 ```
 
-83 tests run against synthetic exports built to reproduce the three behaviours
+124 tests run against synthetic exports built to reproduce the three behaviours
 the real sample data revealed: rising stage peaks, a dwell during which
 displacement keeps climbing after stress has levelled off, and a collapse to a
 few-micrometre baseline at near-zero stress. Those are what the engine's less
 obvious choices exist for, so a synthetic signal without them would test
 nothing that matters. The permanent-set pin is checked against a closed-form
 value rather than a recorded output.
+
+`tests/test_json_contract.py` pins the frozen record shape key by key, and
+`tests/test_diagnostics.py` checks each warning both fires when it should and
+stays quiet when it should not.
 
 A further 10 in `tests/test_regression_real_files.py` run against the real
 `Mehrstufiger` export and pin what it actually produced: 2 specimens × 9
@@ -150,8 +182,11 @@ Config), the dashboard rework, and plots. The pieces they need are in place —
 and `knowledge_base.cycles_for_materials()` returns the shape a compare view
 needs.
 
-Two open questions carried over from the handoff and not decided here:
+Open items:
 
+- **Confirm the `Sonder LÄA` gauge length.** Until someone verifies that the
+  extensometer spans only the 0.471 mm specimen, strain and modulus stay
+  provisional. This is a fixturing question the tool cannot answer.
 - **h0 for exports without a metadata sheet.** Currently a `Config` fallback
   (`--h0-mm`); strain columns are suppressed rather than faked when it is
   unset. Whether the UI should prompt or a material lookup table should hold it

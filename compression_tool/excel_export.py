@@ -20,9 +20,11 @@ from typing import Any, Optional, Sequence
 import xlsxwriter
 
 from .schema import (
+    HOLD_DISP_RATE,
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
     Column,
+    hold_disp_per_1000_samples,
     stiffness_quality,
     user_facing_cycle_columns,
 )
@@ -72,6 +74,9 @@ def row_values(row: dict, cols: Sequence[Column]) -> list[Any]:
         if col.key == STIFFNESS_QUALITY.key:
             out.append(stiffness_quality(row.get("Stiffness_common_n"),
                                          row.get("Stiffness_common_r2")))
+        elif col.key == HOLD_DISP_RATE.key:
+            out.append(hold_disp_per_1000_samples(row.get("Creep_during_hold_mm"),
+                                                  row.get("HoldPoints")))
         else:
             out.append(row.get(col.key))
     return out
@@ -122,7 +127,26 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
     if analysis.get("has_strain"):
         pairs.append(("Total permanent deformation (%)", last_present("PermDef_cumulative_pct")))
     pairs.append(("Mean hysteresis loss (-)", mean_present("HysteresisLoss_rel")))
-    pairs.append(("Total creep during holds (mm)", total_present("Creep_during_hold_mm")))
+    pairs.append(("Total hold displacement (mm)", total_present("Creep_during_hold_mm")))
+
+    basis = analysis.get("strain_basis") or {}
+    if analysis.get("has_strain"):
+        pairs.append(("", ""))
+        pairs.append(("Strain basis", ""))
+        pairs.append(("Gauge length h0 (mm)", basis.get("h0_mm")))
+        pairs.append(("Measured by channel", basis.get("displacement_channel")))
+        pairs.append(("Gauge length confirmed", bool(basis.get("gauge_length_confirmed"))))
+        pairs.append((
+            "Strain / modulus status",
+            "validated" if basis.get("strain_valid") else "PROVISIONAL - gauge length unconfirmed",
+        ))
+
+    warnings = analysis.get("warnings") or []
+    if warnings:
+        pairs.append(("", ""))
+        pairs.append(("Read this before quoting the numbers", ""))
+        for w in warnings:
+            pairs.append((w.get("severity", "").upper(), w.get("message", "")))
     return pairs
 
 

@@ -55,9 +55,40 @@ def test_cycle_headers_carry_units(tmp_path, single_payload):
     assert "Peak stress (MPa)" in headers
     assert "Stiffness (common band) (MPa/mm)" in headers
     assert "Stiffness (relative band) (MPa/mm)" in headers
-    assert "Creep during hold (mm)" in headers
+    assert "Hold displacement (mm)" in headers
+    assert "Maximum displacement (mm)" in headers
+    assert "Displacement at peak stress (mm)" in headers
     # Internal bookkeeping stays out of the user-facing table.
     assert not any(str(h).startswith("_") for h in headers if h)
+
+
+def test_hold_displacement_is_never_separated_from_hold_length(tmp_path, single_payload):
+    """Hold displacement without hold length invites reading a longer dwell as
+    more movement, which is the exact misreading the pair exists to prevent."""
+    from compression_tool.schema import INSEPARABLE_PAIRS
+
+    path = write_workbook([single_payload], tmp_path / "out.xlsx")
+    headers = [c.value for c in load_workbook(path)["Cycles"][1] if c.value]
+    keys = [c.key for c in user_facing_cycle_columns(has_strain=False)]
+
+    for left, right in INSEPARABLE_PAIRS:
+        assert keys.index(right) == keys.index(left) + 1, f"{left} / {right} split"
+
+    assert "Hold length (samples)" in headers
+    assert headers.index("Hold displacement (mm)") == headers.index("Hold length (samples)") + 1
+
+
+def test_per_sample_column_is_not_called_a_rate(tmp_path, single_payload):
+    """Samples convert to time only under constant sampling, which the export
+    does not record. The column must never present itself as a creep rate."""
+    from compression_tool.schema import HOLD_DISP_RATE
+
+    path = write_workbook([single_payload], tmp_path / "out.xlsx")
+    headers = [str(c.value) for c in load_workbook(path)["Cycles"][1] if c.value]
+
+    assert "Hold displacement per 1000 samples (mm)" in headers
+    assert not any("rate" in h.lower() for h in headers)
+    assert "NOT a creep rate" in HOLD_DISP_RATE.description
 
 
 def test_cycle_rows_match_the_record(tmp_path, single_payload):

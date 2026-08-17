@@ -18,7 +18,51 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-SCHEMA_VERSION = 1
+# ----------------------------------------------------------------------------
+# Frozen contract
+# ----------------------------------------------------------------------------
+# Version 2 is the contract the UI is built against. From here on the key sets
+# below are additive-only within a version: a new key may be added, an existing
+# key may NOT be renamed, retyped, or removed without a version bump, because
+# every consumer -- workbook, report, SQLite index, UI -- reads them by name.
+#
+# tests/test_json_contract.py pins the exact key set at every level, so any
+# change to the shape of a record has to be a deliberate edit to that test
+# rather than something that slips through.
+SCHEMA_VERSION = 2
+
+# Top-level sections of a specimen record.
+CONTRACT_TOP_LEVEL: tuple[str, ...] = (
+    "schema_version", "created_utc", "specimen", "analysis", "config", "cycles",
+)
+
+CONTRACT_SPECIMEN: tuple[str, ...] = (
+    "specimen_id", "label", "material", "source_file", "source_format",
+    "source_sha256", "raw_input_path", "displacement_channel",
+    "h0_mm", "d0_mm", "temperature_c", "n_points", "notes",
+)
+
+CONTRACT_ANALYSIS: tuple[str, ...] = (
+    "n_cycles", "global_peak_mpa", "multi_stage", "ref_stress_mpa",
+    "residual_stress_mpa", "h0_mm", "has_strain", "notes",
+    "strain_basis", "warnings",
+)
+
+CONTRACT_STRAIN_BASIS: tuple[str, ...] = (
+    "h0_mm", "displacement_channel", "gauge_length_confirmed", "strain_valid",
+)
+
+CONTRACT_WARNING: tuple[str, ...] = ("code", "severity", "message")
+
+# Warning codes a consumer may rely on existing. New codes may be added;
+# existing codes keep their meaning.
+CONTRACT_WARNING_CODES: tuple[str, ...] = (
+    "gauge_length_unconfirmed",
+    "no_gauge_length",
+    "first_cycle_near_discard_threshold",
+    "cycles_discarded_by_peak_filter",
+    "variable_dwell_length",
+)
 
 
 # ----------------------------------------------------------------------------
@@ -71,6 +115,14 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "the maximum displacement can exceed this value by 20% or more. The "
         "energy integrals below split the loop at that later maximum, not "
         "here.",
+    ),
+    Column(
+        "MaxDisp_mm", "REAL", "Maximum displacement", "mm",
+        "Largest displacement reached in the cycle, at the END of the dwell. "
+        "This is the point the energy integrals split the loop at, and the "
+        "figure to quote for how far the specimen actually moved. It exceeds "
+        "the displacement at peak stress by however much the specimen crept "
+        "while the load was held.",
     ),
     Column(
         "ResidualDisp_mm", "REAL", "Residual displacement", "mm",
@@ -173,27 +225,33 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "HoldPoints", "INTEGER", "Hold length", "samples",
         "Length of the detected dwell in SAMPLES, not seconds -- the export "
-        "carries no time channel. Creep rate therefore cannot be computed, "
-        "only total creep across the dwell. Check this column before comparing "
-        "creep between cycles: dwell length is not necessarily constant.",
+        "carries no time channel. This column is meaningless on its own and "
+        "mandatory alongside the hold displacement beside it: without it there "
+        "is no way to tell a specimen that moved further from one that was "
+        "simply held longer.",
         fmt="0",
     ),
     Column(
-        "Creep_during_hold_mm", "REAL", "Creep during hold", "mm",
-        "Displacement gained across the detected dwell. Left blank, not zero, "
-        "when the cycle has no dwell. NOT comparable between cycles whose "
-        "dwell lengths differ -- it is a total, not a rate, so a longer dwell "
-        "accumulates more creep at the same creep rate. Divide by the hold "
-        "length for a per-sample figure, which is proportional to rate only if "
-        "the machine sampled at a constant interval.",
+        "Creep_during_hold_mm", "REAL", "Hold displacement", "mm",
+        "Displacement accumulated across the detected dwell -- a TOTAL, not a "
+        "rate. Left blank, not zero, when the cycle has no dwell. Only "
+        "comparable between cycles whose hold lengths match, which is why the "
+        "hold length is always reported next to it; a longer dwell accumulates "
+        "more displacement at identical material behaviour.",
     ),
     # --- strain-normalised variants, only when h0 is known -------------------
     Column(
         "PeakStrain_pct", "REAL", "Strain at peak stress", "%",
         "Displacement at peak stress divided by the specimen height h0. "
-        "Inherits both caveats above it: it is taken at maximum stress rather "
-        "than maximum displacement, and it is only a true strain if h0 is the "
-        "gauge length the displacement channel actually spans.",
+        "PROVISIONAL unless the gauge length has been confirmed -- see the "
+        "strain basis in the summary. Also taken at maximum stress rather than "
+        "maximum displacement, so it understates how far the specimen moved.",
+        fmt="0.000", strain=True,
+    ),
+    Column(
+        "MaxStrain_pct", "REAL", "Maximum strain", "%",
+        "Maximum displacement divided by h0 -- the largest strain the specimen "
+        "reached. PROVISIONAL unless the gauge length has been confirmed.",
         fmt="0.000", strain=True,
     ),
     Column(
@@ -207,8 +265,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         fmt="0.000", strain=True,
     ),
     Column(
-        "Creep_pct", "REAL", "Creep during hold", "%",
-        "Creep across the dwell as a fraction of h0.",
+        "Creep_pct", "REAL", "Hold displacement (of h0)", "%",
+        "Hold displacement as a fraction of h0. Still a total, not a rate, and "
+        "still only comparable at matching hold lengths. PROVISIONAL unless "
+        "the gauge length has been confirmed.",
         fmt="0.000", strain=True,
     ),
     # --- internal bookkeeping ------------------------------------------------
@@ -244,6 +304,29 @@ STIFFNESS_QUALITY = Column(
     f"'none' when no fit was possible. Derived from the two columns before it.",
     fmt="@",
 )
+
+
+HOLD_DISP_RATE = Column(
+    "HoldDisp_per_1000_samples_mm", "REAL",
+    "Hold displacement per 1000 samples", "mm",
+    "Hold displacement divided by hold length. This exists ONLY to remove the "
+    "distortion of unequal dwell lengths so cycles can be ranked against each "
+    "other. It is NOT a creep rate and must never be labelled, plotted or "
+    "quoted as one: converting samples to time needs a constant sampling "
+    "interval, which the export does not record and which testXpert does not "
+    "guarantee. A rate in mm/s requires a time channel enabled at export.",
+    fmt="0.000000",
+)
+
+
+def hold_disp_per_1000_samples(
+    hold_disp_mm: Optional[float], hold_points: Optional[float]
+) -> Optional[float]:
+    """Dwell-length-normalised hold displacement. Deliberately not a rate --
+    see HOLD_DISP_RATE.description for why the distinction matters."""
+    if hold_disp_mm is None or not hold_points:
+        return None
+    return float(hold_disp_mm) / float(hold_points) * 1000.0
 
 
 def stiffness_quality(n: Optional[float], r2: Optional[float]) -> str:
@@ -320,8 +403,14 @@ SPECIMEN_BY_KEY: dict[str, Field] = {f.key: f for f in SPECIMEN_FIELDS}
 
 
 def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
-    """Columns shown in Excel / CSV / HTML, in spec order, with the derived
-    quality flag inserted directly after the fit it describes."""
+    """Columns shown in Excel / CSV / HTML, in spec order, with each derived
+    column inserted directly after the column it qualifies.
+
+    Adjacency is not cosmetic here. The quality flag is meaningless away from
+    the fit it describes, and the hold displacement is meaningless away from
+    the hold length -- separating either pair invites exactly the misreading
+    it exists to prevent.
+    """
     out: list[Column] = []
     for col in CYCLE_COLUMNS:
         if col.internal:
@@ -331,4 +420,16 @@ def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
         out.append(col)
         if col.key == "Stiffness_common_r2":
             out.append(STIFFNESS_QUALITY)
+        if col.key == "Creep_during_hold_mm":
+            out.append(HOLD_DISP_RATE)
     return out
+
+
+# Pairs that must never be separated in any view. The UI is free to reorder or
+# hide columns, but splitting one of these pairs strips a number of the context
+# that makes it readable.
+INSEPARABLE_PAIRS: tuple[tuple[str, str], ...] = (
+    ("Stiffness_common_r2", "Stiffness_common_quality"),
+    ("HoldPoints", "Creep_during_hold_mm"),
+    ("Creep_during_hold_mm", "HoldDisp_per_1000_samples_mm"),
+)

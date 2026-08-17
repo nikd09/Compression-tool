@@ -25,15 +25,17 @@ import pandas as pd
 from .persistence import Workspace, iter_specimen_jsons, read_json
 from .schema import (
     CYCLE_COLUMNS,
+    HOLD_DISP_RATE,
     SCHEMA_VERSION,
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
+    hold_disp_per_1000_samples,
     stiffness_quality,
 )
 
 # Stored alongside the derived columns so a query can filter on fit quality
 # without re-deriving it. Rebuild recomputes it, so it cannot drift.
-_CYCLE_STORED = tuple(CYCLE_COLUMNS) + (STIFFNESS_QUALITY,)
+_CYCLE_STORED = tuple(CYCLE_COLUMNS) + (STIFFNESS_QUALITY, HOLD_DISP_RATE)
 
 
 def _quote(name: str) -> str:
@@ -152,6 +154,9 @@ def upsert_payload(
             if col.key == STIFFNESS_QUALITY.key:
                 row.append(stiffness_quality(cyc.get("Stiffness_common_n"),
                                              cyc.get("Stiffness_common_r2")))
+            elif col.key == HOLD_DISP_RATE.key:
+                row.append(hold_disp_per_1000_samples(cyc.get("Creep_during_hold_mm"),
+                                                      cyc.get("HoldPoints")))
             else:
                 row.append(_as_sql(cyc.get(col.key)))
         rows.append(row)
