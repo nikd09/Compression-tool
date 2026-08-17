@@ -139,7 +139,7 @@ def test_strain_columns_are_present_with_h0(tmp_path, payloads):
     path = write_workbook(payloads, tmp_path / "run.xlsx")
     headers = [c.value for c in load_workbook(path)["Cycles"][1]]
 
-    assert "Peak strain (%)" in headers
+    assert "Strain at peak stress (%)" in headers
 
 
 # ----------------------------------------------------------------------------

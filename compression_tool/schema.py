@@ -63,10 +63,14 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         fmt="0.00",
     ),
     Column(
-        "PeakDisp_mm", "REAL", "Peak displacement", "mm",
-        "Largest displacement reached in this cycle. It occurs at the END of "
-        "the dwell, later than the stress peak, because the specimen keeps "
-        "creeping while stress is already held constant.",
+        "PeakDisp_mm", "REAL", "Displacement at peak stress", "mm",
+        "Displacement at the instant of MAXIMUM STRESS -- not the largest "
+        "displacement in the cycle. The two differ: the specimen keeps "
+        "creeping through the dwell while stress is already held constant, so "
+        "displacement goes on rising after stress has peaked. On a long dwell "
+        "the maximum displacement can exceed this value by 20% or more. The "
+        "energy integrals below split the loop at that later maximum, not "
+        "here.",
     ),
     Column(
         "ResidualDisp_mm", "REAL", "Residual displacement", "mm",
@@ -139,15 +143,18 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Energy_in_MPa_mm", "REAL", "Energy in", "MPa*mm",
-        "Work per unit volume put into the specimen along the loading path. "
+        "Work put into the specimen along the loading path, per unit CROSS-"
+        "SECTIONAL AREA -- integral of stress over displacement is work/area, "
+        "not work/volume. Divide by h0 to get work per unit volume in MPa. "
         "The loop is split at maximum DISPLACEMENT, not maximum stress.",
         fmt="0.000",
     ),
     Column(
         "Energy_dissipated_MPa_mm", "REAL", "Energy dissipated", "MPa*mm",
-        "Work per unit volume not recovered on unloading. Splitting the loop "
-        "at maximum stress instead of maximum displacement drives this "
-        "negative, which is physically impossible.",
+        "Work per unit cross-sectional area not recovered on unloading; "
+        "divide by h0 for work per unit volume. Splitting the loop at maximum "
+        "stress instead of maximum displacement drives this negative, which is "
+        "physically impossible.",
         fmt="0.000",
     ),
     Column(
@@ -165,20 +172,28 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "HoldPoints", "INTEGER", "Hold length", "samples",
-        "Length of the detected dwell in SAMPLES, not seconds -- neither "
-        "export carries a time channel. Creep rate therefore cannot be "
-        "computed, only total creep across the dwell.",
+        "Length of the detected dwell in SAMPLES, not seconds -- the export "
+        "carries no time channel. Creep rate therefore cannot be computed, "
+        "only total creep across the dwell. Check this column before comparing "
+        "creep between cycles: dwell length is not necessarily constant.",
         fmt="0",
     ),
     Column(
         "Creep_during_hold_mm", "REAL", "Creep during hold", "mm",
         "Displacement gained across the detected dwell. Left blank, not zero, "
-        "when the cycle has no dwell.",
+        "when the cycle has no dwell. NOT comparable between cycles whose "
+        "dwell lengths differ -- it is a total, not a rate, so a longer dwell "
+        "accumulates more creep at the same creep rate. Divide by the hold "
+        "length for a per-sample figure, which is proportional to rate only if "
+        "the machine sampled at a constant interval.",
     ),
     # --- strain-normalised variants, only when h0 is known -------------------
     Column(
-        "PeakStrain_pct", "REAL", "Peak strain", "%",
-        "Peak displacement divided by the specimen height h0.",
+        "PeakStrain_pct", "REAL", "Strain at peak stress", "%",
+        "Displacement at peak stress divided by the specimen height h0. "
+        "Inherits both caveats above it: it is taken at maximum stress rather "
+        "than maximum displacement, and it is only a true strain if h0 is the "
+        "gauge length the displacement channel actually spans.",
         fmt="0.000", strain=True,
     ),
     Column(
