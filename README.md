@@ -132,11 +132,15 @@ obvious choices exist for, so a synthetic signal without them would test
 nothing that matters. The permanent-set pin is checked against a closed-form
 value rather than a recorded output.
 
-`tests/test_regression_real_files.py` pins the validated numbers from
-HANDOFF.md — 6 cycles in `TALCO50`, 9 in each `Mehrstufiger` specimen, h0 =
-0.471 mm, no unphysical values. The real exports are not in the repository, so
-those tests skip until the files are dropped into `tests/data/` under those
-names, at which point they activate automatically.
+A further 10 in `tests/test_regression_real_files.py` run against the real
+`Mehrstufiger` export and pin what it actually produced: 2 specimens × 9
+cycles, stages landing on 50–450 MPa in 50 MPa steps, h0 = 0.471 mm, d0 = 16 mm,
+a detected dwell of 888–3079 samples in every cycle, no unphysical values, and
+cumulative permanent deformation of 13.494% / 14.071%.
+
+Instrument exports are gitignored rather than committed, so those tests skip on
+a fresh clone until the files are placed in `tests/data/` — see the README
+there for the expected names.
 
 ## Still to build
 
