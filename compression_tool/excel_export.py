@@ -17,9 +17,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+import pandas as pd
 import xlsxwriter
 
+from . import diagnostics
 from .schema import (
+    CYCLE_BY_KEY,
     HOLD_DISP_RATE,
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
@@ -126,7 +129,24 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
     pairs.append(("Total permanent deformation (mm)", last_present("PermDef_cumulative_mm")))
     if analysis.get("has_strain"):
         pairs.append(("Total permanent deformation (%)", last_present("PermDef_cumulative_pct")))
-    pairs.append(("Mean hysteresis loss (-)", mean_present("HysteresisLoss_rel")))
+
+    # Multi-stage cycles span different stress levels, and hysteresis loss is
+    # not flat across a stress range (it climbed from 0.55 to 0.93 across the
+    # nine T050E1 stages) -- so a mean across them is not one physical value
+    # the way it would be for a constant-amplitude test. Scope the label
+    # rather than let it read as a single material constant.
+    if bool(analysis.get("multi_stage")):
+        pairs.append((
+            "Mean hysteresis loss across cycles (-)",
+            mean_present("HysteresisLoss_rel"),
+        ))
+        pairs.append((
+            "  └ not a single physical value: multi-stage cycles span "
+            "different stress levels; compare per-cycle instead",
+            "",
+        ))
+    else:
+        pairs.append(("Mean hysteresis loss (-)", mean_present("HysteresisLoss_rel")))
     pairs.append(("Total hold displacement (mm)", total_present("Creep_during_hold_mm")))
 
     basis = analysis.get("strain_basis") or {}
@@ -140,13 +160,9 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
             "Strain / modulus status",
             "validated" if basis.get("strain_valid") else "PROVISIONAL - gauge length unconfirmed",
         ))
-
-    warnings = analysis.get("warnings") or []
-    if warnings:
-        pairs.append(("", ""))
-        pairs.append(("Read this before quoting the numbers", ""))
-        for w in warnings:
-            pairs.append((w.get("severity", "").upper(), w.get("message", "")))
+    # Warnings are NOT appended here: with more than one specimen they would
+    # repeat the same paragraph once per column. _write_summary() writes them
+    # once, below the per-specimen fields, via diagnostics.distinct().
     return pairs
 
 
@@ -158,7 +174,8 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
 def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
     """Write one workbook covering one or more specimens.
 
-    Sheets: Summary, Cycles, Data dictionary, Config.
+    Sheets: Summary, Cycles, Statistics (only with >1 specimen), Data
+    dictionary, Config.
     """
     if not payloads:
         raise ValueError("write_workbook needs at least one specimen payload")
@@ -194,6 +211,7 @@ def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
 
     _write_summary(book, f, payloads)
     _write_cycles(book, f, numfmt, payloads)
+    _write_statistics(book, f, numfmt, payloads)
     _write_dictionary(book, f, payloads)
     _write_config(book, f, payloads)
 
@@ -218,12 +236,32 @@ def _write_summary(book, f, payloads: Sequence[dict]) -> None:
 
     # All specimens share the field order; take the longest as the spine.
     spine = max(columns, key=len)
+    r = row0
     for r, (key, _) in enumerate(spine, start=row0 + 1):
         style = f["section"] if (key and not _has_value(columns, r - row0 - 1)) else f["key"]
         sheet.write(r, 0, key, style if key else f["text"])
         for i, pairs in enumerate(columns):
             value = pairs[r - row0 - 1][1] if r - row0 - 1 < len(pairs) else None
             _write_value(sheet, r, 1 + i, value, f["text"], f["num"])
+
+    # Warnings, written ONCE below every specimen column -- not per specimen,
+    # the way the fields above are. Specimens under the same config typically
+    # trip the same warnings; repeating the paragraph once per column would
+    # just be the same text side by side.
+    warnings = diagnostics.distinct(payloads)
+    if warnings:
+        r += 2
+        sheet.write(r, 0, "Read this before quoting the numbers", f["section"])
+        last_col = max(1, len(labels))
+        for w in warnings:
+            r += 1
+            style = f["bad"] if w["severity"] == "critical" else (
+                f["warn"] if w["severity"] == "caution" else f["text"])
+            sheet.write(r, 0, w["severity"].upper(), style)
+            if last_col > 1:
+                sheet.merge_range(r, 1, r, last_col, w["message"], f["wrap"])
+            else:
+                sheet.write(r, 1, w["message"], f["wrap"])
 
     sheet.set_column(0, 0, 34)
     sheet.set_column(1, len(labels), 34)
@@ -361,6 +399,105 @@ def _write_config(book, f, payloads: Sequence[dict]) -> None:
 
 
 # ----------------------------------------------------------------------------
+# Cross-specimen statistics
+# ----------------------------------------------------------------------------
+
+# Mirrors the source export's own "Statistik" sheet (x / s / n[%] per
+# quantity), extended across every cycle instead of a single Fmax reading.
+STATS_COLUMNS: tuple[str, ...] = (
+    "PeakStress_MPa",
+    "MaxDisp_mm",
+    "PeakDisp_mm",
+    "Stiffness_common_MPa_per_mm",
+    "HysteresisLoss_rel",
+    "PermDef_cumulative_mm",
+    "Creep_during_hold_mm",
+)
+STATS_COLUMNS_STRAIN: tuple[str, ...] = ("PermDef_cumulative_pct",)
+
+
+def cross_specimen_stats(payloads: Sequence[dict]) -> list[dict]:
+    """Mean / std / coefficient of variation per cycle, across specimens.
+
+    Only meaningful with more than one specimen -- with one there is nothing
+    to compare, so this returns [] and callers skip the section, the same way
+    a single-specimen run skips the combined workbook.
+    """
+    if len(payloads) < 2:
+        return []
+    has_strain = any(p.get("analysis", {}).get("has_strain") for p in payloads)
+    keys = list(STATS_COLUMNS) + (list(STATS_COLUMNS_STRAIN) if has_strain else [])
+
+    rows = [c for p in payloads for c in p.get("cycles", [])]
+    if not rows:
+        return []
+    df = pd.DataFrame(rows)
+
+    out: list[dict] = []
+    for key in keys:
+        if key not in df.columns:
+            continue
+        col = CYCLE_BY_KEY.get(key)
+        entry: dict[str, Any] = {
+            "key": key,
+            "label": col.label if col else key,
+            "unit": col.unit if col else "",
+            "rows": [],
+        }
+        for cycle, values in df.groupby("Cycle")[key]:
+            v = pd.to_numeric(values, errors="coerce").dropna()
+            if v.empty:
+                continue
+            mean = float(v.mean())
+            std = float(v.std(ddof=0)) if len(v) > 1 else 0.0
+            cov_pct = (std / abs(mean) * 100.0) if mean else None
+            entry["rows"].append({
+                "cycle": int(cycle), "n": int(len(v)),
+                "mean": mean, "std": std, "cov_pct": cov_pct,
+            })
+        if entry["rows"]:
+            out.append(entry)
+    return out
+
+
+def _write_statistics(book, f, numfmt, payloads: Sequence[dict]) -> None:
+    """Mean / std / CoV per cycle across specimens -- the same shape as the
+    source export's own Statistik sheet (x / s / n[%]), extended to every
+    cycle rather than a single Fmax reading."""
+    stats = cross_specimen_stats(payloads)
+    if not stats:
+        return
+    n_specimens = len({p.get("specimen", {}).get("label", "") for p in payloads})
+
+    sheet = book.add_worksheet("Statistics")
+    sheet.write(0, 0, "Cross-specimen statistics", f["title"])
+    sheet.write(1, 0, f"n = {n_specimens} specimens", f["text"])
+
+    r = 3
+    for entry in stats:
+        header = entry["label"] + (f" ({entry['unit']})" if entry["unit"] else "")
+        sheet.write(r, 0, header, f["section"])
+        r += 1
+        for i, h in enumerate(("Cycle", "Mean", "Std dev", "CoV (%)")):
+            sheet.write(r, i, h, f["head"])
+        r += 1
+        for row in entry["rows"]:
+            sheet.write_number(r, 0, row["cycle"], numfmt("0"))
+            sheet.write_number(r, 1, row["mean"], numfmt("0.0000"))
+            sheet.write_number(r, 2, row["std"], numfmt("0.0000"))
+            if row["cov_pct"] is None:
+                sheet.write_blank(r, 3, None)
+            else:
+                sheet.write_number(r, 3, row["cov_pct"], numfmt("0.00"))
+            r += 1
+        r += 1
+
+    sheet.set_column(0, 0, 34)
+    sheet.set_column(1, 3, 16)
+    sheet.freeze_panes(3, 0)
+
+
+# ----------------------------------------------------------------------------
 # CSV -- the same flat table, for scripting
 # ----------------------------------------------------------------------------
 
@@ -396,6 +533,7 @@ __all__ = [
     "write_workbook",
     "write_csv",
     "cycles_dataframe",
+    "cross_specimen_stats",
     "row_values",
     "summary_pairs",
 ]

@@ -37,8 +37,8 @@ CONTRACT_TOP_LEVEL: tuple[str, ...] = (
 )
 
 CONTRACT_SPECIMEN: tuple[str, ...] = (
-    "specimen_id", "label", "material", "source_file", "source_format",
-    "source_sha256", "raw_input_path", "displacement_channel",
+    "specimen_id", "label", "material", "source_filename", "source_file",
+    "source_format", "source_sha256", "raw_input_path", "displacement_channel",
     "h0_mm", "d0_mm", "temperature_c", "n_points", "notes",
 )
 
@@ -365,8 +365,15 @@ SPECIMEN_FIELDS: tuple[Field, ...] = (
           "the specimen label. Survives a database rebuild."),
     Field("label", "TEXT", "Specimen", "", "Specimen label from the export."),
     Field("material", "TEXT", "Material", "", "Material name given at ingest."),
-    Field("source_file", "TEXT", "Source file", "",
-          "Path of the file as supplied at ingest."),
+    Field("source_filename", "TEXT", "Source file", "",
+          "Original filename of the export, e.g. 'Mehrstufiger_....xlsx'. "
+          "This is what an operator should read as 'which file was this'."),
+    Field("source_file", "TEXT", "Source path (ingest machine)", "",
+          "Full path as supplied at ingest, on whatever machine ran the "
+          "ingest -- may be a temporary or session-specific path and is not "
+          "meaningful to a reader on a different machine. Kept for "
+          "provenance; use source_filename or raw_input_path for anything "
+          "operator-facing."),
     Field("source_format", "TEXT", "Export format", "",
           "'series' for a multi-sample workbook, 'single' for one sample per sheet."),
     Field("source_sha256", "TEXT", "Source SHA-256", "",

@@ -16,7 +16,7 @@ instructions wherever it goes.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -183,10 +183,17 @@ def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional
         message=(
             f"Strain and any derived modulus are PROVISIONAL: it has not been "
             f"confirmed that '{channel}' spans only the {test.h0_mm:g} mm "
-            "specimen. If it bridges additional material, every strain "
+            "specimen. This is NOT the same question as which h0 to divide "
+            "by -- a modulus-plausibility check can rule out a wrong h0 "
+            "candidate (e.g. a crosshead reference length that implies an "
+            "impossible modulus), but it cannot confirm what the "
+            "extensometer physically spans; a channel that bridges extra "
+            "material would still produce a plausible-looking modulus, just "
+            "a wrong one. If it bridges additional material, every strain "
             "percentage and every modulus is wrong by that ratio, while all "
-            "stress-based metrics remain correct. Confirm the fixturing, then "
-            "re-ingest with gauge_length_confirmed=True."
+            "stress-based metrics remain correct. Confirm the fixturing with "
+            "the person who ran the test, then re-ingest with "
+            "gauge_length_confirmed=True."
         ),
     )
 
@@ -213,6 +220,25 @@ def collect(
         w.as_dict()
         for w in sorted((w for w in found if w), key=lambda w: order[w.severity])
     ]
+
+
+def distinct(payloads: Iterable[dict]) -> list[dict]:
+    """Warnings across one or more specimen records, deduped by code, worst
+    first.
+
+    Specimens ingested under the same config typically trip the same
+    warnings -- two runs of the same series export both fail the same
+    gauge-length check, for instance. Showing the same paragraph once per
+    specimen column is noise, not information, so every consumer (the
+    workbook summary, the HTML report, the CLI) reduces through this one
+    function rather than each keeping its own copy of the same dedup logic.
+    """
+    seen: dict[str, dict] = {}
+    for payload in payloads:
+        for w in payload.get("analysis", {}).get("warnings", []) or []:
+            seen.setdefault(w.get("code", ""), w)
+    order = {name: i for i, name in enumerate(SEVERITIES)}
+    return sorted(seen.values(), key=lambda w: order.get(w.get("severity"), len(SEVERITIES)))
 
 
 def strain_basis(test: TestData, *, gauge_length_confirmed: bool = False) -> dict:

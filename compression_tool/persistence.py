@@ -232,6 +232,11 @@ def build_payload(
             "specimen_id": specimen_id(source_sha256, test.label),
             "label": test.label,
             "material": material,
+            # Operator-facing name -- what a human should read as "which file
+            # was this". source_file below is the full ingest-time path,
+            # which may be a temporary or session-specific location and is
+            # not meaningful to a reader on a different machine.
+            "source_filename": Path(test.source_file).name,
             "source_file": str(test.source_file),
             "source_format": test.source_format,
             "source_sha256": source_sha256,

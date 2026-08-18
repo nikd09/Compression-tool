@@ -90,12 +90,14 @@ never displaces the one it should be compared against.
 
 ## The workbook
 
-Four sheets:
+Five sheets when a run has more than one specimen (four for a single specimen
+— Statistics is skipped when there is nothing to compare):
 
 | Sheet | Contents |
 |---|---|
-| Summary | Identity, provenance and whole-test aggregates. Fields down the page, specimens across it, so a two-specimen series reads side by side. |
+| Summary | Identity, provenance and whole-test aggregates. Fields down the page, specimens across it, so a two-specimen series reads side by side. Warnings appear **once**, below every column, not once per specimen. |
 | Cycles | The flat per-cycle table. Real headers with units, frozen panes, autofilter. |
+| Statistics | Mean / std / coefficient of variation per cycle, across specimens — the same shape as the source export's own `Statistik` sheet, extended to every cycle. Only present with >1 specimen. |
 | Data dictionary | What every column means, generated from the schema. |
 | Config | The settings behind the numbers, plus the derived reference levels. |
 
@@ -104,6 +106,11 @@ stiffness columns that look interchangeable and are not, and a permanent
 deformation column that is **not** compression set in the ASTM D395 / ISO 815
 sense. Anyone reading the workbook without the surrounding conversation needs
 those distinctions in the file itself.
+
+**Source file vs source path.** The Summary shows `Source file` (the original
+filename) separately from `Source path (ingest machine)` (the full path on
+whatever machine ran the ingest, which may be a sandbox or CI path with no
+meaning to anyone else). Use the filename for anything operator-facing.
 
 The JSON contract is frozen at schema_version 2 — see
 [docs/JSON_CONTRACT.md](docs/JSON_CONTRACT.md). Build the UI against that.
@@ -128,7 +135,11 @@ The JSON contract is frozen at schema_version 2 — see
 - **Energy** — `MPa·mm` is work per unit **cross-sectional area**, not per unit
   volume; divide by h0 for per-volume in MPa. **Hysteresis loss** — dissipated ÷
   input — is a ratio, immune to that conversion, and is the cross-test
-  comparable form; absolute loss scales with stress amplitude.
+  comparable form; absolute loss scales with stress amplitude. Its **mean**
+  across a multi-stage test is a different matter: loss climbed 0.55 → 0.93
+  across T050E1's nine stages, so the Summary labels that aggregate "across
+  cycles" rather than let it read as one physical value — same reasoning as
+  the two stiffness bands below.
 - **Permanent deformation** — residual displacement read on the *loading*
   branch at a low common stress, not at zero, because the specimen loses
   contact at zero and the signal falls back to a few-micrometre baseline.
@@ -146,13 +157,23 @@ The JSON contract is frozen at schema_version 2 — see
   `--gauge-length-confirmed`, strain is marked provisional and a `critical`
   warning travels with the result. Stress-based metrics are unaffected.
 
+  This is not the same question as *which* h0 to divide by. A
+  modulus-plausibility check can rule out a wrong candidate — for T050E1 the
+  20 mm crosshead reference length implies 96–192 GPa, which is impossible for
+  something that compacts 13%, so h0 = 0.471 mm is the right value — but it
+  cannot confirm the extensometer's physical span: a channel that bridges
+  extra material would still produce a plausible-looking modulus, just a wrong
+  one. `--gauge-length-confirmed` is already available on `preview` and
+  `ingest`; use it once the fixturing itself has been checked, not on the
+  strength of a plausibility argument alone.
+
 ## Tests
 
 ```bash
 pytest
 ```
 
-124 tests run against synthetic exports built to reproduce the three behaviours
+135 tests run against synthetic exports built to reproduce the three behaviours
 the real sample data revealed: rising stage peaks, a dwell during which
 displacement keeps climbing after stress has levelled off, and a collapse to a
 few-micrometre baseline at near-zero stress. Those are what the engine's less

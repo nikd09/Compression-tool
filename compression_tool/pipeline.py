@@ -213,7 +213,8 @@ def ingest(
         excel_export.write_csv(result.payloads, combined.with_suffix(".csv"),
                                with_specimen=True)
         result.run_html = html_report.write_html(
-            result.payloads, combined.with_suffix(".html"), title=f"{material} - {run_dir.name}"
+            result.payloads, combined.with_suffix(".html"),
+            title=f"{material} - {_run_dir_suffix(run_dir.name, material)}",
         )
     elif len(result.specimens) == 1:
         result.run_xlsx = result.specimens[0].xlsx_path
@@ -245,6 +246,21 @@ def ingest(
             conn.close()
 
     return result
+
+
+def _run_dir_suffix(run_dir_name: str, material: str) -> str:
+    """The part of a run folder's name after the material slug -- the date,
+    and any '-002' collision suffix.
+
+    run_dir.name is f"{slugify(material)}_{date}[-NNN]", so a title built as
+    "{material} - {run_dir.name}" repeats the material: "T050E1 -
+    T050E1_2026-08-17". This strips the slug prefix so the title reads
+    "T050E1 - 2026-08-17" instead.
+    """
+    prefix = slugify(material) + "_"
+    if run_dir_name.startswith(prefix):
+        return run_dir_name[len(prefix):]
+    return run_dir_name
 
 
 def _write_specimen_artifacts(payload: dict, run_dir: Path, stem: str) -> dict[str, Path]:

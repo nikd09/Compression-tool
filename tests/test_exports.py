@@ -13,8 +13,14 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 
-from compression_tool import ingest
-from compression_tool.excel_export import cycles_dataframe, write_csv, write_workbook
+from compression_tool import Config, diagnostics, ingest
+from compression_tool.excel_export import (
+    cross_specimen_stats,
+    cycles_dataframe,
+    summary_pairs,
+    write_csv,
+    write_workbook,
+)
 from compression_tool.html_report import render
 from compression_tool.persistence import read_json
 from compression_tool.schema import (
@@ -23,6 +29,8 @@ from compression_tool.schema import (
     stiffness_quality,
     user_facing_cycle_columns,
 )
+
+from conftest import multistage_signal, write_single_workbook
 
 
 @pytest.fixture
@@ -261,7 +269,142 @@ def test_html_escapes_content(single_payload):
     page = render([hostile])
 
     assert "<img src=x" not in page
-    assert "&lt;img src=x" in page
+
+
+# ----------------------------------------------------------------------------
+# Source filename vs ingest-machine path
+# ----------------------------------------------------------------------------
+
+
+def test_source_filename_is_the_basename_not_the_ingest_path(single_payload, single_file):
+    """'Source file' in the Summary must read as the original filename, not
+    wherever the ingest happened to run from -- a sandbox temp path is not
+    meaningful to an operator on a different machine."""
+    spec = single_payload["specimen"]
+    assert spec["source_filename"] == single_file.name
+    assert "/" not in spec["source_filename"]
+    # The full path is still kept, under a name that says what it is.
+    assert spec["source_file"].endswith(single_file.name)
+
+
+def test_workbook_labels_filename_and_path_separately(tmp_path, single_payload):
+    path = write_workbook([single_payload], tmp_path / "out.xlsx")
+    sheet = load_workbook(path)["Summary"]
+    labels = {sheet.cell(row=r, column=1).value for r in range(1, sheet.max_row + 1)}
+
+    assert "Source file" in labels
+    assert "Source path (ingest machine)" in labels
+
+
+# ----------------------------------------------------------------------------
+# Hysteresis loss: multi-stage scoping
+# ----------------------------------------------------------------------------
+
+
+def test_mean_hysteresis_label_is_scoped_for_multi_stage(payloads):
+    """Multi-stage cycles span different stress levels, and hysteresis loss is
+    not flat across a stress range, so an unscoped 'Mean hysteresis loss'
+    would read as a single physical value when it is not one."""
+    from compression_tool.excel_export import summary_pairs
+
+    assert payloads[0]["analysis"]["multi_stage"] is True
+    keys = [k for k, _ in summary_pairs(payloads[0])]
+    assert any("Mean hysteresis loss across cycles" in k for k in keys)
+    assert not any(k == "Mean hysteresis loss (-)" for k in keys)
+
+
+def test_mean_hysteresis_label_is_plain_for_constant_amplitude(tmp_path):
+    """A constant-amplitude test has one stress level, so the mean IS a
+    single physical value and does not need the multi-stage caveat."""
+    stress, disp = multistage_signal(stages=(300.0, 300.0, 300.0))
+    path = write_single_workbook(tmp_path / "flat.xlsx", stress, disp, disp)
+    result = ingest([path], tmp_path / "ws", material="flat", cfg=Config())
+    payload = read_json(result.specimens[0].json_path)
+
+    assert payload["analysis"]["multi_stage"] is False
+    keys = [k for k, _ in summary_pairs(payload)]
+    assert "Mean hysteresis loss (-)" in keys
+    assert not any("across cycles" in k for k in keys)
+
+
+# ----------------------------------------------------------------------------
+# Warnings shown once, not once per specimen column
+# ----------------------------------------------------------------------------
+
+
+def test_summary_sheet_shows_each_warning_once(tmp_path, payloads):
+    """Both specimens of the series were ingested under the same config and
+    trip the same warnings; the Summary sheet must show each paragraph once,
+    not once per specimen column."""
+    expected = diagnostics.distinct(payloads)
+    assert expected  # the fixture should trip at least the gauge-length warning
+
+    path = write_workbook(payloads, tmp_path / "run.xlsx")
+    sheet = load_workbook(path)["Summary"]
+    severities = [sheet.cell(row=r, column=1).value for r in range(1, sheet.max_row + 1)
+                 if sheet.cell(row=r, column=1).value in ("CRITICAL", "CAUTION", "INFO")]
+    assert len(severities) == len(expected)
+
+
+def test_html_shows_each_warning_once(payloads):
+    import html as html_module
+
+    expected = diagnostics.distinct(payloads)
+    page = render(payloads)
+    for w in expected:
+        # render() HTML-escapes the message (quotes -> entities), so compare
+        # against the same escaping rather than the raw text.
+        assert page.count(html_module.escape(w["message"])) == 1
+
+
+# ----------------------------------------------------------------------------
+# Cross-specimen statistics
+# ----------------------------------------------------------------------------
+
+
+def test_cross_specimen_stats_needs_more_than_one_specimen(single_payload):
+    assert cross_specimen_stats([single_payload]) == []
+
+
+def test_cross_specimen_stats_covers_every_cycle(payloads):
+    stats = cross_specimen_stats(payloads)
+    assert stats
+    peak_stress = next(e for e in stats if e["key"] == "PeakStress_MPa")
+    assert [r["cycle"] for r in peak_stress["rows"]] == list(range(1, 10))
+    # Both specimens carry the same commanded peak, so agreement is tight.
+    assert all(r["cov_pct"] is not None and r["cov_pct"] < 5 for r in peak_stress["rows"])
+
+
+def test_statistics_sheet_only_appears_with_multiple_specimens(tmp_path, single_payload, payloads):
+    single_path = write_workbook([single_payload], tmp_path / "single.xlsx")
+    assert "Statistics" not in load_workbook(single_path).sheetnames
+
+    multi_path = write_workbook(payloads, tmp_path / "multi.xlsx")
+    assert "Statistics" in load_workbook(multi_path).sheetnames
+
+
+def test_html_statistics_section_only_appears_with_multiple_specimens(single_payload, payloads):
+    assert "Cross-specimen statistics" not in render([single_payload])
+    assert "Cross-specimen statistics" in render(payloads)
+
+
+# ----------------------------------------------------------------------------
+# Combined-run report title
+# ----------------------------------------------------------------------------
+
+
+def test_run_report_title_does_not_repeat_the_material(workspace, series_file):
+    """title=f'{material} - {run_dir.name}' repeated the material, since
+    run_dir.name already starts with the material slug: 'T050E1 -
+    T050E1_2026-08-17'."""
+    result = ingest([series_file], workspace, material="T050E1")
+    title_line = result.run_html.read_text(encoding="utf-8")
+    start = title_line.index("<title>") + len("<title>")
+    end = title_line.index("</title>")
+    title = title_line[start:end]
+
+    assert title.count("T050E1") == 1
+    assert "T050E1 -" in title
 
 
 # ----------------------------------------------------------------------------

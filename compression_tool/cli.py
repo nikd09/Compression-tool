@@ -17,7 +17,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Optional, Sequence
 
-from . import knowledge_base
+from . import diagnostics, knowledge_base
 from .core import Config
 from .persistence import Workspace
 from .pipeline import ingest, preview, rebuild_index
@@ -48,15 +48,6 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         if value is not None:
             setattr(cfg, f.name, value)
     return cfg
-
-
-def _distinct_warnings(payloads) -> list[dict]:
-    seen: dict[str, dict] = {}
-    for payload in payloads:
-        for w in payload.get("analysis", {}).get("warnings", []) or []:
-            seen.setdefault(w.get("code", ""), w)
-    rank = {"critical": 0, "caution": 1, "info": 2}
-    return sorted(seen.values(), key=lambda w: rank.get(w.get("severity"), 9))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -128,7 +119,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             gauge_length_confirmed=args.gauge_length_confirmed,
         )
         print(result.summary())
-        for w in _distinct_warnings(result.payloads):
+        for w in diagnostics.distinct(result.payloads):
             print(f"  [{w['severity'].upper()}] {w['message']}")
         return 0 if result.specimens else 1
 

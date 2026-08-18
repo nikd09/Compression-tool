@@ -16,7 +16,8 @@ from typing import Any, Optional, Sequence
 
 # Reused deliberately: the workbook and the report must show the same
 # columns and the same summary, projected the same way.
-from .excel_export import row_values, summary_pairs
+from . import diagnostics
+from .excel_export import cross_specimen_stats, row_values, summary_pairs
 from .schema import STIFFNESS_QUALITY, user_facing_cycle_columns
 
 _CSS = """
@@ -115,14 +116,13 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
     parts.append("</tbody></table></div>")
 
     # --- warnings, ahead of the numbers they qualify -------------------------
-    seen: dict[str, dict] = {}
-    for payload in payloads:
-        for w in payload.get("analysis", {}).get("warnings", []) or []:
-            seen.setdefault(w.get("code", ""), w)
-    if seen:
+    # Deduped by code across specimens (diagnostics.distinct): specimens under
+    # the same config typically trip the same warnings, so the paragraph is
+    # shown once rather than once per specimen.
+    file_warnings = diagnostics.distinct(payloads)
+    if file_warnings:
         parts.append("<h2>Read this before quoting the numbers</h2>")
-        rank = {"critical": 0, "caution": 1, "info": 2}
-        for w in sorted(seen.values(), key=lambda w: rank.get(w.get("severity"), 9)):
+        for w in file_warnings:
             sev = w.get("severity", "info")
             parts.append(
                 f"<div class='warn warn-{_esc(sev)}'>"
@@ -170,6 +170,32 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
                 parts.append(f"<td{cls}>{_fmt(value, col.fmt)}</td>")
             parts.append("</tr>")
     parts.append("</tbody></table></div>")
+
+    # --- cross-specimen statistics --------------------------------------------
+    stats = cross_specimen_stats(payloads)
+    if stats:
+        n_specimens = len({p.get("specimen", {}).get("label", "") for p in payloads})
+        parts.append(
+            f"<h2>Cross-specimen statistics</h2>"
+            f"<p class='sub'>Mean / std / coefficient of variation per cycle, "
+            f"across {n_specimens} specimens.</p>"
+        )
+        for entry in stats:
+            unit = f" ({entry['unit']})" if entry["unit"] else ""
+            parts.append(f"<h3 style='font-size:1rem;margin:1.2rem 0 .4rem'>"
+                        f"{_esc(entry['label'])}{_esc(unit)}</h3>")
+            parts.append("<div class='scroll'><table><thead><tr>"
+                         "<th>Cycle</th><th>Mean</th><th>Std dev</th>"
+                         "<th>CoV (%)</th></tr></thead><tbody>")
+            for row in entry["rows"]:
+                cov = f"{row['cov_pct']:,.2f}" if row["cov_pct"] is not None else ""
+                parts.append(
+                    f"<tr><td>{row['cycle']}</td>"
+                    f"<td>{row['mean']:,.4g}</td>"
+                    f"<td>{row['std']:,.4g}</td>"
+                    f"<td>{_esc(cov)}</td></tr>"
+                )
+            parts.append("</tbody></table></div>")
 
     # --- dictionary ----------------------------------------------------------
     parts.append("<h2>What each column means</h2><div class='scroll'>"

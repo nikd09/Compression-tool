@@ -33,7 +33,8 @@ to the shape has to be a deliberate edit to that test.
 | `specimen_id` | string | 16 hex chars. Stable across rebuilds and workspaces — derived from the source hash and label, so it is safe to use as a UI key. |
 | `label` | string | From the export. |
 | `material` | string | Given at ingest. |
-| `source_file` | string | Path as supplied. |
+| `source_filename` | string | Original filename, e.g. `Mehrstufiger_....xlsx`. **Use this for anything operator-facing** — "which file was this". Added after v2 was frozen; additive, so schema_version stayed at 2 — see the changelog at the bottom of this document. |
+| `source_file` | string | Full path as supplied at ingest, **on whatever machine ran the ingest**. May be a temporary or session-specific path (a CI runner, a sandbox) and is not meaningful to a reader on a different machine. Kept for provenance only — do not display this as "the source file" in a UI; use `source_filename` or `raw_input_path`. |
 | `source_format` | string | `series` or `single`. |
 | `source_sha256` | string | Content hash of the original export. |
 | `raw_input_path` | string \| null | Relative to the workspace root. |
@@ -171,6 +172,35 @@ UCS or failure stress. Never label it "strength" on an axis.
 read on the loading branch at a low common stress. ASTM D395 / ISO 815
 compression set is a different, long-duration static test.
 
+**A mean across multi-stage cycles is not a single physical value.**
+`HysteresisLoss_rel` climbed from 0.55 to 0.93 across the nine T050E1 stages —
+it is not flat across a stress range. `summary_pairs()` labels the aggregate
+"Mean hysteresis loss **across cycles**" only when `analysis.multi_stage` is
+true, precisely so it cannot be read as one number the way it would be for a
+constant-amplitude test. Do the same in the UI: never show a mean across a
+multi-stage test's cycles without naming what it's averaged over, and prefer
+the per-cycle table.
+
+**`source_file` is not for display.** It is the full path on whatever machine
+ran the ingest — a sandbox, a CI runner, someone's laptop — and is provenance,
+not identity. Show `source_filename` (or `raw_input_path`, which is relative to
+the workspace) wherever a user needs to know "which file was this".
+
+**Warnings are file-level, not per-column.** When rendering more than one
+specimen side by side, dedupe warnings with `diagnostics.distinct()` before
+displaying them — do not iterate each specimen's own `analysis.warnings` and
+show every one, or two specimens ingested under identical settings will show
+the same paragraph twice.
+
+**Confirming the gauge length is not the same question as picking the right h0
+value.** A modulus-plausibility check (does dividing by this h0 give a sane
+modulus?) can rule out a *wrong* candidate — for T050E1 it rules out the 20 mm
+crosshead reference length, which implies an impossible 96–192 GPa. It cannot
+confirm that the extensometer *physically spans only the specimen*: a channel
+that bridges extra material would still produce a plausible-looking modulus,
+just the wrong one. `gauge_length_confirmed` is a human assertion about
+fixturing, not something a plausibility check can set on your behalf.
+
 ---
 
 ## Derived values
@@ -186,6 +216,14 @@ index; neither is in the JSON.
 
 Use those functions rather than reimplementing them, so the UI cannot drift from
 the workbook.
+
+A third function is a cross-cutting aggregate rather than a per-cycle value:
+`excel_export.cross_specimen_stats(payloads)` returns mean / std / coefficient
+of variation per cycle across two or more specimens — the same shape as the
+source export's own `Statistik` sheet, extended to every cycle rather than a
+single `Fmax` reading. Returns `[]` for a single specimen (nothing to compare)
+so the caller can skip the section entirely, the same way the combined
+workbook itself only appears for a multi-specimen ingest.
 
 ## Building against it
 
@@ -203,3 +241,25 @@ rows = [row_values(c, columns) for c in payload["cycles"]]
 already inserted next to what they qualify, and each `Column` carries its
 `label`, `unit` and `description`. Rendering from it is what keeps the UI,
 workbook and report showing the same thing.
+
+---
+
+## Changelog since the v2 freeze (all additive; schema_version stayed at 2)
+
+- `specimen.source_filename` added — the original filename, for display.
+  `specimen.source_file` (the full ingest-machine path) is unchanged but its
+  label was clarified: it is provenance, not something to show a user.
+- `excel_export.cross_specimen_stats()` added — mean/std/CoV per cycle across
+  specimens, surfaced as a "Statistics" workbook sheet and an HTML section
+  when a run has more than one specimen.
+- `diagnostics.distinct()` added and became the one place every consumer
+  (workbook, report, CLI) dedupes warnings across specimens — previously each
+  kept its own copy of the same logic, and the workbook's Summary sheet did
+  not dedupe at all, repeating each warning's full paragraph once per
+  specimen column.
+- `summary_pairs()`'s hysteresis-loss row is now labelled "Mean hysteresis
+  loss **across cycles**" when `analysis.multi_stage` is true, rather than an
+  unscoped "Mean hysteresis loss" that could be read as a single physical
+  value across stress levels that are not comparable.
+- The combined run report's `<title>` no longer repeats the material name
+  (was `"T050E1 - T050E1_2026-08-17"`; now `"T050E1 - 2026-08-17"`).
