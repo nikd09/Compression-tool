@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
-from . import diagnostics, excel_export, html_report, knowledge_base
+from . import curve_cache, diagnostics, excel_export, html_report, knowledge_base
 from .core import Config, analyse_test, load_tests
 from .persistence import (
     Workspace,
@@ -44,6 +44,7 @@ class SpecimenResult:
     csv_path: Path
     xlsx_path: Path
     html_path: Path
+    curve_path: Path
 
 
 @dataclass
@@ -190,7 +191,7 @@ def ingest(
                 gauge_length_confirmed=gauge_length_confirmed,
             )
             stem = _unique_stem(slugify(test.label), used_names)
-            paths_written = _write_specimen_artifacts(payload, run_dir, stem)
+            paths_written = _write_specimen_artifacts(test, df, payload, run_dir, stem)
 
             payload["_json_path"] = ws.relative(paths_written["json"])
             payload["_run_dir"] = ws.relative(run_dir)
@@ -204,6 +205,7 @@ def ingest(
                 csv_path=paths_written["csv"],
                 xlsx_path=paths_written["xlsx"],
                 html_path=paths_written["html"],
+                curve_path=paths_written["curve"],
             ))
 
     # 3. Run-level rollup, only when it says something a single file does not.
@@ -263,12 +265,27 @@ def _run_dir_suffix(run_dir_name: str, material: str) -> str:
     return run_dir_name
 
 
-def _write_specimen_artifacts(payload: dict, run_dir: Path, stem: str) -> dict[str, Path]:
+def _write_specimen_artifacts(
+    test, df, payload: dict, run_dir: Path, stem: str
+) -> dict[str, Path]:
     json_path = write_json(payload, run_dir / f"{stem}.json")
     csv_path = excel_export.write_csv([payload], run_dir / f"{stem}.csv")
     xlsx_path = excel_export.write_workbook([payload], run_dir / f"{stem}.xlsx")
     html_path = html_report.write_html([payload], run_dir / f"{stem}.html")
-    return {"json": json_path, "csv": csv_path, "xlsx": xlsx_path, "html": html_path}
+    # Display-only sidecar, not part of the frozen record: the full per-cycle
+    # loop shape a chart needs, which the JSON contract deliberately does not
+    # carry. Rebuildable from the archived raw file at any time.
+    cache = curve_cache.build_curve_cache(
+        test, df, specimen_id=payload["specimen"]["specimen_id"]
+    )
+    curve_path = curve_cache.write_curve_cache(cache, run_dir / f"{stem}.curve.json")
+    return {
+        "json": json_path,
+        "csv": csv_path,
+        "xlsx": xlsx_path,
+        "html": html_path,
+        "curve": curve_path,
+    }
 
 
 def _unique_stem(stem: str, used: set[str]) -> str:

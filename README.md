@@ -211,8 +211,15 @@ there for the expected names.
 Steps 3–5 of the handoff: the Streamlit UI (Ingest / Results / Compare /
 Config), the dashboard rework, and plots. The pieces they need are in place —
 `preview()` returns exactly what an ingest screen should show before committing,
-and `knowledge_base.cycles_for_materials()` returns the shape a compare view
-needs.
+`knowledge_base.cycles_for_materials()` returns the shape a compare view
+needs, and `ingest()` now writes a `<specimen>.curve.json` sidecar beside every
+record — the per-cycle stress-displacement points a chart needs, reduced with
+Ramer-Douglas-Peucker (`compression_tool/curve_cache.py`) so a UI is not
+loading 85k raw samples per specimen to draw a loop. Deliberately outside the
+frozen contract: rebuildable from the archived raw file, so a change to the
+reduction is not a schema bump. On the real T050E1 export it reduces
+85,844 / 86,017 raw samples to 704 / 1,380 points per specimen (28–55 KB) at
+under 0.3% enclosed-area error per cycle.
 
 Open items:
 
