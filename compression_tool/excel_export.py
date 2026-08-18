@@ -24,11 +24,13 @@ from . import diagnostics
 from .schema import (
     CYCLE_BY_KEY,
     HOLD_DISP_RATE,
+    UNLOAD_YIELD,
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
     Column,
     hold_disp_per_1000_samples,
     stiffness_quality,
+    unload_yield_frac,
     user_facing_cycle_columns,
 )
 
@@ -77,6 +79,9 @@ def row_values(row: dict, cols: Sequence[Column]) -> list[Any]:
         if col.key == STIFFNESS_QUALITY.key:
             out.append(stiffness_quality(row.get("Stiffness_common_n"),
                                          row.get("Stiffness_common_r2")))
+        elif col.key == UNLOAD_YIELD.key:
+            out.append(unload_yield_frac(row.get("StressAtMaxDisp_MPa"),
+                                         row.get("PeakStress_MPa")))
         elif col.key == HOLD_DISP_RATE.key:
             out.append(hold_disp_per_1000_samples(row.get("Creep_during_hold_mm"),
                                                   row.get("HoldPoints")))
@@ -408,6 +413,7 @@ STATS_COLUMNS: tuple[str, ...] = (
     "PeakStress_MPa",
     "MaxDisp_mm",
     "PeakDisp_mm",
+    "StressAtMaxDisp_MPa",
     "Stiffness_common_MPa_per_mm",
     "HysteresisLoss_rel",
     "PermDef_cumulative_mm",

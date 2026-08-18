@@ -194,6 +194,46 @@ def test_permanent_deformation_matches_recorded_values():
         assert final == pytest.approx(expected[_suffix(test.label)], rel=1e-3)
 
 
+def test_specimen_keeps_compacting_through_unload_at_the_late_stages():
+    """Both specimens stop compacting exactly when the dwell ends for the early
+    stages, then start carrying their maximum displacement partway down the
+    unloading ramp -- S1 from cycle 6, S2 from cycle 7.
+
+    The post-dwell gain runs 0.02 um through cycle 5 against a 0.024 um signal
+    noise floor, then climbs to 2.41 um by cycle 9 -- roughly 100x the noise.
+    It is a step, not a drift, which is what makes it a sharper onset marker
+    than the stiffness rollover.
+    """
+    path = _require("Mehrstufiger_Druckversuch_Vergleichstest_2_T050E1.xlsx")
+    # Ripple during the dwell means an intact cycle reads a shade under 1.000
+    # rather than exactly 1.000; the intact band measures 0.9982-0.9998.
+    INTACT = 0.997
+    onset = {"S1": 6, "S2": 7}
+
+    for test in load_tests(str(path)):
+        df = analyse_test(test, Config())
+        ratio = df["StressAtMaxDisp_MPa"] / df["PeakStress_MPa"]
+        label = _suffix(test.label)
+        first = onset[label]
+
+        # Intact through the early stages: displacement stops when the load does.
+        assert (ratio[df["Cycle"] < first] > INTACT).all(), \
+            f"{test.label} yielded through unload earlier than cycle {first}"
+        # And it does not recover once it starts.
+        assert (ratio[df["Cycle"] >= first] < INTACT).all(), \
+            f"{test.label} stopped yielding through unload after cycle {first}"
+        # The final stage is unambiguous in both specimens.
+        assert ratio.iloc[-1] < 0.98
+
+    # S1 is the clearer case by a wide margin -- it carries its maximum
+    # displacement barely half way down the unloading ramp by cycle 9, where S2
+    # only reaches 0.97. S2's onset cycle is the less certain of the two: its
+    # first yielding cycle reads 0.9943 against an intact floor of 0.9982, so
+    # treat that boundary as indicative rather than sharp.
+    a, _ = (analyse_test(t, Config()) for t in load_tests(str(path)))
+    assert (a["StressAtMaxDisp_MPa"] / a["PeakStress_MPa"]).min() < 0.55
+
+
 def test_series_specimens_agree():
     """The two specimens of the series agreed closely -- the repeatability
     signal that made the original validation credible.

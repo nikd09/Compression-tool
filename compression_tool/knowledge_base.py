@@ -29,13 +29,15 @@ from .schema import (
     SCHEMA_VERSION,
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
+    UNLOAD_YIELD,
     hold_disp_per_1000_samples,
     stiffness_quality,
+    unload_yield_frac,
 )
 
 # Stored alongside the derived columns so a query can filter on fit quality
 # without re-deriving it. Rebuild recomputes it, so it cannot drift.
-_CYCLE_STORED = tuple(CYCLE_COLUMNS) + (STIFFNESS_QUALITY, HOLD_DISP_RATE)
+_CYCLE_STORED = tuple(CYCLE_COLUMNS) + (STIFFNESS_QUALITY, HOLD_DISP_RATE, UNLOAD_YIELD)
 
 
 def _quote(name: str) -> str:
@@ -154,6 +156,9 @@ def upsert_payload(
             if col.key == STIFFNESS_QUALITY.key:
                 row.append(stiffness_quality(cyc.get("Stiffness_common_n"),
                                              cyc.get("Stiffness_common_r2")))
+            elif col.key == UNLOAD_YIELD.key:
+                row.append(unload_yield_frac(cyc.get("StressAtMaxDisp_MPa"),
+                                             cyc.get("PeakStress_MPa")))
             elif col.key == HOLD_DISP_RATE.key:
                 row.append(hold_disp_per_1000_samples(cyc.get("Creep_during_hold_mm"),
                                                       cyc.get("HoldPoints")))

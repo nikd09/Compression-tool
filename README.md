@@ -8,13 +8,17 @@ implementation described in [HANDOFF.md](HANDOFF.md). This repository adds the
 persistence layer and the Excel export around it — steps 1 and 2 of the build
 order in that brief.
 
-Two deliberate changes have been made to the engine since the handoff, both
-requested after review against the real T050E1 export:
+Three deliberate changes have been made to the engine since the handoff, each
+after review against the real T050E1 export:
 
 - `MaxDisp_mm` (and `MaxStrain_pct`) added — the largest displacement in the
   cycle, distinct from `PeakDisp_mm`, which is displacement at maximum *stress*.
 - The energy docstring corrected: `MPa·mm` is work per unit cross-sectional
   area, not per unit volume. No computed value changed.
+- `StressAtMaxDisp_MPa` added — the stress at which the specimen was most
+  compressed. Plotting the loops revealed that from cycle 6 the maximum falls on
+  the *unloading* ramp, not at the dwell's end: the specimen kept compacting as
+  the load came off. The description of `MaxDisp_mm` was corrected with it.
 
 ## Install
 
@@ -118,10 +122,17 @@ The JSON contract is frozen at schema_version 2 — see
 ### Reading the numbers
 
 - **Displacement, two meanings** — *displacement at peak stress* is taken at
-  maximum stress; *maximum displacement* is the largest in the cycle, at the end
-  of the dwell, and is where the energy integrals split. The second exceeds the
-  first by however much the specimen crept under load — 37% in cycle 8 of the
-  T050E1 export. Quote maximum displacement for how far the specimen moved.
+  maximum stress; *maximum displacement* is the largest in the cycle, and is
+  where the energy integrals split. The second exceeds the first by however much
+  the specimen crept after the stress peak — 37% in cycle 8 of the T050E1
+  export. Quote maximum displacement for how far the specimen moved. Where that
+  maximum falls is its own reading — see the next entry.
+- **Stress at maximum displacement** — on an intact specimen this equals the
+  peak: the specimen stops compacting the moment the load stops being held.
+  Below the peak it kept compacting *while the load was being removed*. On
+  T050E1 it holds at ~1.00 for cycles 1–5 then steps to 0.49 by cycle 9, and
+  the same step appears in both specimens — a sharper onset marker than the
+  stiffness rollover.
 - **Stiffness (common band)** — fitted over an identical stress window in every
   cycle (25–75% of the smallest cycle peak). This is the one that may be
   compared across stages, specimens and materials.
@@ -173,7 +184,7 @@ The JSON contract is frozen at schema_version 2 — see
 pytest
 ```
 
-135 tests run against synthetic exports built to reproduce the three behaviours
+138 tests run against synthetic exports built to reproduce the three behaviours
 the real sample data revealed: rising stage peaks, a dwell during which
 displacement keeps climbing after stress has levelled off, and a collapse to a
 few-micrometre baseline at near-zero stress. Those are what the engine's less

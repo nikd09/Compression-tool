@@ -109,7 +109,8 @@ meaning):
 
 Always present:
 
-`Cycle`, `PeakStress_MPa`, `PeakDisp_mm`, `MaxDisp_mm`, `ResidualDisp_mm`,
+`Cycle`, `PeakStress_MPa`, `PeakDisp_mm`, `MaxDisp_mm`,
+`StressAtMaxDisp_MPa`, `ResidualDisp_mm`,
 `PermDef_cumulative_mm`, `PermDef_incremental_mm`,
 `Stiffness_common_MPa_per_mm`, `Stiffness_common_n`, `Stiffness_common_r2`,
 `Stiffness_relative_MPa_per_mm`, `Stiffness_relative_n`, `Stiffness_relative_r2`,
@@ -132,11 +133,11 @@ Keys prefixed `_` are sample indices into the raw signal, for re-plotting.
 These are the distinctions the numbers do not carry on their own.
 
 **Displacement has two meanings.** `PeakDisp_mm` is displacement at maximum
-*stress*; `MaxDisp_mm` is the largest displacement in the cycle, at the end of
-the dwell, and is the point the energy integrals split at. On your T050E1
-export `MaxDisp_mm` exceeds `PeakDisp_mm` by 37% in cycle 8. Quote `MaxDisp_mm`
-for how far the specimen moved; the pair for how much of that arrived during
-the hold.
+*stress*; `MaxDisp_mm` is the largest displacement in the cycle and is the point
+the energy integrals split at. On T050E1 `MaxDisp_mm` exceeds `PeakDisp_mm` by
+37% in cycle 8. Quote `MaxDisp_mm` for how far the specimen moved; the pair for
+how much of that arrived after the stress peak. Where that maximum falls is
+itself a reading — see `StressAtMaxDisp_MPa` below.
 
 **Two stiffnesses, one comparable.** `Stiffness_common_*` uses an identical
 stress window in every cycle and may be compared across stages, specimens and
@@ -158,6 +159,15 @@ stored) normalises away unequal dwell lengths so cycles can be *ranked*. It is
 not a creep rate and must never be labelled or plotted as one — converting
 samples to time needs a constant sampling interval, which the export does not
 record. A rate in mm/s requires a time channel enabled at export.
+
+**Maximum displacement is not always at the end of the dwell.** On an intact
+specimen it is, and `StressAtMaxDisp_MPa` equals the peak. When it falls below
+the peak the specimen went on compacting *while the load was being removed* —
+still yielding on the unloading ramp. On T050E1 this reads ~0.9996 of peak for
+cycles 1–5 and then steps to 0.88 / 0.66 / 0.71 / 0.49 (S1, from cycle 6). Dwell
+ripple keeps an intact cycle a shade under 1.000, so read ≥ 0.997 as intact.
+It is a step rather than a drift, which dates damage onset more sharply than the
+stiffness rollover does.
 
 **Fit quality is not measurement accuracy.** `Stiffness_common_quality`
 (`ok` / `few points` / `nonlinear` / `none`) describes only how well a line
@@ -213,6 +223,7 @@ index; neither is in the JSON.
 |---|---|---|
 | `Stiffness_common_quality` | `Stiffness_common_n`, `Stiffness_common_r2` | `schema.stiffness_quality()` |
 | `HoldDisp_per_1000_samples_mm` | `Creep_during_hold_mm`, `HoldPoints` | `schema.hold_disp_per_1000_samples()` |
+| `UnloadYield_frac` | `StressAtMaxDisp_MPa`, `PeakStress_MPa` | `schema.unload_yield_frac()` |
 
 Use those functions rather than reimplementing them, so the UI cannot drift from
 the workbook.
@@ -261,5 +272,11 @@ workbook and report showing the same thing.
   loss **across cycles**" when `analysis.multi_stage` is true, rather than an
   unscoped "Mean hysteresis loss" that could be read as a single physical
   value across stress levels that are not comparable.
+- `cycles[].StressAtMaxDisp_MPa` added, with derived `UnloadYield_frac` — the
+  stress at which the specimen was most compressed, and that as a fraction of
+  the cycle peak. Surfaces continued yielding on the unloading ramp, which no
+  other column carried.
+- `MaxDisp_mm`'s description corrected: it claimed the maximum always falls at
+  the end of the dwell, which holds only while the specimen is intact.
 - The combined run report's `<title>` no longer repeats the material name
   (was `"T050E1 - T050E1_2026-08-17"`; now `"T050E1 - 2026-08-17"`).

@@ -526,12 +526,20 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
                 # Displacement at the instant of MAXIMUM STRESS. Not the same
                 # as the largest displacement in the cycle -- see MaxDisp_mm.
                 "PeakDisp_mm": float(cx[peak_idx]),
-                # Largest displacement reached in the cycle. It occurs at the
-                # END of the dwell, later than the stress peak, because the
-                # specimen keeps creeping while stress is already held constant.
-                # This is the point the energy integrals split the loop at, and
-                # on a long dwell it can exceed PeakDisp_mm by 20% or more.
+                # Largest displacement reached in the cycle, and the point the
+                # energy integrals split the loop at. It falls at or after the
+                # stress peak because the specimen keeps creeping while stress
+                # is held; on a long dwell it can exceed PeakDisp_mm by 20%+.
+                # It is NOT necessarily at the end of the dwell -- see
+                # StressAtMaxDisp_MPa below.
                 "MaxDisp_mm": float(np.nanmax(cx)),
+                # Stress at the instant of maximum displacement. On an intact
+                # specimen this equals the peak: displacement stops growing
+                # when the load stops being held. Once it falls BELOW the peak
+                # the specimen went on compacting while the load was being
+                # removed, which is a damage signature no other column here
+                # carries. Reported in MPa so it can be read against the peak.
+                "StressAtMaxDisp_MPa": float(cs[int(np.argmax(cx))]),
                 # --- residual / permanent deformation -----------------------
                 # Read on the loading branch at a LOW common stress, not at
                 # zero: at zero stress the specimen loses contact and the

@@ -118,11 +118,24 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "MaxDisp_mm", "REAL", "Maximum displacement", "mm",
-        "Largest displacement reached in the cycle, at the END of the dwell. "
-        "This is the point the energy integrals split the loop at, and the "
-        "figure to quote for how far the specimen actually moved. It exceeds "
-        "the displacement at peak stress by however much the specimen crept "
-        "while the load was held.",
+        "Largest displacement reached in the cycle, and the point the energy "
+        "integrals split the loop at. This is the figure to quote for how far "
+        "the specimen actually moved. It exceeds the displacement at peak "
+        "stress by however much the specimen crept while the load was held. "
+        "It is NOT necessarily at the end of the dwell -- check the stress at "
+        "maximum displacement beside it.",
+    ),
+    Column(
+        "StressAtMaxDisp_MPa", "REAL", "Stress at maximum displacement", "MPa",
+        "Stress at the instant the specimen was most compressed. On an intact "
+        "specimen this equals the peak stress: displacement stops growing once "
+        "the load stops being held. When it falls BELOW the peak, the specimen "
+        "went on compacting while the load was being REMOVED -- it is still "
+        "yielding on the unloading ramp. That is a damage signature that no "
+        "other column here carries, and it appears as a step rather than a "
+        "drift, so it dates the onset more sharply than the stiffness "
+        "rollover does.",
+        fmt="0.00",
     ),
     Column(
         "ResidualDisp_mm", "REAL", "Residual displacement", "mm",
@@ -319,6 +332,29 @@ HOLD_DISP_RATE = Column(
 )
 
 
+UNLOAD_YIELD = Column(
+    "UnloadYield_frac", "REAL", "Stress at max displacement, of peak", "-",
+    "Stress at maximum displacement divided by the cycle's peak stress. "
+    "About 1.00 means the specimen stopped compacting when the load stopped "
+    "being held -- intact behaviour. Ripple during the dwell puts an intact "
+    "cycle a shade under 1.000 rather than exactly on it, so read roughly "
+    "0.997 and above as intact. Below that the specimen kept compacting while "
+    "the load was being REMOVED, and the shortfall measures how far into the "
+    "unloading ramp that continued. Derived from the two columns before it.",
+    fmt="0.000",
+)
+
+
+def unload_yield_frac(
+    stress_at_max_disp: Optional[float], peak_stress: Optional[float]
+) -> Optional[float]:
+    """How far into unloading the specimen was still compacting, as a fraction
+    of peak stress. 1.0 is intact; lower means still yielding as load came off."""
+    if stress_at_max_disp is None or not peak_stress:
+        return None
+    return float(stress_at_max_disp) / float(peak_stress)
+
+
 def hold_disp_per_1000_samples(
     hold_disp_mm: Optional[float], hold_points: Optional[float]
 ) -> Optional[float]:
@@ -427,6 +463,8 @@ def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
         out.append(col)
         if col.key == "Stiffness_common_r2":
             out.append(STIFFNESS_QUALITY)
+        if col.key == "StressAtMaxDisp_MPa":
+            out.append(UNLOAD_YIELD)
         if col.key == "Creep_during_hold_mm":
             out.append(HOLD_DISP_RATE)
     return out
@@ -437,6 +475,7 @@ def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
 # that makes it readable.
 INSEPARABLE_PAIRS: tuple[tuple[str, str], ...] = (
     ("Stiffness_common_r2", "Stiffness_common_quality"),
+    ("StressAtMaxDisp_MPa", "UnloadYield_frac"),
     ("HoldPoints", "Creep_during_hold_mm"),
     ("Creep_during_hold_mm", "HoldDisp_per_1000_samples_mm"),
 )

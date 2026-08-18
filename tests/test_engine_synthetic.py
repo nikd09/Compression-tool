@@ -162,6 +162,48 @@ def test_displacement_peaks_after_stress_does(signal):
         assert int(np.argmax(x)) > int(np.argmax(s))
 
 
+def test_stress_at_max_displacement_equals_peak_on_an_intact_specimen(signal):
+    """The synthetic signal stops creeping when the dwell ends, so maximum
+    displacement lands at peak stress. A value below the peak means the
+    specimen went on compacting while the load was coming off -- the damage
+    signature this column exists to catch."""
+    stress, disp = signal
+    df = analyse_test(_as_test(stress, disp))
+
+    ratio = df["StressAtMaxDisp_MPa"] / df["PeakStress_MPa"]
+    assert (ratio > 0.999).all()
+
+
+def test_stress_at_max_displacement_detects_yielding_through_unload():
+    """A specimen that keeps compacting as the load is removed puts its maximum
+    displacement partway down the unloading ramp, not at the dwell's end."""
+    from conftest import BASELINE_MM, CONTACT_SCALE_MPA
+
+    peak, n_ramp, n_hold, n_unload = 200.0, 400, 600, 400
+    s_load = np.linspace(0.0, peak, n_ramp)
+    contact = 1.0 - np.exp(-s_load / CONTACT_SCALE_MPA)
+    x_load = BASELINE_MM + (BASELINE_MM - BASELINE_MM) * contact + 0.02 * (s_load / peak) ** 0.85
+    s_hold = np.full(n_hold, peak)
+    x_hold = x_load[-1] + 0.002 * np.linspace(0, 1, n_hold) ** 0.5
+    # Unloading: displacement keeps rising over the first third of the ramp
+    # before the specimen finally recovers -- continued yielding under falling load.
+    s_unload = np.linspace(peak, 0.0, n_unload)
+    frac = np.linspace(0, 1, n_unload)
+    x_unload = x_hold[-1] + 0.004 * np.sin(np.pi * np.clip(frac / 0.6, 0, 1)) - 0.01 * frac**2
+    stress = np.concatenate([np.zeros(200), s_load, s_hold, s_unload, np.full(200, 0.001)])
+    disp = np.concatenate([np.full(200, BASELINE_MM), x_load, x_hold, x_unload,
+                           np.full(200, BASELINE_MM)])
+
+    df = analyse_test(_as_test(stress, disp))
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["StressAtMaxDisp_MPa"] < row["PeakStress_MPa"] * 0.95
+    # The maximum is still the maximum, whichever branch it fell on.
+    assert row["MaxDisp_mm"] == pytest.approx(float(np.max(disp)))
+    # And the energy split still yields non-negative dissipation.
+    assert row["Energy_dissipated_MPa_mm"] >= 0
+
+
 def test_common_band_stiffness_is_comparable_across_stages(signal):
     """The whole point of the common band: an identical stress window in every
     cycle, so a rising stage does not masquerade as a stiffening material."""
