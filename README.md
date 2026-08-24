@@ -206,14 +206,60 @@ Instrument exports are gitignored rather than committed, so those tests skip on
 a fresh clone until the files are placed in `tests/data/` — see the README
 there for the expected names.
 
+## Web UI
+
+```bash
+pip install -e ".[webapp]"
+streamlit run compression_tool/webapp/app.py
+```
+
+Four views, matching HANDOFF.md's build order:
+
+| View | What it does |
+|---|---|
+| Ingest | Upload exports, adjust thresholds, `preview()` before committing, then `ingest()`. |
+| Results | Pick a material and up to two specimens; renders the grouped-bar dashboard (S1 / S2 / Avg) against their real records and curve caches. |
+| Compare | Overlay one metric across materials, averaged per cycle across each material's specimens (`knowledge_base.cycles_for_materials()`). |
+| Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
+
+Every view is a thin layer over the public API -- `preview`, `ingest`,
+`knowledge_base`, and `dashboard_data.build_dashboard_data()`, which maps a
+stored record plus its curve cache onto the exact shape the dashboard
+template (`webapp/templates/results_dashboard.html`) renders from. Nothing
+web-specific reimplements a metric.
+
+The dashboard's chart set (`PANELS` in the template) is a single array, so
+narrowing it to whatever subset a reviewer settles on -- fewer panels, a
+different order -- is a one-line edit, not a rebuild. Each chart carries its
+own legend, drawn into the SVG rather than beside it, so a copied or
+downloaded PNG is self-explanatory without its surrounding page. Copy and
+Download both render the same PNG; when the browser's clipboard or download
+permissions are actually withheld (a sandboxed embed) the PNG opens on
+screen instead, right-click-able, rather than failing silently -- detected
+via `window.origin`, which reads the literal string `"null"` in a sandboxed
+iframe lacking `allow-same-origin` and the real origin otherwise. (A `srcdoc`
+document's `location.origin` reads `"null"` regardless of sandboxing, which
+is why the check does not use it.)
+
+The chart palette (S1 / S2 / Avg) supports at most two specimens shown
+together -- `dashboard_data.MAX_SPECIMENS` -- matching the grouped-bar idiom
+this dashboard standardised on; a third would have nowhere distinct left in
+the colour set.
+
 ## Still to build
 
-Steps 3–5 of the handoff: the Streamlit UI (Ingest / Results / Compare /
-Config), the dashboard rework, and plots. The pieces they need are in place —
-`preview()` returns exactly what an ingest screen should show before committing,
-`knowledge_base.cycles_for_materials()` returns the shape a compare view
-needs, and `ingest()` now writes a `<specimen>.curve.json` sidecar beside every
-record — the per-cycle stress-displacement points a chart needs, reduced with
+Steps 3–5 of the handoff are now built: Ingest / Results / Compare / Config
+above. What is not built yet:
+
+- **Compare's chart is a plain Altair line, not the grouped-bar idiom.**
+  Cross-material comparison was never mocked up against the old tool the way
+  Results was, so it is functional rather than designed to the same bar.
+- **No re-analysis from the UI.** Changing a threshold on Ingest only affects
+  new ingests; there is no "re-run this specimen with different settings"
+  button yet, though `Config` exposes every knob needed to build one.
+
+`ingest()` writes a `<specimen>.curve.json` sidecar beside every record -- the
+per-cycle stress-displacement points a chart needs, reduced with
 Ramer-Douglas-Peucker (`compression_tool/curve_cache.py`) so a UI is not
 loading 85k raw samples per specimen to draw a loop. Deliberately outside the
 frozen contract: rebuildable from the archived raw file, so a change to the

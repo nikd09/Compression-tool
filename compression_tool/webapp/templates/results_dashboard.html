@@ -1,0 +1,794 @@
+<title>Compression Results</title>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --sunk:#f2f1ed;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --ghost:#b9b7b0;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --shadow:0 8px 30px rgba(0,0,0,.16);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --sunk:#232322;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --ghost:#5a5954;
+  --shadow:0 8px 30px rgba(0,0,0,.55);
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --sunk:#232322;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --ghost:#5a5954;
+  --shadow:0 8px 30px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1340px;margin:0 auto;padding:1.6rem 1.1rem 4rem;}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:.6rem 1.4rem;align-items:baseline;
+  justify-content:space-between;margin-bottom:.5rem;}
+h1{font-size:1.35rem;margin:0;letter-spacing:-.02em;font-weight:670;}
+.meta{display:flex;flex-wrap:wrap;gap:.2rem 1.1rem;font-size:.76rem;
+  color:var(--muted);font-variant-numeric:tabular-nums;}
+.meta b{color:var(--ink-2);font-weight:600;}
+
+/* tabs */
+.tabs{display:flex;gap:.25rem;border-bottom:1px solid var(--grid);margin:1rem 0 1.4rem;}
+.tabs button{font:inherit;font-size:.9rem;font-weight:600;padding:.55rem .95rem;
+  border:none;background:none;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tabs button:hover{color:var(--ink);}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--s1);}
+.tabs button:focus-visible{outline:2px solid var(--s1);outline-offset:-2px;border-radius:4px;}
+[role="tabpanel"][hidden]{display:none;}
+
+/* controls */
+.bar{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;align-items:center;margin-bottom:1.1rem;}
+.grp{display:flex;gap:.28rem;align-items:center;}
+.grp>span{font-size:.7rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.07em;font-weight:600;margin-right:.15rem;}
+button.chip{font:inherit;font-size:.79rem;padding:.26rem .58rem;border-radius:6px;
+  border:1px solid var(--ring);background:var(--surface);color:var(--ink-2);
+  cursor:pointer;font-variant-numeric:tabular-nums;line-height:1.2;}
+button.chip:hover{background:var(--sunk);color:var(--ink);}
+button.chip[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);
+  color:#fff;font-weight:600;}
+button.chip:focus-visible{outline:2px solid var(--s1);outline-offset:2px;}
+
+/* legend */
+.leg{display:flex;flex-wrap:wrap;gap:.35rem 1.1rem;font-size:.79rem;color:var(--ink-2);}
+.leg i{display:inline-block;width:13px;height:11px;border-radius:2px;
+  vertical-align:-1px;margin-right:.35rem;}
+
+/* charts */
+.grid{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));}
+.cell{background:var(--surface);border:1px solid var(--ring);border-radius:10px;
+  padding:.7rem .8rem .5rem;position:relative;transition:border-color .12s,box-shadow .12s;}
+.cell:hover{border-color:var(--axis);}
+.cell .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;
+  margin-bottom:.4rem;}
+.cell h3{margin:0 0 .05rem;font-size:.87rem;font-weight:650;letter-spacing:-.01em;}
+.cell .u{margin:0;font-size:.71rem;color:var(--muted);}
+.wide{grid-column:1/-1;}
+.plot{cursor:zoom-in;}
+svg{display:block;width:100%;height:auto;overflow:visible;}
+.gl{stroke:var(--grid);stroke-width:1;}
+.ax{stroke:var(--axis);stroke-width:1;}
+.tk{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;}
+.altl{fill:var(--ink-2);font-size:10.5px;font-weight:600;}
+.vl{fill:var(--ink-2);font-size:9px;font-variant-numeric:tabular-nums;font-weight:600;}
+/* Legend lives inside the SVG, not beside it, so an exported or copied chart
+   carries its own key instead of losing it at the crop. */
+.lgd{fill:var(--ink-2);font-size:10px;font-weight:600;}
+.ttl{fill:var(--ink);font-size:15px;font-weight:660;}
+.sub{fill:var(--muted);font-size:11px;}
+
+/* per-chart actions */
+.acts{display:flex;gap:.12rem;opacity:0;transition:opacity .12s;flex:none;}
+.cell:hover .acts,.cell:focus-within .acts,.dlg .acts{opacity:1;}
+.ico{width:26px;height:26px;display:grid;place-items:center;border-radius:6px;
+  border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;padding:0;}
+.ico:hover{background:var(--sunk);color:var(--ink);border-color:var(--ring);}
+.ico:focus-visible{outline:2px solid var(--s1);outline-offset:1px;}
+.ico svg{width:15px;height:15px;overflow:visible;}
+
+/* expanded dialog — sized to the viewport so the whole plot is always visible */
+.dlg{border:none;padding:0;background:transparent;max-width:none;max-height:none;
+  width:100%;height:100%;}
+.dlg::backdrop{background:rgba(0,0,0,.62);backdrop-filter:blur(3px);}
+.dlg .panel{background:var(--page);color:var(--ink);border-radius:12px;
+  box-shadow:var(--shadow);width:min(1180px,95vw);height:min(92vh,900px);margin:auto;
+  display:flex;flex-direction:column;overflow:hidden;}
+.dlg .bar2{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;
+  padding:.85rem 1.1rem .55rem;border-bottom:1px solid var(--grid);flex:none;}
+.dlg h3{margin:0;font-size:1.05rem;font-weight:660;letter-spacing:-.015em;}
+.dlg .u{margin:.1rem 0 0;font-size:.78rem;color:var(--muted);}
+.dlg .body{padding:.8rem 1.1rem 1rem;flex:1;min-height:0;
+  display:flex;flex-direction:column;gap:.7rem;}
+/* flex:1 + min-height:0 lets the plot take the leftover height; the SVG's own
+   preserveAspectRatio then fits the drawing inside it instead of overflowing. */
+#dlg-plot{flex:1;min-height:0;}
+#dlg-plot svg{width:100%;height:100%;}
+.dlg .why{margin:0;font-size:.82rem;color:var(--ink-2);max-width:92ch;flex:none;}
+
+/* PNG fallback: when the browser blocks clipboard and downloads, the image is
+   put on the page so it can still be right-clicked out. */
+#img-dlg .panel{padding:.9rem 1.1rem 1.1rem;gap:.6rem;}
+#img-dlg img{max-width:100%;max-height:100%;object-fit:contain;display:block;
+  margin:0 auto;border:1px solid var(--ring);border-radius:6px;background:#fff;}
+#img-wrap{flex:1;min-height:0;display:flex;}
+#img-hint{font-size:.82rem;color:var(--ink-2);margin:0;flex:none;}
+#img-hint b{color:var(--ink);}
+@media (prefers-reduced-motion:no-preference){
+  .dlg[open]{animation:pop .14s ease-out;}
+  @keyframes pop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+}
+
+/* table */
+.tw{overflow:auto;max-height:620px;border:1px solid var(--ring);border-radius:9px;
+  background:var(--surface);}
+table{border-collapse:collapse;width:100%;font-size:.77rem;
+  font-variant-numeric:tabular-nums;}
+th,td{padding:.34rem .6rem;text-align:right;white-space:nowrap;
+  border-bottom:1px solid var(--grid);}
+th{color:var(--muted);font-weight:600;font-size:.66rem;letter-spacing:.03em;
+  text-transform:uppercase;background:var(--sunk);position:sticky;top:0;z-index:1;}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;
+  background:var(--surface);}
+th:first-child{background:var(--sunk);z-index:2;}
+tbody tr:hover td{background:var(--sunk);}
+tbody tr.sep td{border-top:2px solid var(--axis);}
+
+/* method tab */
+.mh{font-size:1.12rem;margin:0 0 .5rem;font-weight:660;letter-spacing:-.015em;}
+.prose{max-width:76ch;}
+.prose h2{font-size:1.12rem;margin:2.2rem 0 .4rem;font-weight:660;letter-spacing:-.015em;}
+.prose p,.prose li{color:var(--ink-2);}
+.prose code{font-family:var(--mono);font-size:.85em;background:var(--sunk);
+  padding:.1em .34em;border-radius:3px;color:var(--ink);}
+.dict{width:100%;font-size:.82rem;}
+.dict td{text-align:left;white-space:normal;vertical-align:top;}
+.dict td:first-child{font-weight:640;color:var(--ink);width:15rem;position:static;}
+.dict td:nth-child(2){color:var(--muted);white-space:nowrap;width:5rem;text-align:center;}
+.note{font-size:.79rem;color:var(--muted);margin:.5rem 0 1rem;}
+
+#tip{position:fixed;pointer-events:none;z-index:90;opacity:0;transition:opacity .09s;
+  background:var(--surface);border:1px solid var(--ring);border-radius:7px;
+  padding:.45rem .6rem;font-size:.77rem;box-shadow:var(--shadow);
+  font-variant-numeric:tabular-nums;}
+#tip .t{font-weight:660;margin-bottom:.18rem;}
+#tip .r{display:flex;justify-content:space-between;gap:1.1rem;color:var(--ink-2);}
+#tip .r b{color:var(--ink);font-weight:600;}
+#toast{position:fixed;left:50%;bottom:1.6rem;transform:translateX(-50%) translateY(8px);
+  background:var(--ink);color:var(--page);font-size:.8rem;font-weight:560;
+  padding:.5rem .9rem;border-radius:7px;opacity:0;pointer-events:none;z-index:100;
+  transition:opacity .16s,transform .16s;box-shadow:var(--shadow);}
+#toast.on{opacity:1;transform:translateX(-50%);}
+footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--grid);
+  font-size:.74rem;color:var(--muted);}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1 id="title">Compression Results</h1>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-res" aria-controls="p-res" aria-selected="true">Results</button>
+    <button role="tab" id="t-met" aria-controls="p-met" aria-selected="false">Method</button>
+  </div>
+
+  <div role="tabpanel" id="p-res" aria-labelledby="t-res">
+    <div class="bar" id="ctrls"></div>
+    <div class="grid" id="charts"></div>
+  </div>
+
+  <div role="tabpanel" id="p-met" aria-labelledby="t-met" hidden>
+    <h2 class="mh">All values</h2>
+    <div class="tw"><table id="tbl"></table></div>
+    <p class="note" id="dlnote"></p>
+    <div class="prose" id="method"></div>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<dialog class="dlg" id="dlg">
+  <div class="panel">
+    <div class="bar2">
+      <div><h3 id="dlg-t"></h3><p class="u" id="dlg-u"></p></div>
+      <div class="acts" id="dlg-acts"></div>
+    </div>
+    <div class="body">
+      <div id="dlg-plot"></div>
+      <p class="why" id="dlg-why"></p>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="dlg" id="img-dlg">
+  <div class="panel">
+    <div class="bar2">
+      <div><h3 id="img-t"></h3><p class="u">Right-click the image to copy or save it</p></div>
+      <div class="acts"><button class="ico" id="img-close" title="Close" aria-label="Close"></button></div>
+    </div>
+    <div class="body">
+      <div id="img-wrap"><img id="img-out" alt="Chart export"></div>
+      <p id="img-hint"></p>
+    </div>
+  </div>
+</dialog>
+
+<div id="tip" role="status" aria-live="polite"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+const $ = s => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+const SPS = DATA.specimens;
+const NC = SPS[0].cycles.length;
+const state = { show: "both" };   // "both" | "0" | "1"
+
+const fmt = (v,d=2) => v==null||Number.isNaN(v) ? "—"
+  : v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+function el(t,a={},p=null){const e=document.createElementNS(NS,t);
+  for(const k in a) e.setAttribute(k,a[k]); if(p) p.appendChild(e); return e;}
+function svg(host,w,h){host.innerHTML="";const s=el("svg",{viewBox:`0 0 ${w} ${h}`,role:"img"});
+  host.appendChild(s);return s;}
+
+/* series actually drawn, given the specimen filter. Colour follows the entity,
+   never the row -- filtering never repaints a survivor. */
+function series(){
+  const out = [];
+  SPS.forEach((s,i) => {
+    if (state.show === "both" || state.show === String(i))
+      out.push({key:i, name:s.short, colour:`var(--s${i+1})`});
+  });
+  if (state.show === "both" && SPS.length > 1)
+    out.push({key:"avg", name:"Avg", colour:"var(--s3)"});
+  return out;
+}
+const valOf = (ser, key, n) => {
+  if (ser.key === "avg"){
+    const vs = SPS.map(s => s.cycles.find(c=>c.n===n)[key]).filter(v => v!=null);
+    return vs.length ? vs.reduce((a,b)=>a+b,0)/vs.length : null;
+  }
+  return SPS[ser.key].cycles.find(c=>c.n===n)[key];
+};
+
+const tip = $("#tip");
+function showTip(ev,title,rows){
+  tip.innerHTML = `<div class="t">${title}</div>` +
+    rows.map(([k,v])=>`<div class="r"><span>${k}</span><b>${v}</b></div>`).join("");
+  tip.style.opacity=1;
+  const pad=13,r=tip.getBoundingClientRect();
+  let x=ev.clientX+pad,y=ev.clientY+pad;
+  if(x+r.width>innerWidth-8) x=ev.clientX-r.width-pad;
+  if(y+r.height>innerHeight-8) y=ev.clientY-r.height-pad;
+  tip.style.left=x+"px"; tip.style.top=y+"px";
+}
+const hideTip = () => tip.style.opacity=0;
+
+let toastTimer;
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"),1900);
+}
+
+function ticks(lo,hi,n=4){
+  const span=hi-lo; if(!(span>0)) return [lo];
+  const mag=Math.pow(10,Math.floor(Math.log10(span/n)));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(s=>span/s<=n*1.4)||mag*10;
+  const out=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+step*1e-6; v+=step) out.push(+v.toFixed(10));
+  return out;
+}
+function axes(s,m,w,h,yd,yfmt,xlab){
+  const Y=v=>h-m.b-(v-yd[0])/(yd[1]-yd[0])*(h-m.t-m.b);
+  for(const t of ticks(yd[0],yd[1])){
+    if(t<yd[0]||t>yd[1]) continue;
+    el("line",{x1:m.l,x2:w-m.r,y1:Y(t),y2:Y(t),class:"gl"},s);
+    const tx=el("text",{x:m.l-6,y:Y(t)+3.4,class:"tk","text-anchor":"end"},s);
+    tx.textContent=yfmt(t);
+  }
+  el("line",{x1:m.l,x2:w-m.r,y1:Y(Math.max(yd[0],0)),y2:Y(Math.max(yd[0],0)),class:"ax"},s);
+  if(xlab){const t=el("text",{x:(m.l+w-m.r)/2,y:h-2,class:"altl","text-anchor":"middle"},s);
+    t.textContent=xlab;}
+  return Y;
+}
+
+/* Every panel shares one viewBox ratio so the grid reads as one system, and
+   the expanded view keeps that ratio rather than restretching the chart. */
+const RATIO = 360/220;
+
+/* Legend drawn into the SVG itself. Widths are estimated from the label text
+   rather than measured -- the labels are "S1", "S2", "Avg", so an estimate is
+   exact enough and avoids a layout pass per chart. */
+function drawLegend(root, ser, x0, y, big){
+  const fs = big ? 13 : 10, sw = big ? 11 : 9, gap = big ? 7 : 5;
+  let x = x0;
+  ser.forEach(s=>{
+    el("rect",{x, y:y-sw+1, width:sw, height:sw, rx:2, fill:s.colour},root);
+    const t=el("text",{x:x+sw+gap, y, class:"lgd", style:`font-size:${fs}px`},root);
+    t.textContent=s.name;
+    x += sw + gap + s.name.length*fs*0.62 + (big?20:14);
+  });
+}
+
+/* ── grouped bars: one group per cycle, one bar per specimen ─────────── */
+function barChart(host, spec, big=false, aspect=null){
+  const ser = series();
+  const W = big ? 1000 : 360;
+  // Expanded, the chart takes the shape of the space it was given rather than
+  // being letterboxed inside it.
+  const H = Math.round(W / (aspect || RATIO));
+  const k = W/360;
+  const legH = big ? 26 : 18;
+  const m={l:46*k, r:10*k, t:12*k+legH, b:26*k};
+  const root=svg(host,W,H);
+  drawLegend(root, ser, 46*k, legH-4, big);
+  const sc = spec.scale || 1;
+  const vals=[]; for(let n=1;n<=NC;n++) ser.forEach(s=>{const v=valOf(s,spec.k,n); if(v!=null) vals.push(v*sc);});
+  if(!vals.length) return;
+  const hi=Math.max(...vals), lo=Math.min(0,Math.min(...vals));
+  const yd=[lo, hi*(big?1.08:1.12) || 1];
+  const Y=axes(root,m,W,H,yd,spec.f,"Cycle");
+  if(big){
+    const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
+      transform:`translate(13 ${(m.t+H-m.b)/2}) rotate(-90)`},root);
+    yl.textContent=spec.u2 || spec.t;
+  }
+
+  const gw=(W-m.l-m.r)/NC, bw=Math.max(3,(gw-6*k)/ser.length-2*k);
+  for(let n=1;n<=NC;n++){
+    const gx=m.l+(n-1)*gw+3*k;
+    const tx=el("text",{x:m.l+(n-.5)*gw,y:H-m.b+12*k,class:"tk","text-anchor":"middle"},root);
+    tx.textContent=n;
+    if(big) tx.setAttribute("style","font-size:13px");
+    ser.forEach((s,si)=>{
+      const raw=valOf(s,spec.k,n); if(raw==null) return;
+      const v=raw*sc;
+      const y=Y(v), y0=Y(Math.max(yd[0],0));
+      const hgt=Math.abs(y0-y);
+      // 4px rounded data-end, anchored to the baseline; 2px gap between bars
+      const r=Math.min(4*k,bw/2,hgt);
+      const x=gx+si*(bw+2*k);
+      const top=Math.min(y,y0);
+      el("path",{d:`M${x} ${top+hgt} L${x} ${top+r} Q${x} ${top} ${x+r} ${top}
+        L${x+bw-r} ${top} Q${x+bw} ${top} ${x+bw} ${top+r} L${x+bw} ${top+hgt} Z`,
+        fill:s.colour, style:"cursor:crosshair"},root)
+        .addEventListener("pointermove",ev=>showTip(ev,`Cycle ${n} · ${s.name}`,
+          [[spec.t, spec.f(v)+(spec.u2?" "+spec.u2:"")],
+           ["Peak stress", fmt(valOf(s,"peakStress",n),0)+" MPa"]]));
+      // Expanded view has the room to print the number, so it does.
+      if(big){
+        const lab=el("text",{x:x+bw/2,y:top-5,class:"vl","text-anchor":"middle"},root);
+        lab.textContent=spec.f(v);
+      }
+    });
+  }
+  root.addEventListener("pointerleave",hideTip);
+}
+
+/* ── stress–displacement curves ───────────────────────────────────────── */
+function loopChart(host, _spec, big=false, aspect=null){
+  const ser=series().filter(s=>s.key!=="avg");
+  const W = 1000, H = aspect ? Math.round(W/aspect) : 400;
+  const k = 1;
+  const legH = big ? 26 : 20;
+  const m={l:52*k,r:14*k,t:12*k+legH,b:34*k};
+  const root=svg(host,W,H);
+  drawLegend(root, ser, 52*k, legH-5, big);
+  const all=ser.flatMap(s=>SPS[s.key].cycles.flatMap(c=>c.pts));
+  const gmax=Math.max(...all.map(p=>p[0]));
+  const xd=[-0.008,gmax*1.03], yd=[0,Math.max(...all.map(p=>p[1]))*1.04];
+  const X=v=>m.l+(v-xd[0])/(xd[1]-xd[0])*(W-m.l-m.r);
+  const Y=axes(root,m,W,H,yd,v=>v.toFixed(0),"Displacement (mm)");
+  for(const t of ticks(xd[0],xd[1],big?7:5)){
+    if(t<xd[0]||t>xd[1]) continue;
+    const tx=el("text",{x:X(t),y:H-m.b+12*k,class:"tk","text-anchor":"middle"},root);
+    tx.textContent=t.toFixed(3);
+  }
+  const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
+    transform:`translate(${11*k} ${(m.t+H-m.b)/2}) rotate(-90)`},root);
+  yl.textContent="Stress (MPa)";
+  ser.forEach(s=>{
+    SPS[s.key].cycles.forEach(c=>{
+      const d=c.pts.map(p=>`${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(" L");
+      el("path",{d:"M"+d,fill:"none",stroke:s.colour,"stroke-width":big?1.7:1.4,
+        "stroke-linejoin":"round",opacity:.9},root);
+    });
+  });
+}
+
+/* ── the panels, in the order they are read ───────────────────────────── */
+const PANELS=[
+  {k:"peakStress", t:"Peak stress", u:"MPa", f:v=>fmt(v,0), u2:"MPa",
+   why:"Highest stress reached in each cycle. It rises every stage by design — this is the "+
+       "programmed schedule, not a material response — and it is the reference every "+
+       "per-cycle-relative metric is measured against."},
+  {k:"kCommon", t:"Common-band stiffness", u:"MPa/mm — identical window every cycle",
+   f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
+   why:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle "+
+       "(25–75% of the smallest cycle peak). This is the form that may be compared across "+
+       "stages, specimens and materials. A rollover here is the material softening."},
+  {k:"permCumPct", t:"Permanent deformation", u:"% of h₀, cumulative", f:v=>fmt(v,1), u2:"%",
+   why:"Residual displacement read on the LOADING branch at a low common stress, referenced "+
+       "to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal "+
+       "falls back to a few-micrometre baseline. NOT compression set in the ASTM D395 sense."},
+  {k:"maxStrainPct", t:"Maximum strain", u:"% of h₀", f:v=>fmt(v,1), u2:"%",
+   why:"Maximum displacement divided by the specimen's own measured thickness h₀. Valid only "+
+       "as far as h₀ is the length the displacement channel actually spans — confirmed for "+
+       "this test, since thickness is measured per specimen and entered into testXpert."},
+  {k:"loss", t:"Hysteresis loss", u:"dissipated ÷ input", f:v=>fmt(v,2), u2:"",
+   why:"Dissipated divided by input energy. The cross-test comparable form: absolute loss "+
+       "scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on "+
+       "the absolute number, but they can be compared on this ratio."},
+  {k:"holdDisp", t:"Hold displacement", u:"µm — a total, not a rate", f:v=>fmt(v,0), u2:"µm",
+   scale:1000,
+   why:"Displacement accumulated across the dwell at peak stress — a TOTAL, not a rate. Dwell "+
+       "length varies across the cycles of this test, so a longer dwell accumulates more at "+
+       "identical material behaviour. Read it against the hold length in the values table."},
+  {k:"maxDisp", t:"Maximum displacement", u:"mm", f:v=>fmt(v,3), u2:"mm",
+   why:"Largest displacement reached in the cycle, and the point the energy integrals split "+
+       "the loop at. It exceeds the displacement at peak stress by however much the specimen "+
+       "crept while the load was held — 37% in cycle 8 of this export."},
+  {k:"eDiss", t:"Energy dissipated", u:"MPa·mm — per unit area", f:v=>fmt(v,1), u2:"MPa·mm",
+   why:"The area enclosed by the loop: work that went into the specimen and did not come back "+
+       "out. Units are work per unit CROSS-SECTIONAL AREA, not per unit volume — divide by h₀ "+
+       "for work per unit volume in MPa."},
+  {k:"dispRefLoad", t:"Reference-stress displacement", u:"mm — loading branch", f:v=>fmt(v,3),
+   u2:"mm",
+   why:"Displacement at a common reference stress on the loading branch, reachable in every "+
+       "cycle of a rising multi-stage test. Because the stress is the same every time, the "+
+       "growth here is the specimen changing, not the schedule."},
+  // Last, and full width: the raw signal the nine panels above are read out of.
+  {k:"__loop", t:"Stress–displacement curves", u:"Every cycle, every specimen shown",
+   draw:loopChart, wide:true,
+   why:"The raw shape every other number is derived from. Each closed loop is one cycle: "+
+       "up the loading branch, across the dwell at peak, down the unloading branch. The area "+
+       "inside a loop is the energy dissipated in that cycle; the rightward drift between loops "+
+       "is the permanent deformation accumulating."},
+];
+
+function renderCtrls(){
+  const btns = [["both","Both + Avg"], ...SPS.map((s,i)=>[String(i), s.short])]
+    .map(([v,l])=>`<button class="chip" role="switch" aria-pressed="${state.show===v}" data-show="${v}">${l}</button>`).join("");
+  const note = series().some(s=>s.key==="avg")
+    ? `<span style="font-size:.78rem;color:var(--muted);text-transform:none;letter-spacing:0">
+       Avg is the mean of the specimens shown, per cycle</span>` : "";
+  $("#ctrls").innerHTML=`<div class="grp"><span>Show</span>${btns}</div>${note}`;
+  $("#ctrls").querySelectorAll("[data-show]").forEach(b=>
+    b.onclick=()=>{state.show=b.dataset.show; renderAll();});
+}
+
+const ICONS={
+  copy:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>',
+  png:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"/><path d="M4.75 7.25 8 10.5l3.25-3.25"/><path d="M2.5 12.5h11"/></svg>',
+  expand:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4"/><path d="M6.5 13.5h-4v-4"/><path d="M13.5 2.5 9 7"/><path d="M2.5 13.5 7 9"/></svg>',
+  close:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+};
+const actBtn=(act,label)=>`<button class="ico" data-act="${act}" title="${label}" aria-label="${label}">${ICONS[act]}</button>`;
+
+function renderCharts(){
+  const host=$("#charts");
+  host.innerHTML = PANELS.map((p,i)=>
+    `<div class="cell${p.wide?" wide":""}" data-i="${i}">
+       <div class="hd">
+         <div><h3>${p.t}</h3><p class="u">${p.u}</p></div>
+         <div class="acts">
+           ${actBtn("copy","Copy chart as PNG")}
+           ${actBtn("png","Download PNG")}
+           ${actBtn("expand","Expand")}
+         </div>
+       </div>
+       <div class="plot" id="c${i}" role="button" tabindex="0"
+            aria-label="${p.t} — expand"></div>
+     </div>`).join("");
+  PANELS.forEach((p,i)=>(p.draw||barChart)($("#c"+i),p,false));
+}
+
+/* ── export: SVG → PNG ────────────────────────────────────────────────── */
+/* The chart SVG paints itself from CSS custom properties and classes, none of
+   which survive being lifted out of the document. So the clone gets every
+   paint property resolved to a literal value first -- otherwise the export
+   comes out black-on-transparent. */
+const PAINT=["fill","stroke","stroke-width","stroke-linejoin","stroke-linecap",
+  "opacity","fill-opacity","stroke-opacity","font-size","font-family","font-weight",
+  "text-anchor","letter-spacing"];
+function freezePaint(src,dst){
+  const cs=getComputedStyle(src);
+  let css="";
+  for(const p of PAINT){const v=cs.getPropertyValue(p); if(v) css+=`${p}:${v};`;}
+  dst.setAttribute("style",css);
+  dst.removeAttribute("class");
+  const a=src.children,b=dst.children;
+  for(let i=0;i<a.length;i++) freezePaint(a[i],b[i]);
+}
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+/* The title and unit live in the page's HTML, not the SVG, so they are added
+   here -- an exported chart has to say what it is once it is out of the page. */
+async function chartToPng(svgEl,title,sub,scale=2.5){
+  const vb=svgEl.getAttribute("viewBox").split(/\s+/).map(Number);
+  const w=vb[2],h=vb[3],pad=14,head=title?42:0;
+  const clone=svgEl.cloneNode(true);
+  freezePaint(svgEl,clone);
+  if(head){
+    const g=document.createElementNS(NS,"g");
+    while(clone.firstChild) g.appendChild(clone.firstChild);
+    g.setAttribute("transform",`translate(0 ${head})`);
+    clone.appendChild(g);
+    const ink=getComputedStyle(document.body).color;
+    const t=el("text",{x:0,y:16,style:`fill:${ink};font-size:16px;font-weight:660;`+
+      `font-family:${getComputedStyle(document.body).fontFamily}`},clone);
+    t.textContent=title;
+    if(sub){
+      const st=el("text",{x:0,y:33,style:`fill:${ink};opacity:.62;font-size:11.5px;`+
+        `font-family:${getComputedStyle(document.body).fontFamily}`},clone);
+      st.textContent=sub;
+    }
+  }
+  const W=w+pad*2, H=h+head+pad*2;
+  clone.setAttribute("xmlns",NS);
+  clone.setAttribute("width",W); clone.setAttribute("height",H);
+  clone.setAttribute("viewBox",`${-pad} ${-pad} ${W} ${H}`);
+  const bg=getComputedStyle(document.body).backgroundColor;
+  let str=new XMLSerializer().serializeToString(clone);
+  str=str.replace(/(<svg[^>]*>)/,
+    `$1<rect x="${-pad}" y="${-pad}" width="${W}" height="${H}" fill="${bg}"/>`);
+  const img=new Image();
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(str);
+  await new Promise((ok,no)=>{img.onload=ok;img.onerror=()=>no(new Error("render failed"));});
+  const c=document.createElement("canvas");
+  c.width=Math.round(W*scale); c.height=Math.round(H*scale);
+  c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+  return new Promise(r=>c.toBlob(r,"image/png"));
+}
+const slug=t=>t.replace(/[^\w]+/g,"-").replace(/^-|-$/g,"").toLowerCase();
+
+/* A sandboxed iframe without allow-same-origin (the Claude Artifact preview)
+   forces an opaque origin, and window.origin then reads the literal string
+   "null" -- exactly the case where a script-started download is silently
+   dropped. window.origin ONLY: a srcdoc document's location.origin reads
+   "null" as a browser quirk regardless of sandboxing (confirmed against a
+   real Streamlit components.html iframe, which grants allow-same-origin and
+   allow-downloads -- downloads work there -- yet still has that quirk), so
+   location.origin is not part of this check. */
+const SANDBOXED = (()=>{ try{ return window.origin==="null"; } catch(e){ return false; } })();
+
+const imgDlg=$("#img-dlg");
+function showImageFallback(blob,title,hint){
+  const url=URL.createObjectURL(blob);
+  const im=$("#img-out");
+  im.onload=()=>setTimeout(()=>URL.revokeObjectURL(url),1000);
+  im.src=url;
+  $("#img-t").textContent=title;
+  $("#img-hint").innerHTML=hint;
+  if(!imgDlg.open) imgDlg.showModal();
+}
+$("#img-close").innerHTML=ICONS.close;
+$("#img-close").onclick=()=>imgDlg.close();
+imgDlg.addEventListener("click",ev=>{ if(ev.target===imgDlg) imgDlg.close(); });
+
+async function copyChart(svgEl,title,sub){
+  let blob;
+  try{ blob=await chartToPng(svgEl,title,sub); }
+  catch(e){ toast("Could not render the chart"); return; }
+  try{
+    await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
+    toast("Chart copied — paste into Word, Teams or PowerPoint");
+  }catch(e){
+    showImageFallback(blob,title,
+      "This preview does not give the page clipboard access, so the chart is shown here "+
+      "instead. <b>Right-click it → “Copy image”</b> and paste it straight into Word or "+
+      "PowerPoint. Opened outside the preview, the Copy button works directly.");
+  }
+}
+async function downloadChart(svgEl,title,sub){
+  let blob;
+  try{ blob=await chartToPng(svgEl,title,sub); }
+  catch(e){ toast("Could not render the chart"); return; }
+  if(SANDBOXED){
+    showImageFallback(blob,title,
+      "This preview blocks downloads that a page starts itself, so the PNG is shown here "+
+      "instead. <b>Right-click it → “Save image as…”</b> to keep the file. Opened outside "+
+      "the preview, the Download button saves it directly.");
+    return;
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=`${slug(DATA.sourceFilename)}_${slug(title)}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  toast("PNG downloaded");
+}
+
+/* ── expand ───────────────────────────────────────────────────────────── */
+const dlg=$("#dlg");
+let openIndex=null;
+function drawExpanded(){
+  if(openIndex==null) return;
+  const p=PANELS[openIndex], box=$("#dlg-plot");
+  // Measured after the dialog is on screen, so the chart is built to the space
+  // that actually exists on this display rather than a guessed one.
+  const w=box.clientWidth, h=box.clientHeight;
+  (p.draw||barChart)(box,p,true, w>0&&h>0 ? w/h : null);
+}
+function expand(i){
+  const p=PANELS[i];
+  openIndex=i;
+  $("#dlg-t").textContent=p.t;
+  $("#dlg-u").textContent=p.u;
+  $("#dlg-why").textContent=p.why||"";
+  $("#dlg-acts").innerHTML =
+    actBtn("copy","Copy chart as PNG")+actBtn("png","Download PNG")+actBtn("close","Close");
+  if(!dlg.open) dlg.showModal();
+  drawExpanded();
+}
+addEventListener("resize",()=>{ if(dlg.open) drawExpanded(); });
+$("#dlg-acts").addEventListener("click",async ev=>{
+  const b=ev.target.closest("[data-act]"); if(!b) return;
+  const s=$("#dlg-plot").querySelector("svg"), p=PANELS[openIndex];
+  if(b.dataset.act==="copy") await copyChart(s,p.t,p.u);
+  else if(b.dataset.act==="png") await downloadChart(s,p.t,p.u);
+  else dlg.close();
+});
+dlg.addEventListener("click",ev=>{ if(ev.target===dlg) dlg.close(); });
+dlg.addEventListener("close",()=>{ openIndex=null; hideTip(); });
+
+$("#charts").addEventListener("click",async ev=>{
+  const b=ev.target.closest("[data-act]");
+  const cell=ev.target.closest(".cell"); if(!cell) return;
+  const i=+cell.dataset.i, p=PANELS[i];
+  if(b){
+    // Scoped to .plot: .cell also holds toolbar-icon <svg>s in .hd, rendered
+    // before the chart, so an unscoped query grabs an icon instead of it.
+    const s=cell.querySelector(".plot svg");
+    if(b.dataset.act==="copy") await copyChart(s,p.t,p.u);
+    else if(b.dataset.act==="png") await downloadChart(s,p.t,p.u);
+    else expand(i);
+    return;
+  }
+  if(ev.target.closest(".plot")) expand(i);
+});
+$("#charts").addEventListener("keydown",ev=>{
+  if(ev.key!=="Enter"&&ev.key!==" ") return;
+  const plot=ev.target.closest(".plot"); if(!plot) return;
+  ev.preventDefault(); expand(+plot.closest(".cell").dataset.i);
+});
+
+/* ── the values table, on the Method tab ──────────────────────────────── */
+const COLS=[
+  ["Specimen", (c,s)=>s.short, null],
+  ["Cycle", c=>c.n, 0],
+  ["Peak stress (MPa)", c=>c.peakStress, 1],
+  ["Disp at peak stress (mm)", c=>c.peakDisp, 4],
+  ["Max displacement (mm)", c=>c.maxDisp, 4],
+  ["Stress at max disp (MPa)", c=>c.stressAtMaxDisp, 1],
+  ["… ÷ peak", c=>c.unloadYield, 3],
+  ["Max strain (%)", c=>c.maxStrainPct, 2],
+  ["Residual disp (mm)", c=>c.residDisp, 4],
+  ["Permanent def (mm)", c=>c.permCum, 4],
+  ["Permanent def (%)", c=>c.permCumPct, 3],
+  ["Stiffness common (MPa/mm)", c=>c.kCommon, 0],
+  ["n", c=>c.kCommonN, 0],
+  ["R²", c=>c.kCommonR2, 3],
+  ["Stiffness relative (MPa/mm)", c=>c.kRel, 0],
+  ["Energy in (MPa·mm)", c=>c.eIn, 3],
+  ["Energy dissipated (MPa·mm)", c=>c.eDiss, 3],
+  ["Hysteresis loss", c=>c.loss, 3],
+  ["Hold length (samples)", c=>c.holdPts, 0],
+  ["Hold disp (mm)", c=>c.holdDisp, 5],
+  ["Hold disp / 1000 (µm)", c=>c.holdPer1k, 2],
+  ["Disp at ref, load (mm)", c=>c.dispRefLoad, 4],
+  ["Disp at ref, unload (mm)", c=>c.dispRefUnload, 4],
+];
+function renderTable(){
+  const shown = state.show==="both" ? SPS : [SPS[+state.show]];
+  let body="";
+  shown.forEach((s,si)=>{
+    s.cycles.forEach((c,ci)=>{
+      body += `<tr${ci===0&&si>0?' class="sep"':''}>` +
+        COLS.map(([,f,d])=>`<td>${d===null?f(c,s):fmt(f(c,s),d)}</td>`).join("") + "</tr>";
+    });
+  });
+  $("#tbl").innerHTML =
+    `<thead><tr>${COLS.map(([h])=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody>`;
+}
+
+/* ── method tab: every word below is static text from the Python source ─ */
+const DEFS=[
+  ["Peak stress","MPa","Highest stress reached in this cycle. Rises every stage in a multi-stage test, which is why several metrics exist in both a per-cycle and a common-reference form."],
+  ["Stiffness, common band","MPa/mm","Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25–75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials."],
+  ["Stiffness, relative band","MPa/mm","Slope over 25–75% of THIS cycle's own peak. Describes the cycle faithfully but rises artificially as the stages climb, so it is NOT comparable across cycles. In the table only — it is not charted for exactly that reason."],
+  ["Maximum displacement","mm","Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held."],
+  ["Stress at maximum displacement","MPa","Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED — a damage signature no other column carries."],
+  ["Permanent deformation","mm / %","Residual displacement read on the LOADING branch at a low common stress, referenced to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. NOT compression set in the ASTM D395 / ISO 815 sense."],
+  ["Energy in / dissipated","MPa·mm","Work per unit CROSS-SECTIONAL AREA — the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress."],
+  ["Hysteresis loss","–","Dissipated divided by input energy. The cross-test comparable form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on the absolute number."],
+  ["Hold length","samples","Length of the detected dwell in SAMPLES, not seconds — the export carries no time channel. Meaningless on its own and mandatory alongside the hold displacement beside it."],
+  ["Hold displacement","mm","Displacement accumulated across the dwell — a TOTAL, not a rate. Only comparable between cycles whose hold lengths match, which is why the hold length is always reported next to it."],
+  ["Hold displacement / 1000 samples","µm","Removes the distortion of unequal dwell lengths so cycles can be ranked. NOT a creep rate: converting samples to time needs a constant sampling interval, which the export does not record."],
+];
+function renderMethod(){
+  const s = SPS[0], cfg = DATA.config;
+  $("#method").innerHTML = `
+  <h2>Settings behind the numbers</h2>
+  <p class="note">Relative to the test's own peak stress, never absolute — so a 2 MPa test and a
+  450 MPa test run on identical defaults.</p>
+  <div class="tw" style="max-height:none"><table class="dict"><tbody>
+    <tr><td>Loaded threshold</td><td>${(cfg.unload_frac*100).toFixed(0)}%</td>
+      <td>of global peak = ${fmt(cfg.unload_frac*s.globalPeak,1)} MPa — below this the specimen counts as unloaded</td></tr>
+    <tr><td>Cycle discard threshold</td><td>${(cfg.major_cycle_frac*100).toFixed(0)}%</td>
+      <td>of global peak = ${fmt(cfg.major_cycle_frac*s.globalPeak,1)} MPa — runs peaking below this are noise, not stages</td></tr>
+    <tr><td>Stiffness window</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}–${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
+      <td>of the smallest cycle peak = ${s.stiffLo}–${s.stiffHi} MPa, identical in every cycle</td></tr>
+    <tr><td>Reference stress</td><td>${(cfg.ref_stress_frac*100).toFixed(0)}%</td>
+      <td>of the smallest cycle peak = ${s.refStress} MPa — reachable in every cycle</td></tr>
+    <tr><td>Residual read stress</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
+      <td>of global peak = ${s.residStress} MPa — above the contact-loss baseline</td></tr>
+    <tr><td>Dwell tolerance</td><td>${(cfg.hold_tol_frac*100).toFixed(1)}%</td>
+      <td>of cycle peak — stress within this band counts as held</td></tr>
+  </tbody></table></div>
+
+  <h2>What each column means</h2>
+  <div class="tw" style="max-height:none"><table class="dict"><tbody>
+    ${DEFS.map(([n,u,d])=>`<tr><td>${n}</td><td>${u}</td><td>${d}</td></tr>`).join("")}
+  </tbody></table></div>
+
+  <h2>What this test cannot tell you</h2>
+  <ul>
+    <li><strong>${s.globalPeak} MPa is the maximum applied stress, not a strength.</strong>
+      It is the top step of the programmed schedule; all nine stages hit command within
+      0.06 MPa and the specimen unloaded normally. A UCS figure needs loading to fracture.</li>
+    <li><strong>There is no creep rate.</strong> The export carries no time channel, so the
+      dwell is measured in samples. A rate in mm/s needs a time channel enabled at export —
+      one setting on the machine.</li>
+    <li><strong>Fit quality is not measurement accuracy.</strong> The n and R² columns describe
+      how well a straight line fitted the points. They say nothing about calibration,
+      machine compliance or alignment.</li>
+  </ul>`;
+}
+
+/* tabs */
+document.querySelectorAll('[role="tab"]').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('[role="tab"]').forEach(o=>{
+      const on = o===t;
+      o.setAttribute("aria-selected",on);
+      $("#"+o.getAttribute("aria-controls")).hidden=!on;
+    });
+  };
+});
+
+function renderHead(){
+  const s=SPS[0];
+  $("#title").textContent = DATA.sourceFilename.replace(/\.xlsx$/i,"");
+  $("#meta").innerHTML=[["Specimens",SPS.length],["Cycles",NC],
+    ["Peak",s.globalPeak+" MPa"],["h₀",s.h0+" mm"],["d₀",s.d0+" mm"],
+    ["Channel",s.channel],["T",s.temp+" °C"]]
+    .map(([k,v])=>`<span><b>${k}</b> ${v}</span>`).join("");
+  $("#dlnote").textContent =
+    "In the Streamlit build this table gets CSV and XLSX download buttons. Charts export to "+
+    "PNG from the toolbar on each one, or from the expanded view.";
+  $("#foot").textContent =
+    "Rendered from the frozen JSON record (schema v2). Curves are reduced for drawing only — "+
+    "85,844 raw samples to 2,084 vertices at 0.32% area error; every number is computed on the full signal.";
+}
+function renderAll(){ renderCtrls(); renderCharts(); renderTable();
+  if(openIndex!=null) expand(openIndex); }
+renderHead(); renderAll(); renderMethod();
+</script>

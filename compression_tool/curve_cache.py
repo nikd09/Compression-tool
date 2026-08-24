@@ -123,3 +123,10 @@ def write_curve_cache(cache: dict, path: Path) -> Path:
 def read_curve_cache(path: str | os.PathLike) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def curve_cache_path_for(json_path: str | os.PathLike) -> Path:
+    """`<stem>.json` -> `<stem>.curve.json`, the sidecar written next to it at
+    ingest time. The two are never named independently, so deriving one from
+    the other is safe rather than a guess."""
+    return Path(json_path).with_suffix("").with_suffix(".curve.json")
