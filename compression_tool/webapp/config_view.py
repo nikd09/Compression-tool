@@ -8,10 +8,11 @@ from __future__ import annotations
 import streamlit as st
 
 from ..persistence import read_json
-from .common import workspace_picker
+from .common import polish, workspace_picker
 
 
 def render() -> None:
+    polish()
     st.header("Config")
     ws = workspace_picker()
 

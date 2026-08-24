@@ -389,6 +389,42 @@ def test_html_statistics_section_only_appears_with_multiple_specimens(single_pay
 
 
 # ----------------------------------------------------------------------------
+# Four specimens in one export
+# ----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def quad_payloads(workspace, four_specimen_file):
+    result = ingest([four_specimen_file], workspace, material="QUAD")
+    return [read_json(s.json_path) for s in result.specimens]
+
+
+def test_four_specimens_all_reach_the_workbook(tmp_path, quad_payloads):
+    assert len(quad_payloads) == 4
+    path = write_workbook(quad_payloads, tmp_path / "quad.xlsx")
+    book = load_workbook(path)
+    assert "Statistics" in book.sheetnames
+    # Summary lays specimens across the page: one label column plus one per
+    # specimen, so a dropped specimen shows up as a missing column here.
+    summary = book["Summary"]
+    assert summary.max_column >= 5
+
+
+def test_cross_specimen_stats_averages_over_all_four(quad_payloads):
+    stats = cross_specimen_stats(quad_payloads)
+    peak = next(e for e in stats if e["key"] == "PeakStress_MPa")
+    assert [r["cycle"] for r in peak["rows"]] == list(range(1, 10))
+    assert all(r["n"] == 4 for r in peak["rows"])
+
+
+def test_four_specimen_csv_keeps_every_row(tmp_path, quad_payloads):
+    path = write_csv(quad_payloads, tmp_path / "quad.csv", with_specimen=True)
+    df = pd.read_csv(path)
+    assert len(df) == sum(len(p["cycles"]) for p in quad_payloads)
+    assert df["Specimen"].nunique() == 4
+
+
+# ----------------------------------------------------------------------------
 # Combined-run report title
 # ----------------------------------------------------------------------------
 

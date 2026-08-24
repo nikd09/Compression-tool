@@ -3,7 +3,6 @@ connection to its index."""
 
 from __future__ import annotations
 
-from typing import Optional
 
 import streamlit as st
 
@@ -11,6 +10,30 @@ from .. import knowledge_base
 from ..persistence import Workspace
 
 DEFAULT_WORKSPACE = "./data"
+
+# Streamlit's own theme covers colour and radius (see .streamlit/config.toml);
+# this covers only what the theme cannot reach -- heading rhythm, the width of
+# the content column, and the empty-state look. Kept deliberately small: every
+# rule here is one the theme has no key for.
+_POLISH = """
+<style>
+  .block-container{padding-top:2.2rem;padding-bottom:3rem;max-width:1500px;}
+  h1,h2,h3{letter-spacing:-.018em;}
+  h1{font-size:1.75rem!important;font-weight:670!important;}
+  h2{font-size:1.2rem!important;font-weight:650!important;}
+  [data-testid="stSidebarHeader"]{padding-bottom:.4rem;}
+  section[data-testid="stSidebar"] h1{font-size:1.05rem!important;}
+  /* The dashboard iframe brings its own card surfaces; a second border around
+     it would read as a frame inside a frame. */
+  iframe[title="st.iframe"]{border:none!important;}
+  div[data-testid="stMetricValue"]{font-variant-numeric:tabular-nums;}
+</style>
+"""
+
+
+def polish() -> None:
+    """Apply the shared style layer. Called once per view, at the top."""
+    st.markdown(_POLISH, unsafe_allow_html=True)
 
 
 def workspace_picker() -> Workspace:

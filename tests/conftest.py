@@ -238,6 +238,26 @@ def series_file(tmp_path_factory, signal) -> Path:
     return write_series_workbook(path, specimens)
 
 
+@pytest.fixture(scope="session")
+def four_specimen_file(tmp_path_factory, signal) -> Path:
+    """A four-sample series in one export.
+
+    Real tests are not always run in pairs, and every stage of the pipeline --
+    segmentation, the cross-specimen statistics sheet, the dashboard's colour
+    slots -- has to hold when the count is neither one nor two. Each specimen
+    is scaled slightly differently so they stay individually identifiable.
+    """
+    stress, disp = signal
+    specimens = {
+        "1": (stress, disp),
+        "2": (stress, disp * 1.04),
+        "3": (stress, disp * 0.97),
+        "4": (stress, disp * 1.09),
+    }
+    path = tmp_path_factory.mktemp("exports") / "VierProben.xlsx"
+    return write_series_workbook(path, specimens)
+
+
 @pytest.fixture
 def workspace(tmp_path) -> Path:
     return tmp_path / "data"

@@ -15,10 +15,17 @@ from typing import Optional
 
 from .schema import hold_disp_per_1000_samples, unload_yield_frac
 
-# The template's colour palette and "Avg" series are built for exactly this
-# case -- two specimens shown as S1 / S2 plus their mean, matching the old
-# tool's grouped-bar idiom. A third specimen would reuse the Avg swatch.
-MAX_SPECIMENS = 2
+# The template carries eight validated categorical slots, assigned to specimens
+# in fixed order. Past eight a slot would have to be reused, and two specimens
+# sharing a colour is worse than being told to select fewer -- so this is a
+# real limit of the palette, not an arbitrary cap.
+#
+# Readability degrades before that: the grouped-bar panels widen as specimens
+# are added and the grid drops to fewer columns to keep bars legible, which is
+# comfortable to about six. Between seven and eight the charts still read, they
+# just take more room.
+MAX_SPECIMENS = 8
+COMFORTABLE_SPECIMENS = 6
 
 
 def _cycle_row(c: dict, points: list[list[float]]) -> dict:
@@ -81,20 +88,25 @@ def build_dashboard_data(
 ) -> dict:
     """Assemble the `DATA` object the results dashboard template expects.
 
-    `payloads` and `curves` are parallel lists of 1 or `MAX_SPECIMENS` records
+    `payloads` and `curves` are parallel lists of 1 to `MAX_SPECIMENS` records
     (from `read_json`) and their curve caches (from `read_curve_cache`, or
     None when a cache is missing -- the loop chart just draws nothing for that
     specimen rather than failing). Warnings, strain basis, config and the
-    source filename are taken from the FIRST specimen: for a two-specimen
-    series ingested together they are identical, which is asserted by the
-    caller rather than silently assumed here.
+    source filename are taken from the FIRST specimen: for a series ingested
+    together they are identical, which is asserted by the caller rather than
+    silently assumed here.
     """
     if not payloads:
         raise ValueError("build_dashboard_data needs at least one specimen")
     if len(payloads) > MAX_SPECIMENS:
         raise ValueError(
-            f"the dashboard template supports at most {MAX_SPECIMENS} specimens "
-            f"(S1/S2 plus their Avg) -- got {len(payloads)}"
+            f"the dashboard has {MAX_SPECIMENS} distinct series colours and will "
+            f"not reuse one -- got {len(payloads)} specimens; select fewer"
+        )
+    if len(payloads) != len(curves):
+        raise ValueError(
+            f"payloads and curves must be parallel: {len(payloads)} payloads, "
+            f"{len(curves)} curves"
         )
 
     shorts = [f"S{i + 1}" for i in range(len(payloads))]

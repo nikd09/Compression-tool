@@ -134,6 +134,23 @@ def test_materials_and_cross_material_query(workspace, series_file, single_file)
         conn.close()
 
 
+def test_cross_material_query_has_no_duplicate_columns(workspace, series_file):
+    """The join has specimen_id on both sides. Selecting it from both returns
+    two columns of that name, and any consumer that then asks for it by label
+    raises instead of getting a column -- which is how the Compare view's row
+    table broke."""
+    ingest([series_file], workspace, material="PEEK")
+    conn = kb.connect(Workspace.at(workspace).db_path)
+    try:
+        joined = kb.cycles_for_materials(conn, ["PEEK"])
+        assert list(joined.columns) == list(dict.fromkeys(joined.columns))
+        # And it is still there exactly once -- not dropped entirely.
+        assert joined["specimen_id"].ndim == 1
+        assert joined[["material", "label", "specimen_id", "Cycle"]].shape[1] == 4
+    finally:
+        conn.close()
+
+
 def test_index_can_be_skipped(workspace, series_file):
     result = ingest([series_file], workspace, material="PEEK", update_index=False)
     assert result.indexed == 0

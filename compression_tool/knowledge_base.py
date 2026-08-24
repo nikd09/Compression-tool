@@ -261,9 +261,13 @@ def cycles_for_materials(conn: sqlite3.Connection, names: Iterable[str]) -> pd.D
     if not names:
         return pd.DataFrame()
     marks = ", ".join("?" for _ in names)
+    # c.* already carries specimen_id, so it is NOT selected from s as well:
+    # two columns of the same name come back as a duplicate in the DataFrame,
+    # and anything that then selects that label by name raises rather than
+    # picking one.
     return query(
         conn,
-        f'SELECT s."material", s."label", s."specimen_id", s."h0_mm", '
+        f'SELECT s."material", s."label", s."h0_mm", '
         f'       s."global_peak_mpa", s."multi_stage", c.* '
         f"FROM cycles c JOIN specimens s ON s.\"specimen_id\" = c.\"specimen_id\" "
         f'WHERE s."material" IN ({marks}) '

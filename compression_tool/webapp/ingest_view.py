@@ -11,7 +11,7 @@ import streamlit as st
 
 from ..core import Config
 from ..pipeline import ingest, preview
-from .common import workspace_picker
+from .common import polish, workspace_picker
 
 
 def _config_from_form() -> Config:
@@ -83,6 +83,7 @@ def _show_warning(w: dict) -> None:
 
 
 def render() -> None:
+    polish()
     st.header("Ingest")
     ws = workspace_picker()
 

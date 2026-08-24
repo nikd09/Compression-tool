@@ -241,22 +241,58 @@ iframe lacking `allow-same-origin` and the real origin otherwise. (A `srcdoc`
 document's `location.origin` reads `"null"` regardless of sandboxing, which
 is why the check does not use it.)
 
-The chart palette (S1 / S2 / Avg) supports at most two specimens shown
-together -- `dashboard_data.MAX_SPECIMENS` -- matching the grouped-bar idiom
-this dashboard standardised on; a third would have nowhere distinct left in
-the colour set.
+### Specimens per test
+
+Any count from one to eight. `dashboard_data.MAX_SPECIMENS` is the palette's
+slot count, not an arbitrary cap: the eight categorical slots are assigned by
+specimen index and never cycled, so a ninth specimen would have to reuse a
+colour, and two specimens sharing one is worse than being told to select
+fewer. Charts read most comfortably to about six
+(`COMFORTABLE_SPECIMENS`).
+
+Layout adapts rather than squeezing: the grouped-bar panels widen as series
+are added, and because the same number drives the grid's column width the
+grid drops to fewer columns instead of thinning the bars past legibility.
+Direct value labels stay selective -- past three series a number on every bar
+is forty-odd labels fighting for one strip of space, so beyond that the hover
+tooltip and the values table carry the figures.
+
+Inside the dashboard every specimen is a toggle, and the mean recomputes over
+whichever are shown. Colour follows the specimen, never its position in the
+visible list, so hiding one never repaints the others.
+
+### Colour
+
+The categorical palette is the validated default from the data-viz method,
+verified with its own checker on the adjacent pairlist (grouped bars sit side
+by side) against the exact surfaces the dashboard renders on -- light: worst
+adjacent CVD dE 9.1, normal-vision 19.6; dark: 8.4 and 19.3. Dark is a
+selected set of steps for the dark surface, not an automatic flip of the
+light one. Three light-mode slots sit under 3:1 on the light surface, which
+obliges the relief rule: every chart carries a legend, the expanded view
+direct-labels its bars, and the full values table is one tab away.
+
+The **mean is deliberately not a categorical slot** -- it is an aggregate, not
+another specimen, and giving it a specimen hue would say it is one. It takes a
+neutral ink instead.
+
+`--brand` drives only the interactive accent (active chips, focus rings, the
+tab underline) and never a data mark, so rebranding cannot break a validated
+data palette. The same palette is handed to Streamlit's chrome in
+`.streamlit/config.toml`, so the Compare view's charts use the same hues in
+the same order.
 
 ## Still to build
 
 Steps 3–5 of the handoff are now built: Ingest / Results / Compare / Config
 above. What is not built yet:
 
-- **Compare's chart is a plain Altair line, not the grouped-bar idiom.**
-  Cross-material comparison was never mocked up against the old tool the way
-  Results was, so it is functional rather than designed to the same bar.
 - **No re-analysis from the UI.** Changing a threshold on Ingest only affects
   new ingests; there is no "re-run this specimen with different settings"
   button yet, though `Config` exposes every knob needed to build one.
+- **Brand colours are placeholders.** `--brand` in the dashboard template and
+  `primaryColor` in `.streamlit/config.toml` carry the palette's own blue.
+  Swapping in EQYO's accent is those two values; nothing else depends on them.
 
 `ingest()` writes a `<specimen>.curve.json` sidecar beside every record -- the
 per-cycle stress-displacement points a chart needs, reduced with
