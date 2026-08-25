@@ -4,10 +4,10 @@ persistence.py
 On-disk layout and the JSON record that is the system's source of truth.
 
     <root>/
-      raw_input/                     immutable copies of the original exports
+      Raw exports/                   immutable copies of the original exports
         <sha12>_<original name>.xlsx   -- optional, ingest(archive_originals=False)
                                            skips this and records just the SHA-256
-      processed_output/
+      Records/
         <material>_<YYYY-MM-DD>/
           run.json                   what was ingested, with which config
           <specimen>.json            the record -- source of truth, ALWAYS written
@@ -28,6 +28,15 @@ On-disk layout and the JSON record that is the system's source of truth.
     reads the combined reports/ workbook and dashboard and finds the per-run
     copies redundant. The JSON record and curve cache are never optional:
     everything else in this layout, including reports/, is rebuilt FROM them.
+
+    "Raw exports" and "Records" are named for someone browsing in Explorer,
+    not for a codebase -- the folders that hold most of the storage and most
+    of the file count are the ones a reader is least likely to ever open.
+    Workspaces created before this rename keep working: `Workspace.raw` and
+    `.processed` fall back to the old `raw_input`/`processed_output` names
+    when THOSE already exist on disk and the new names do not, so nothing
+    already ingested has to move, and a workspace only ever writes under one
+    name or the other, never a mix of both.
 
 The JSON records are authoritative. The database is a queryable index over
 them and may be deleted and rebuilt at any time; nothing is stored there that
@@ -54,9 +63,15 @@ from . import diagnostics
 from .core import Config, TestData
 from .schema import SCHEMA_VERSION
 
-RAW_DIRNAME = "raw_input"
-PROCESSED_DIRNAME = "processed_output"
+RAW_DIRNAME = "Raw exports"
+PROCESSED_DIRNAME = "Records"
 DB_FILENAME = "knowledge_base.db"
+
+# Pre-rename names. A workspace that already has one of these on disk keeps
+# using it -- see Workspace.raw / .processed below -- so nothing already
+# ingested under the old layout has to be moved.
+_LEGACY_RAW_DIRNAME = "raw_input"
+_LEGACY_PROCESSED_DIRNAME = "processed_output"
 
 
 # ----------------------------------------------------------------------------
@@ -69,7 +84,7 @@ class Workspace:
     """The directories the tool owns. Nothing is written outside them.
 
     `index_root`, when set, moves ONLY the SQLite index (`db_path`) out of
-    `root` -- everything else (raw_input/, processed_output/, reports/)
+    `root` -- everything else (Raw exports/, Records/, reports/)
     still lives under `root`. Exists for a workspace whose `root` is a
     synced folder (OneDrive, SharePoint) or a network share: syncing a
     SQLite file that is being actively written is a well-known corruption
@@ -94,10 +109,16 @@ class Workspace:
 
     @property
     def raw(self) -> Path:
+        legacy = self.root / _LEGACY_RAW_DIRNAME
+        if legacy.exists() and not (self.root / RAW_DIRNAME).exists():
+            return legacy
         return self.root / RAW_DIRNAME
 
     @property
     def processed(self) -> Path:
+        legacy = self.root / _LEGACY_PROCESSED_DIRNAME
+        if legacy.exists() and not (self.root / PROCESSED_DIRNAME).exists():
+            return legacy
         return self.root / PROCESSED_DIRNAME
 
     @property
@@ -179,12 +200,12 @@ def slugify(text: str, fallback: str = "unnamed") -> str:
 
 
 # ----------------------------------------------------------------------------
-# raw_input -- immutable archive
+# Raw exports -- immutable archive
 # ----------------------------------------------------------------------------
 
 
 def archive_raw(source: str | os.PathLike, ws: Workspace) -> tuple[Path, str]:
-    """Copy an export into raw_input/ and return (archived path, sha256).
+    """Copy an export into Raw exports/ and return (archived path, sha256).
 
     The copy is content-addressed and marked read-only. Re-ingesting the same
     file is a no-op, so an export can be fed in repeatedly without ever
@@ -378,18 +399,34 @@ def run_dir_name(material: str, when: Optional[datetime] = None) -> str:
 def resolve_run_dir(
     ws: Workspace, material: str, fingerprint: str, when: Optional[datetime] = None
 ) -> Path:
-    """Pick the output folder for a run.
+    """Pick the output folder for a run, and claim it.
 
     Re-analysing the same sources with the same config on the same day is a
     re-run and overwrites in place, which keeps the tree from filling with
     identical folders. Anything else -- different files, different config --
     gets its own suffixed folder, so a changed result never silently displaces
     the earlier one it should be compared against.
+
+    Claiming is exclusive-create (`mkdir` without `exist_ok`), not the
+    exists()-then-mkdir this replaced: two ingests racing for the same
+    candidate folder could both see it free, both proceed, and then both
+    write specimens into it while write_manifest's run.json -- written once,
+    at the end of each ingest -- silently keeps only the last writer's list,
+    orphaning the other ingest's specimens from the manifest. Letting the
+    filesystem itself arbitrate who created the directory removes the race
+    instead of narrowing its window: the loser of a mkdir race simply moves
+    on to try the next suffix, exactly as if it had found the folder already
+    taken by an earlier run.
     """
     base = run_dir_name(material, when)
     candidate = ws.processed / base
     index = 1
-    while candidate.exists():
+    while True:
+        try:
+            candidate.mkdir(parents=True)
+            return candidate
+        except FileExistsError:
+            pass
         manifest = candidate / "run.json"
         if manifest.exists():
             try:
@@ -399,7 +436,6 @@ def resolve_run_dir(
                 pass
         index += 1
         candidate = ws.processed / f"{base}-{index:03d}"
-    return candidate
 
 
 def run_fingerprint(source_hashes: Iterable[str], cfg: Config) -> str:
@@ -430,7 +466,7 @@ def write_manifest(
 
 
 def iter_specimen_jsons(ws: Workspace) -> list[Path]:
-    """Every specimen record under processed_output, run manifests excluded."""
+    """Every specimen record under Records/, run manifests excluded."""
     if not ws.processed.exists():
         return []
     return sorted(p for p in ws.processed.glob("*/*.json") if p.name != "run.json")

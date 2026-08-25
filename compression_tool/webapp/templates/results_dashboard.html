@@ -387,6 +387,32 @@ function svg(host,w,h){host.innerHTML="";
   const s=el("svg",{viewBox:`0 0 ${w} ${h}`,role:"img"});
   host.appendChild(s);return s;}
 
+/* Fit-quality classification for the common-band stiffness -- must stay in
+   lock-step with stiffness_quality() in schema.py, the single source of
+   truth every other artefact (Excel, the values table) already derives
+   this from. */
+const QUALITY_MIN_POINTS=10, QUALITY_MIN_R2=0.95;
+function stiffQuality(n,r2){
+  if(n==null||r2==null) return "none";
+  if(n<QUALITY_MIN_POINTS) return "few points";
+  if(r2<QUALITY_MIN_R2) return "nonlinear";
+  return "ok";
+}
+/* Diagonal hatch, one <pattern> per chart instance (ids must be unique only
+   within their own SVG, but several charts share one page) -- laid OVER a
+   dimmed bar so a shaky fit is never drawn identically to a solid one. */
+let hatchSeq=0;
+function ensureHatch(root){
+  if(root.__hatchId) return root.__hatchId;
+  const id=`hatch${hatchSeq++}`;
+  const defs=el("defs",{},root);
+  const pat=el("pattern",{id,width:6,height:6,patternTransform:"rotate(45)",
+    patternUnits:"userSpaceOnUse"},defs);
+  el("line",{x1:0,y1:0,x2:0,y2:6,stroke:"var(--ink)",opacity:.55,"stroke-width":2},pat);
+  root.__hatchId=id;
+  return id;
+}
+
 const visible = () => SPS.map((s,i)=>i).filter(i=>!state.hidden.has(i));
 
 /* Series actually drawn. Colour follows the specimen, never its position in
@@ -534,12 +560,26 @@ function barChart(host, spec, big=false, aspect=null){
       const r=Math.min(4*k,bw/2,hgt);
       const x=gx+si*(bw+2*k);
       const top=Math.min(y,y0);
-      const path=el("path",{d:`M${x} ${top+hgt} L${x} ${top+r} Q${x} ${top} ${x+r} ${top}
-        L${x+bw-r} ${top} Q${x+bw} ${top} ${x+bw} ${top+r} L${x+bw} ${top+hgt} Z`,
-        fill:s.colour, class:"bar-mark", style:`cursor:crosshair;--bi:${bi++}`},root);
+      const d=`M${x} ${top+hgt} L${x} ${top+r} Q${x} ${top} ${x+r} ${top}
+        L${x+bw-r} ${top} Q${x+bw} ${top} ${x+bw} ${top+r} L${x+bw} ${top+hgt} Z`;
+      // A slope is only as good as the fit behind it -- for the panel this
+      // applies to, dim + hatch a bar whose fit is thin or curved, so a
+      // shaky number is never drawn identically to a solid one.
+      let quality=null;
+      if(spec.q){
+        quality=stiffQuality(valOf(s,spec.q.n,n), valOf(s,spec.q.r2,n));
+      }
+      const thisBi=bi++;
+      const path=el("path",{d, fill:s.colour, class:"bar-mark",
+        style:`cursor:crosshair;--bi:${thisBi}` + (quality&&quality!=="ok" ? ";opacity:.55" : "")},root);
+      if(quality&&quality!=="ok"){
+        el("path",{d, fill:`url(#${ensureHatch(root)})`, class:"bar-mark",
+          style:`pointer-events:none;--bi:${thisBi}`},root);
+      }
       path.addEventListener("pointermove",ev=>showTip(ev,`Cycle ${n} · ${s.name}`,s.colour,
         [[spec.t, spec.f(v)+(spec.u2?" "+spec.u2:"")],
-         ["Peak stress", fmt(valOf(s,"peakStress",n),0)+" MPa"]]));
+         ["Peak stress", fmt(valOf(s,"peakStress",n),0)+" MPa"],
+         ...(quality&&quality!=="ok" ? [["Fit quality", quality]] : [])]));
       // Direct labels stay SELECTIVE: past three series a number on every bar
       // is 40+ labels fighting for the same strip of space. Beyond that the
       // hover tooltip and the values table carry the exact figures.
@@ -595,9 +635,13 @@ const PANELS=[
        "per-cycle-relative metric is measured against."},
   {k:"kCommon", t:"Common-band stiffness", u:"MPa/mm — identical window every cycle",
    f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
+   q:{n:"kCommonN", r2:"kCommonR2"},
    why:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle "+
        "(25–75% of the smallest cycle peak). This is the form that may be compared across "+
-       "stages, specimens and materials. A rollover here is the material softening."},
+       "stages, specimens and materials. A rollover here is the material softening. A "+
+       "hatched, dimmed bar means the fit behind it is thin (fewer than "+QUALITY_MIN_POINTS+
+       " points) or curved (R² below "+QUALITY_MIN_R2+") — read that cycle's slope as "+
+       "indicative only, never as a solid number to quote."},
   {k:"permCumPct", t:"Permanent deformation", u:"% of h₀, cumulative", f:v=>fmt(v,1), u2:"%",
    why:"Residual displacement read on the LOADING branch at a low common stress, referenced "+
        "to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal "+

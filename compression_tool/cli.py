@@ -17,7 +17,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Optional, Sequence
 
-from . import diagnostics, knowledge_base
+from . import audit, diagnostics, knowledge_base
 from .core import Config
 from .material_export import export_material
 from .persistence import Workspace
@@ -82,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="assert that the displacement channel spans only h0; "
                             "without it, strain and modulus are marked provisional")
     p_ing.add_argument("--no-archive", action="store_true",
-                       help="do not copy the export into raw_input/ -- only its "
+                       help="do not copy the export into Raw exports/ -- only its "
                             "SHA-256 is recorded")
     p_ing.add_argument("--no-reports", action="store_true",
                        help="skip per-specimen/per-run Excel, CSV and HTML -- only "
@@ -106,6 +106,12 @@ def build_parser() -> argparse.ArgumentParser:
         "build-overview",
         help="(re)write the all-materials overview page (reports/_Overview.html)",
     )
+
+    p_audit = sub.add_parser(
+        "audit", help="who ingested what, and when -- most recent first"
+    )
+    p_audit.add_argument("-n", "--limit", type=int, default=20,
+                         help="show at most this many records (default: 20)")
 
     return parser
 
@@ -170,6 +176,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("No indexed specimens in this workspace.")
             return 1
         print(f"Overview : {path}")
+        return 0
+
+    if args.command == "audit":
+        entries = audit.list_entries(ws, limit=args.limit)
+        if not entries:
+            print("No audit records in this workspace.")
+            return 1
+        for e in entries:
+            skipped = f", {len(e.get('skipped', []))} skipped" if e.get("skipped") else ""
+            print(
+                f"{e.get('timestamp_utc', '—')}  {e.get('user', '—')}@{e.get('host', '—')}  "
+                f"{e.get('material', '—')}: {len(e.get('specimens', []))} specimen(s){skipped}"
+                f"  -> {e.get('run_dir', '—')}"
+            )
         return 0
 
     conn = knowledge_base.connect(ws.db_path)

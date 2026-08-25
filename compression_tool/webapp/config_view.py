@@ -8,6 +8,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from .. import audit
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..reports_overview import build_overview
@@ -87,6 +88,29 @@ def render(ws: Workspace) -> None:
                 st.success("Rebuilt from every indexed material.")
             else:
                 st.warning("No indexed specimens found in this workspace.")
+
+    entries = audit.list_entries(ws, limit=15)
+    if entries:
+        with st.container(border=True):
+            st.markdown("##### Recent activity")
+            st.caption(
+                "Who ingested what, and when -- one record per Commit, "
+                "across the whole workspace, not just this run. The 15 "
+                "most recent; every record ever written is a small JSON "
+                "file under audit/, or `compression_tool audit` on the CLI."
+            )
+            st.dataframe(
+                pd.DataFrame({
+                    "Time (UTC)": [e.get("timestamp_utc", "—") for e in entries],
+                    "User": [e.get("user", "—") for e in entries],
+                    "Host": [e.get("host", "—") for e in entries],
+                    "Material": [e.get("material", "—") for e in entries],
+                    "Specimens": [len(e.get("specimens", [])) for e in entries],
+                    "Skipped": [len(e.get("skipped", [])) for e in entries],
+                    "Run": [e.get("run_dir", "—") for e in entries],
+                }),
+                use_container_width=True, hide_index=True,
+            )
 
     with st.expander("Settings this run used"):
         st.json(manifest.get("config", {}), expanded=False)

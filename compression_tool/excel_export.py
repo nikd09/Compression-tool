@@ -14,6 +14,7 @@ out of step with the engine.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -181,13 +182,23 @@ def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
 
     Sheets: Summary, Cycles, Statistics (only with >1 specimen), Data
     dictionary, Config.
+
+    Written atomically (a `.partial` file, then `os.replace`): xlsxwriter
+    writes progressively into the file as sheets are built, so a plain
+    `Workbook(path)` leaves a reader able to open a truncated file for the
+    whole time the workbook is being built. That window matters most for
+    reports/<material>.xlsx, which every ingest of that material rewrites
+    from scratch -- without this, two ingesters landing on the same material
+    around the same time could each see the other's half-written workbook,
+    not just an old-but-complete one.
     """
     if not payloads:
         raise ValueError("write_workbook needs at least one specimen payload")
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    book = xlsxwriter.Workbook(str(path), {"nan_inf_to_errors": True})
+    tmp = path.with_suffix(path.suffix + ".partial")
+    book = xlsxwriter.Workbook(str(tmp), {"nan_inf_to_errors": True})
 
     f = {
         "title": book.add_format({"bold": True, "font_size": 14}),
@@ -221,6 +232,7 @@ def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
     _write_config(book, f, payloads)
 
     book.close()
+    os.replace(tmp, path)
     return path
 
 
@@ -531,7 +543,9 @@ def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False):
 def write_csv(payloads: Sequence[dict], path: str | Path, *, with_specimen: bool = False) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cycles_dataframe(payloads, with_specimen=with_specimen).to_csv(path, index=False)
+    tmp = path.with_suffix(path.suffix + ".partial")
+    cycles_dataframe(payloads, with_specimen=with_specimen).to_csv(tmp, index=False)
+    os.replace(tmp, path)
     return path
 
 

@@ -166,7 +166,7 @@ def workspace_picker() -> Workspace:
     root = st.text_input(
         "Workspace",
         key="workspace_root",
-        help="Where raw_input/, processed_output/ and reports/ live -- every "
+        help="Where Raw exports/, Records/ and reports/ live -- every "
         "specimen's JSON, CSV, Excel workbook and HTML report land here on "
         "every Commit, nowhere else. The same path every time this app is "
         "opened shows the same tests; pointing it elsewhere switches "

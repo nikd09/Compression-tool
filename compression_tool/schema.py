@@ -415,7 +415,7 @@ SPECIMEN_FIELDS: tuple[Field, ...] = (
           "'series' for a multi-sample workbook, 'single' for one sample per sheet."),
     Field("source_sha256", "TEXT", "Source SHA-256", "",
           "Content hash of the original export, linking this record to the "
-          "immutable copy in raw_input/."),
+          "immutable copy in Raw exports/."),
     Field("raw_input_path", "TEXT", "Archived copy", "",
           "Path of the immutable copy of the source export."),
     Field("displacement_channel", "TEXT", "Displacement channel", "",

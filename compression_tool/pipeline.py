@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
-from . import curve_cache, diagnostics, excel_export, html_report, knowledge_base
+from . import audit, curve_cache, diagnostics, excel_export, html_report, knowledge_base
 from .core import Config, analyse_test, load_tests
 from .material_export import export_material
 from .material_registry import add_material
@@ -62,6 +62,7 @@ class IngestResult:
     material_xlsx: Optional[Path] = None
     material_html: Optional[Path] = None
     overview_html: Optional[Path] = None
+    audit_path: Optional[Path] = None
     indexed: int = 0
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
@@ -86,6 +87,8 @@ class IngestResult:
             lines.append(f"Material dashboard (all runs) : {self.material_html}")
         if self.overview_html:
             lines.append(f"Materials overview (all materials) : {self.overview_html}")
+        if self.audit_path:
+            lines.append(f"Audit record : {self.audit_path}")
         return "\n".join(lines)
 
 
@@ -160,7 +163,7 @@ def ingest(
     modulus figure provisional: nothing in an export proves what the
     extensometer was clamped across, so the tool will not assume it.
 
-    `archive_originals=False` skips copying the export into raw_input/ --
+    `archive_originals=False` skips copying the export into Raw exports/ --
     only its SHA-256 is recorded (still needed for the specimen ID and to
     detect a re-ingest of the same file). For someone who already keeps their
     own originals elsewhere and does not want a second copy on disk.
@@ -212,8 +215,9 @@ def ingest(
     # quietly starting a second, never-comparable material.
     material = add_material(ws, material or _infer_material(paths))
     fingerprint = run_fingerprint((s["sha256"] for s in sources), cfg)
+    # resolve_run_dir claims the folder itself (exclusive-create) -- nothing
+    # left to mkdir here.
     run_dir = resolve_run_dir(ws, material, fingerprint, when)
-    run_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Analyse and write one record per specimen.
     result = IngestResult(material=material, run_dir=run_dir, workspace=ws)
@@ -284,24 +288,33 @@ def ingest(
         result.run_xlsx = result.specimens[0].xlsx_path
         result.run_html = result.specimens[0].html_path
 
+    manifest_specimens = [
+        {
+            "specimen_id": s.specimen_id,
+            "label": s.label,
+            "n_cycles": s.n_cycles,
+            "json": s.json_path.name,
+        }
+        for s in result.specimens
+    ]
     write_manifest(
         run_dir,
         material=material,
         cfg=cfg,
         fingerprint=fingerprint,
         sources=[{k: v for k, v in s.items() if k != "archived_abs"} for s in sources],
-        specimens=[
-            {
-                "specimen_id": s.specimen_id,
-                "label": s.label,
-                "n_cycles": s.n_cycles,
-                "json": s.json_path.name,
-            }
-            for s in result.specimens
-        ],
+        specimens=manifest_specimens,
     )
 
-    # 4. Index last, from what was actually written.
+    # 4. Audit trail: who ingested what, regardless of whether indexing was
+    # requested -- an ingest call is worth recording even with
+    # update_index=False, and even when every file in it was skipped.
+    result.audit_path = audit.record_ingest(
+        ws, material=material, run_dir=run_dir,
+        sources=sources, specimens=manifest_specimens, skipped=result.skipped,
+    )
+
+    # 5. Index last, from what was actually written.
     if update_index and result.specimens:
         conn = knowledge_base.connect(ws.db_path)
         try:
@@ -309,7 +322,7 @@ def ingest(
         finally:
             conn.close()
 
-        # 5. Refresh the material's combined workbook + dashboard so it
+        # 6. Refresh the material's combined workbook + dashboard so it
         # covers this run too. Reads back through the index rather than the
         # in-memory payloads above, since it must include every specimen
         # ever ingested for this material, not just this run's -- the whole
@@ -318,7 +331,7 @@ def ingest(
         result.material_xlsx = exported["xlsx"]
         result.material_html = exported["html"]
 
-        # 6. Refresh the all-materials overview too -- this run may have
+        # 7. Refresh the all-materials overview too -- this run may have
         # changed this material's numbers, or (rarer) be the first time it
         # has any specimens at all, either of which the overview page
         # needs to reflect.

@@ -8,7 +8,7 @@ from. A derived rollup, like knowledge_base.db: rebuilt from the indexed
 specimens on every call, safe to delete, never the source of truth.
 
 Written to <workspace>/reports/<material-slug>.xlsx and .html, deliberately
-apart from the per-run archive under processed_output/<material>_<date>/ --
+apart from the per-run archive under Records/<material>_<date>/ --
 so "everything for this material" is always one predictable pair of files,
 not something to reassemble by hand across however many sessions built it up.
 """
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -96,6 +97,8 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
             f"is still in the paired Excel workbook. -->\n" + page
         )
     html_path = out_dir / f"{stem}.html"
-    html_path.write_text(page, encoding="utf-8")
+    tmp = html_path.with_suffix(html_path.suffix + ".partial")
+    tmp.write_text(page, encoding="utf-8")
+    os.replace(tmp, html_path)
 
     return {"xlsx": xlsx_path, "html": html_path}

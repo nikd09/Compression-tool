@@ -114,9 +114,16 @@ def build_curve_cache(
 
 
 def write_curve_cache(cache: dict, path: Path) -> Path:
+    """Atomic (a `.partial` file, then `os.replace`) for the same reason as
+    every other record write on a shared drive: a plain `open(path, "w")`
+    truncates the destination first, and this file is read by every
+    downstream chart -- a truncated cache would silently draw an empty or
+    partial loop rather than fail loudly."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
+    tmp = path.with_suffix(path.suffix + ".partial")
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(cache, fh, ensure_ascii=False)
+    os.replace(tmp, path)
     return path
 
 

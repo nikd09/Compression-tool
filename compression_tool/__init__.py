@@ -13,6 +13,7 @@ The calculation engine lives in `compression_tool.core` and is the validated
 reference implementation; everything else is built around it.
 """
 
+from .audit import list_entries as list_audit_entries
 from .core import Config, TestData, analyse_test, detect_format, load_tests, segment_cycles
 from .material_export import export_material
 from .material_registry import add_material, load_materials
@@ -35,6 +36,7 @@ __all__ = [
     "add_material",
     "load_materials",
     "build_overview",
+    "list_audit_entries",
     "ingest",
     "preview",
     "rebuild_index",

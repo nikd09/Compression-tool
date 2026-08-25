@@ -11,6 +11,7 @@ later. Plots are deliberately absent; charting arrives with the dashboard.
 from __future__ import annotations
 
 import html
+import os
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -218,7 +219,13 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
 
 def write_html(payloads: Sequence[dict], path: str | Path,
                *, title: Optional[str] = None) -> Path:
+    """Written atomically (a `.partial` file, then `os.replace`) -- this is
+    also what backs reports/<material>.html, which every ingest of that
+    material rewrites from scratch, so a reader opening it mid-write must
+    never be able to see a half-written file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render(payloads, title=title), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".partial")
+    tmp.write_text(render(payloads, title=title), encoding="utf-8")
+    os.replace(tmp, path)
     return path

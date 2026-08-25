@@ -62,9 +62,9 @@ print(result.summary())
 
 ```
 <workspace>/
-  raw_input/                        immutable, content-addressed, read-only
+  Raw exports/                      immutable, content-addressed, read-only
     <sha12>_<original name>.xlsx      -- optional, see below
-  processed_output/
+  Records/
     <material>_<YYYY-MM-DD>/
       run.json                      what was ingested, under which config
       <specimen>.json               the record — source of truth, ALWAYS written
@@ -82,6 +82,8 @@ print(result.summary())
                                      all-materials overview" below
   materials.json                    the controlled material list -- see
                                      "The controlled material list" below
+  audit/                             one small JSON file per ingest call --
+    <timestamp>_<id>.json             see "Ingest audit trail" below
   knowledge_base.db                 SQLite index, rebuildable -- unless the
                                      workspace has an index_root (the web
                                      app always sets one), in which case
@@ -90,10 +92,18 @@ print(result.summary())
                                      "Sharing the app with colleagues" below
 ```
 
+`Raw exports/` and `Records/` are named for someone browsing the shared drive
+in Explorer, not for a codebase — plain English beats the folders someone
+opening `Reports\` would otherwise never need to see. A workspace ingested
+into before this rename does not have to move anything: `raw_input/` and
+`processed_output/` still work exactly as before if that workspace already
+has them on disk (see `Workspace.raw` / `.processed` in `persistence.py`) —
+only a brand-new workspace gets the new names.
+
 Three properties this layout is built to hold:
 
 - **The original export can be archived, but does not have to be.** By
-  default it is copied into `raw_input/` before anything is analysed — an
+  default it is copied into `Raw exports/` before anything is analysed — an
   export that later turns out to crash the engine is still preserved — and
   the copy is marked read-only. `ingest(archive_originals=False)` (the
   Ingest form's "Archive a copy of the uploaded file" checkbox, or
@@ -291,7 +301,7 @@ SharePoint, a network drive), and syncing a SQLite file while it is being
 written is a well-known way to corrupt it -- the sync client and SQLite's own
 locking are not coordinated. `Workspace.index_root` (default:
 `%LOCALAPPDATA%\CompressionTool` on Windows) moves *only* `knowledge_base.db`
-to a plain local folder on the host PC; `raw_input/`, `processed_output/` and
+to a plain local folder on the host PC; `Raw exports/`, `Records/` and
 `reports/` still live under the shared path exactly as before. The index is
 disposable and rebuildable from the JSON records regardless of where it
 lives, so this costs nothing -- and the very first time a shared workspace is
@@ -472,6 +482,83 @@ mean rewriting `material` on already-persisted specimen JSONs and, because
 `specimen_id` is partly derived from material, changing IDs that Compare's
 session state and the SQLite index already reference -- real, but higher-risk
 work, worth doing only once an actual case of existing fragmentation shows up.
+
+### Concurrent ingest: the filesystem decides who owns a run folder
+
+Two people ingesting into the same shared workspace around the same moment
+used to be a real race. `resolve_run_dir()` picks a run folder by name
+(`<material>_<date>`, then `-002`, `-003`, ... on a collision) and, before
+this hardening, only checked whether that name already existed before
+`mkdir`ing it -- a window in which two callers could both see the name free,
+both proceed, and both write specimens into the same folder. `run.json` is
+written once, at the end of each ingest, so the loser of that race would
+have its specimens on disk but silently missing from the manifest.
+
+`resolve_run_dir()` now claims the folder itself with an exclusive-create
+`mkdir` (no `exist_ok`): the filesystem, not a check-then-act sequence in
+Python, decides who gets a given name. Losing the race for one name just
+means trying the next suffix, exactly as if the folder had already existed
+from an earlier run -- so two concurrent ingests of different sources for
+the same material on the same day now reliably end up in two different
+folders instead of silently sharing one. A legitimate re-run (identical
+sources, identical config, same day) still lands back in the same folder as
+before, once its `run.json` proves the match.
+
+The other half: every file this codebase (re)writes on every ingest --
+`reports/<material>.xlsx`, `reports/<material>.html`, the per-run workbook
+and report, and the per-specimen curve cache -- is now written atomically
+(a `.partial` file, then `os.replace`), the same pattern the JSON records
+and `reports/_Overview.html` already used. Two ingesters landing on the same
+material around the same time can no longer produce an interleaved, corrupt
+workbook or dashboard between them, and nobody can open a half-written file
+mid-write regardless of concurrency.
+
+A lock file was deliberately not added: at "a few ingesters", exclusive-
+create plus atomic writes closes every case that actually mattered, without
+the stale-lock failure mode a lock file brings (a crashed process leaving a
+lock nobody ever clears).
+
+### Stiffness-quality flagging in the common-band stiffness chart
+
+`schema.py`'s `stiffness_quality()` -- 'few points' below 10 samples in the
+fit, 'nonlinear' below an R² of 0.95, 'ok' otherwise -- already coloured the
+Excel cycles sheet and sat as raw `n`/`R²` columns in the dashboard's values
+table. The chart itself did not: a common-band stiffness slope from four
+points on a fast machine ramp was drawn identically to one from forty,
+which is exactly backwards for the one panel most likely to be read at a
+glance and quoted.
+
+The common-band stiffness bar chart now dims and diagonally hatches any bar
+whose fit is thin or curved, in both the grid view and the expanded dialog
+(one shared drawing function, so the fix applies to both automatically), and
+adds a "Fit quality" line to that bar's tooltip. The raw `n` and `R²` stay in
+the values table as before -- the chart change is additive, not a
+replacement for the numbers underneath it.
+
+### Ingest audit trail: who ingested what, and when
+
+`audit.py` writes one small JSON file per ingest call, under
+`<workspace>/audit/` -- user (OS login name), host, UTC timestamp, material,
+run folder, the source files and their hashes, every specimen written, and
+anything skipped and why. Written automatically by `ingest()` itself, so it
+applies uniformly regardless of entry point, same as the material registry
+and the overview page. Read it back with `compression_tool audit` on the
+CLI, `list_audit_entries(ws)` from Python, or the "Recent activity" table on
+the Config tab (the 15 most recent, across the whole workspace).
+
+One file per ingest, not one growing log that every ingester would have to
+append to -- the same reasoning as everywhere else in this codebase that a
+shared drive rules out append-in-place: two ingesters appending around the
+same moment can interleave into a corrupt line or lose one entirely,
+depending on how the filesystem buffers a write that is not a whole new
+file. A brand-new file per ingest, atomically written, is never shared
+between writers.
+
+Best-effort and disposable by design, like the SQLite index: nothing
+downstream reads an audit record to reconstruct state, so a write that
+fails (a read-only share, a full disk) is swallowed rather than allowed to
+fail an ingest that already succeeded and was already written to disk in
+full.
 
 ### One design system across every view, not just Results
 

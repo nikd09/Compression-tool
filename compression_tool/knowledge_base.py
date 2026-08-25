@@ -4,7 +4,7 @@ knowledge_base.py
 SQLite index over the JSON records.
 
 The database is never the source of truth. It holds nothing that is not
-already in processed_output/, and `rebuild()` throws it away and regenerates
+already in Records/, and `rebuild()` throws it away and regenerates
 it from disk. That is the property worth protecting: if the schema changes, or
 the file is corrupted, or a record is edited by hand, the fix is always to
 rebuild rather than to migrate.

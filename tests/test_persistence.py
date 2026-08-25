@@ -19,10 +19,13 @@ from compression_tool.persistence import (
     archive_raw,
     jsonable,
     read_json,
+    resolve_run_dir,
+    run_dir_name,
     run_fingerprint,
     sha256_file,
     slugify,
     specimen_id,
+    write_manifest,
 )
 
 
@@ -39,6 +42,38 @@ def test_raw_input_is_content_addressed_and_preserved(workspace, single_file):
     assert digest == sha256_file(single_file)
     assert digest.startswith(archived.name.split("_")[0])
     assert sha256_file(archived) == digest
+
+
+def test_new_workspace_uses_the_explorer_friendly_names(workspace, single_file):
+    """A workspace with nothing on disk yet writes under the renamed folders,
+    not the old raw_input/processed_output -- those are compatibility names,
+    not the current default."""
+    result = ingest([single_file], workspace, material="TALCO50")
+    ws = result.workspace
+    assert ws.raw.name == "Raw exports"
+    assert ws.processed.name == "Records"
+    assert (ws.root / "Raw exports").exists()
+    assert (ws.root / "Records").exists()
+    assert not (ws.root / "raw_input").exists()
+    assert not (ws.root / "processed_output").exists()
+
+
+def test_workspace_with_legacy_folders_keeps_using_them(workspace, single_file):
+    """A workspace ingested into before this rename must not have to move
+    anything: as long as the old folder is the one that already exists (and
+    the new one does not), every write continues to land there."""
+    (workspace / "raw_input").mkdir(parents=True)
+    (workspace / "processed_output").mkdir(parents=True)
+
+    result = ingest([single_file], workspace, material="TALCO50")
+    ws = result.workspace
+
+    assert ws.raw.name == "raw_input"
+    assert ws.processed.name == "processed_output"
+    assert not (ws.root / "Raw exports").exists()
+    assert not (ws.root / "Records").exists()
+    assert len(list((workspace / "raw_input").iterdir())) == 1
+    assert result.run_dir.parent.name == "processed_output"
 
 
 def test_re_archiving_the_same_export_is_a_no_op(workspace, single_file):
@@ -118,7 +153,7 @@ def test_record_is_self_contained(workspace, series_file):
     assert spec["material"] == "PEEK-GF30"
     assert spec["source_format"] == "series"
     assert spec["source_sha256"] == sha256_file(series_file)
-    assert spec["raw_input_path"].startswith("raw_input/")
+    assert spec["raw_input_path"].startswith("Raw exports/")
     assert spec["h0_mm"] == pytest.approx(0.471)
 
     # The exact settings behind the numbers travel with them.
@@ -181,7 +216,7 @@ def test_record_points_at_a_recoverable_raw_file(workspace, single_file):
 
 def test_archive_originals_false_skips_the_copy_but_keeps_the_hash(workspace, single_file):
     """The hash is what a re-ingest of the same file is detected from, so it
-    must survive even when nothing is actually copied into raw_input/."""
+    must survive even when nothing is actually copied into Raw exports/."""
     result = ingest([single_file], workspace, material="TALCO50", archive_originals=False)
     ws = result.workspace
 
@@ -224,7 +259,7 @@ def test_write_reports_false_skips_per_run_excel_csv_html_but_not_the_record(
 
 def test_run_folder_is_named_for_material_and_date(workspace, single_file):
     result = ingest([single_file], workspace, material="TALCO 50/2")
-    assert result.run_dir.parent.name == "processed_output"
+    assert result.run_dir.parent.name == "Records"
     assert result.run_dir.name.startswith("TALCO-50-2_")
 
 
@@ -245,6 +280,48 @@ def test_changed_settings_get_their_own_folder(workspace, single_file):
 
     assert a.run_dir != b.run_dir
     assert a.run_dir.exists() and b.run_dir.exists()
+
+
+def test_resolve_run_dir_claims_the_folder_it_returns(workspace):
+    """The old exists()-then-mkdir version left a window between the check
+    and the write; resolve_run_dir now claims the folder itself
+    (exclusive-create), so by the time it returns, the folder is already
+    this call's and no concurrent caller can also be given it."""
+    ws = Workspace.at(workspace).ensure()
+    run_dir = resolve_run_dir(ws, "PEEK", "fp-a")
+    assert run_dir.exists()
+    assert run_dir.name == run_dir_name("PEEK")
+
+
+def test_resolve_run_dir_never_reuses_an_unfinished_folder(workspace):
+    """A folder that exists but has no run.json yet is either mid-write by
+    someone else, or was abandoned -- either way it is NOT provably a
+    finished run with a matching fingerprint, so it must not be silently
+    written into."""
+    ws = Workspace.at(workspace).ensure()
+    first = resolve_run_dir(ws, "PEEK", "fp-a")
+    # Simulates a second, concurrent ingest of DIFFERENT sources for the same
+    # material on the same day, racing to claim the same base name before
+    # either has written run.json: this is exactly the TOCTOU window the old
+    # exists()-then-mkdir implementation left open.
+    second = resolve_run_dir(ws, "PEEK", "fp-b")
+
+    assert first != second
+    assert first.exists() and second.exists()
+
+
+def test_resolve_run_dir_still_reuses_a_finished_matching_run(workspace):
+    """Once run.json proves a folder is a finished run with the SAME
+    fingerprint, resolving it again (the same sources, same config, same
+    day) must still land back in that folder -- the exclusive-create change
+    must not turn a legitimate re-run into a needless new folder every time."""
+    ws = Workspace.at(workspace).ensure()
+    run_dir = resolve_run_dir(ws, "PEEK", "fp-a")
+    write_manifest(run_dir, material="PEEK", cfg=Config(), fingerprint="fp-a",
+                    sources=[], specimens=[])
+
+    again = resolve_run_dir(ws, "PEEK", "fp-a")
+    assert again == run_dir
 
 
 def test_run_fingerprint_reacts_to_sources_and_config():

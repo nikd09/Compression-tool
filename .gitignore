@@ -17,17 +17,23 @@ env/
 .idea/
 .DS_Store
 
-# Workspaces produced by the tool. raw_input/ is an immutable archive of
-# instrument exports, processed_output/ is regenerated from it, and reports/
-# is the combined per-material export rebuilt from processed_output/ on every
-# ingest -- none of the three belongs in version control. (data/ covers all
-# three when the default workspace is used; the individual names cover a
-# workspace pointed elsewhere, e.g. this repo checkout itself.)
+# Workspaces produced by the tool. "Raw exports/" is an immutable archive of
+# instrument exports, "Records/" is regenerated from it, and reports/ is the
+# combined per-material export rebuilt from Records/ on every ingest -- none
+# of these belongs in version control. (data/ covers all of them when the
+# default workspace is used; the individual names cover a workspace pointed
+# elsewhere, e.g. this repo checkout itself. raw_input/ and processed_output/
+# are the pre-rename names, kept here too since a workspace that already has
+# one of those on disk keeps using it -- see Workspace.raw/.processed.)
 data/
+Raw exports/
+Records/
 raw_input/
 processed_output/
 reports/
+audit/
 knowledge_base.db
+materials.json
 
 # Real instrument exports used by the regression pins. Drop them in locally;
 # they are not redistributed here.

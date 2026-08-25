@@ -4,7 +4,9 @@ CLI -- this view calls the exact same two functions, nothing is reimplemented.""
 
 from __future__ import annotations
 
+import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -15,6 +17,19 @@ from ..persistence import Workspace
 from ..pipeline import ingest, preview
 
 _NEW_MATERIAL = "+ Add new material…"
+_UPLOAD_PREFIX = "compression_tool_upload_"
+# How long an orphaned upload directory (left behind by a session that was
+# killed rather than closed normally -- a browser tab crash, a re-deployed
+# server -- is kept around before the sweep below removes it. Generous on
+# purpose: it only has to outlive the longest plausible single ingest, not
+# protect anything -- these are ephemeral copies of files the user still has.
+_STALE_UPLOAD_MAX_AGE_S = 24 * 3600
+# Sweep at most once per this many seconds per server PROCESS (a module-level
+# guard, not per-session): the sweep is a full directory listing, wasteful to
+# repeat on every widget interaction, and it only ever needs to catch what a
+# normal per-session cleanup missed.
+_SWEEP_INTERVAL_S = 3600
+_last_sweep = 0.0
 
 
 def _step(n: int, title: str, sub: str = "") -> None:
@@ -107,13 +122,62 @@ def _material_picker(ws: Workspace) -> str:
     return choice or ""
 
 
+def _sweep_stale_uploads() -> None:
+    """Best-effort cleanup for upload directories a crashed session never
+    got to remove itself -- a browser tab killed mid-upload, a server
+    redeploy. Per-session cleanup (below) is the normal path; this only
+    catches what that missed, so it errs generous on age and silent on
+    error rather than risk removing a directory a live session still owns."""
+    global _last_sweep
+    now = time.time()
+    if now - _last_sweep < _SWEEP_INTERVAL_S:
+        return
+    _last_sweep = now
+    base = Path(tempfile.gettempdir())
+    cutoff = now - _STALE_UPLOAD_MAX_AGE_S
+    for d in base.glob(f"{_UPLOAD_PREFIX}*"):
+        try:
+            if d.is_dir() and d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def _cleanup_upload_dir() -> None:
+    d = st.session_state.pop("ingest_upload_dir", None)
+    st.session_state.pop("ingest_upload_key", None)
+    st.session_state.pop("ingest_upload_paths", None)
+    if d:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _save_uploads(files) -> list[Path]:
-    tmp_dir = Path(tempfile.mkdtemp(prefix="compression_tool_upload_"))
+    """Copy uploaded files to a temp dir the engine can read a real path
+    from. Cached in session_state and keyed on (name, size) per file: a
+    Streamlit rerun re-executes this on every widget interaction, not only
+    when the upload actually changes, so without the cache every checkbox
+    toggle while a file is attached would silently leave behind another
+    copy on disk that nothing ever deleted. A new upload -- or Commit,
+    which consumes the copy -- replaces or clears the cached directory
+    rather than accumulating another one beside it."""
+    key = tuple((f.name, f.size) for f in files)
+    if (
+        st.session_state.get("ingest_upload_key") == key
+        and st.session_state.get("ingest_upload_dir")
+        and Path(st.session_state["ingest_upload_dir"]).exists()
+    ):
+        return [Path(p) for p in st.session_state["ingest_upload_paths"]]
+
+    _cleanup_upload_dir()
+    tmp_dir = Path(tempfile.mkdtemp(prefix=_UPLOAD_PREFIX))
     paths = []
     for f in files:
         p = tmp_dir / f.name
         p.write_bytes(f.getbuffer())
         paths.append(p)
+    st.session_state["ingest_upload_key"] = key
+    st.session_state["ingest_upload_dir"] = str(tmp_dir)
+    st.session_state["ingest_upload_paths"] = [str(p) for p in paths]
     return paths
 
 
@@ -151,6 +215,8 @@ def _render_preview_cards(rows: list[dict]) -> None:
 
 
 def render(ws: Workspace) -> None:
+    _sweep_stale_uploads()
+
     st.header("Ingest")
     st.caption(
         "Upload one or more exports of the same series, look before "
@@ -192,6 +258,10 @@ def render(ws: Workspace) -> None:
     cfg = _config_from_form(detect_holds)
 
     if not uploaded:
+        # Nothing attached (including "no longer attached" -- the uploader
+        # was cleared): no reason to keep a copy of files that are no
+        # longer in the form around on disk.
+        _cleanup_upload_dir()
         st.info("Upload one or more exports above to preview them.")
         return
     paths = _save_uploads(uploaded)
@@ -212,7 +282,7 @@ def render(ws: Workspace) -> None:
     with c1:
         archive_originals = st.checkbox(
             "Archive a copy of the uploaded file", value=True,
-            help="Copies the export into raw_input/ before analysis, so a "
+            help="Copies the export into Raw exports/ before analysis, so a "
             "result can always be traced back to the exact bytes that "
             "produced it. Uncheck if you already keep your own copies "
             "elsewhere and do not want a second one on disk -- the file's "
@@ -239,6 +309,10 @@ def render(ws: Workspace) -> None:
                 archive_originals=archive_originals,
                 write_reports=write_reports,
             )
+            # The uploaded copy has done its job -- ingest() has already
+            # archived (or hashed) and read every file -- so there is
+            # nothing left for it to do on disk.
+            _cleanup_upload_dir()
             if result.material != material.strip():
                 st.info(
                     f"Matched to the existing material '{result.material}' "
