@@ -63,16 +63,17 @@ print(result.summary())
 ```
 <workspace>/
   raw_input/                        immutable, content-addressed, read-only
-    <sha12>_<original name>.xlsx
+    <sha12>_<original name>.xlsx      -- optional, see below
   processed_output/
     <material>_<YYYY-MM-DD>/
       run.json                      what was ingested, under which config
-      <specimen>.json               the record — source of truth
-      <specimen>.csv                per-cycle table, flat
-      <specimen>.xlsx               per-cycle table + summary + dictionary
-      <specimen>.html               standalone report
-      <material>_<date>.xlsx        all specimens of THIS RUN, when >1
-  materials/
+      <specimen>.json               the record — source of truth, ALWAYS written
+      <specimen>.curve.json         curve cache for the dashboard, ALWAYS written
+      <specimen>.csv                per-cycle table, flat            -- optional
+      <specimen>.xlsx               per-cycle table + summary        -- optional
+      <specimen>.html               standalone report                -- optional
+      <material>_<date>.xlsx        all specimens of THIS RUN, when >1 -- optional
+  reports/
     <material>.xlsx                 every specimen ever ingested for this
     <material>.html                 material, across every run -- see
                                      "Combined per-material export" below
@@ -81,16 +82,30 @@ print(result.summary())
 
 Three properties this layout is built to hold:
 
-- **The original export is never touched.** It is copied into `raw_input/`
-  before anything is analysed — an export that later turns out to crash the
-  engine is still preserved — and the copy is marked read-only. Re-ingesting
-  the same file is a no-op rather than a silent replacement.
-- **The JSON records are the source of truth.** Each one carries the metadata,
-  the exact config used, the source file's hash and every per-cycle metric.
-  A record plus the archived raw file is enough to reproduce the numbers.
+- **The original export can be archived, but does not have to be.** By
+  default it is copied into `raw_input/` before anything is analysed — an
+  export that later turns out to crash the engine is still preserved — and
+  the copy is marked read-only. `ingest(archive_originals=False)` (the
+  Ingest form's "Archive a copy of the uploaded file" checkbox, or
+  `--no-archive` on the CLI) skips the copy for someone who already keeps
+  their own originals elsewhere; the file's SHA-256 is still recorded either
+  way, so re-ingesting the same file stays a no-op rather than a silent
+  duplicate regardless of this setting.
+- **The JSON records are the source of truth, always written.** Each one
+  carries the metadata, the exact config used, the source file's hash and
+  every per-cycle metric. A record plus the archived raw file (if kept) is
+  enough to reproduce the numbers. The per-specimen and per-run Excel/CSV/HTML
+  next to it are a convenience, not the record, and are themselves optional:
+  `ingest(write_reports=False)` (the "Write per-run Excel/CSV/HTML" checkbox,
+  or `--no-reports`) skips them for someone who only ever opens the combined
+  export in `reports/` and finds the per-run copies redundant.
 - **The database is disposable.** `rebuild` throws it away and regenerates it
   from the records. Nothing is stored there that cannot be recovered, so a
-  schema change is a rebuild rather than a migration.
+  schema change is a rebuild rather than a migration. `reports/` is the same
+  kind of disposable: `material_export.export_material()` rebuilds it
+  entirely from the indexed specimens every time, so deleting it just means
+  the next ingest (or a manual rebuild -- see Config, or `compression-tool
+  export-material <name>`) recreates it.
 
 Re-running the same sources with the same config on the same day overwrites in
 place. Changing the config gives the run its own folder, so a changed result
@@ -323,12 +338,14 @@ groups it renamed, rather than let that merge happen silently.
 ### Combined per-material export: one Excel workbook, one real dashboard, across every run
 
 `material_export.export_material(ws, material)` writes
-`<workspace>/materials/<material>.xlsx` and `.html`, covering every specimen
+`<workspace>/reports/<material>.xlsx` and `.html`, covering every specimen
 ever ingested for that material -- not just whichever run last triggered the
 write. It runs automatically at the end of every `ingest()` call (Config
 shows the resulting paths, with a manual "Rebuild now" for a material ingested
 before this existed, or after `rebuild`), and is exposed on the CLI as
-`compression-tool export-material <name>`.
+`compression-tool export-material <name>`. It runs regardless of the
+`write_reports` setting below -- turning off the per-run copies never turns
+off the one export most people actually keep using.
 
 The `.html` half is a real, standalone copy of the interactive dashboard --
 the same template and the same `dashboard_data.build_dashboard_data()`

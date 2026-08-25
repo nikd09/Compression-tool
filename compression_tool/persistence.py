@@ -5,21 +5,29 @@ On-disk layout and the JSON record that is the system's source of truth.
 
     <root>/
       raw_input/                     immutable copies of the original exports
-        <sha12>_<original name>.xlsx
+        <sha12>_<original name>.xlsx   -- optional, ingest(archive_originals=False)
+                                           skips this and records just the SHA-256
       processed_output/
         <material>_<YYYY-MM-DD>/
           run.json                   what was ingested, with which config
-          <specimen>.json            the record -- source of truth
-          <specimen>.csv             per-cycle table, flat
-          <specimen>.xlsx            per-cycle table + summary
-          <specimen>.html            standalone report
-          <material>_<date>.xlsx     all specimens of THIS RUN in one workbook
-      materials/
+          <specimen>.json            the record -- source of truth, ALWAYS written
+          <specimen>.curve.json      curve cache for the dashboard, ALWAYS written
+          <specimen>.csv             per-cycle table, flat        -- optional, see below
+          <specimen>.xlsx            per-cycle table + summary    -- optional, see below
+          <specimen>.html            standalone report            -- optional, see below
+          <material>_<date>.xlsx     all specimens of THIS RUN in one workbook -- optional
+      reports/
         <material>.xlsx              every specimen ever ingested for this
         <material>.html              material, across every run -- see
                                       material_export.py. Rebuilt on every
                                       ingest; safe to delete, like the index.
       knowledge_base.db              SQLite index, rebuildable from the JSONs
+
+    The three "optional" rows above (per-specimen and per-run csv/xlsx/html)
+    are skipped by ingest(write_reports=False) -- for someone who only ever
+    reads the combined reports/ workbook and dashboard and finds the per-run
+    copies redundant. The JSON record and curve cache are never optional:
+    everything else in this layout, including reports/, is rebuilt FROM them.
 
 The JSON records are authoritative. The database is a queryable index over
 them and may be deleted and rebuilt at any time; nothing is stored there that

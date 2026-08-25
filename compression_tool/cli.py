@@ -80,6 +80,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_ing.add_argument("--gauge-length-confirmed", action="store_true",
                        help="assert that the displacement channel spans only h0; "
                             "without it, strain and modulus are marked provisional")
+    p_ing.add_argument("--no-archive", action="store_true",
+                       help="do not copy the export into raw_input/ -- only its "
+                            "SHA-256 is recorded")
+    p_ing.add_argument("--no-reports", action="store_true",
+                       help="skip per-specimen/per-run Excel, CSV and HTML -- only "
+                            "the JSON record, curve cache and the combined "
+                            "reports/<material> export are written")
     _add_config_args(p_ing)
 
     p_list = sub.add_parser("list", help="list indexed specimens")
@@ -129,6 +136,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cfg=_config_from_args(args),
             update_index=not args.no_index,
             gauge_length_confirmed=args.gauge_length_confirmed,
+            archive_originals=not args.no_archive,
+            write_reports=not args.no_reports,
         )
         print(result.summary())
         for w in diagnostics.distinct(result.payloads):

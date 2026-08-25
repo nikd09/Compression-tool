@@ -173,10 +173,33 @@ def render(ws: Workspace) -> None:
 
     st.divider()
     _step(4, "Commit", "Archives the raw file and writes the record — re-running the same file is a no-op.")
+    c1, c2 = st.columns(2)
+    with c1:
+        archive_originals = st.checkbox(
+            "Archive a copy of the uploaded file", value=True,
+            help="Copies the export into raw_input/ before analysis, so a "
+            "result can always be traced back to the exact bytes that "
+            "produced it. Uncheck if you already keep your own copies "
+            "elsewhere and do not want a second one on disk -- the file's "
+            "SHA-256 is still recorded either way, which is what a "
+            "re-ingest of the same file is detected from.",
+        )
+    with c2:
+        write_reports = st.checkbox(
+            "Write per-run Excel/CSV/HTML", value=True,
+            help="Writes a per-specimen and per-run Excel workbook, CSV and "
+            "HTML report alongside the JSON record. Uncheck if you only "
+            "open the combined report in reports/<material> (see Config) "
+            "and find these per-run copies redundant -- the JSON record "
+            "and curve cache, which the combined report and every chart "
+            "are rebuilt from, are always written either way.",
+        )
     if st.button("Commit to workspace", type="primary", icon=":material/save:"):
         result = ingest(
             paths, ws, material=material or None, cfg=cfg,
             gauge_length_confirmed=gauge_confirmed,
+            archive_originals=archive_originals,
+            write_reports=write_reports,
         )
         st.success(f"Ingested {len(result.specimens)} specimen(s) into {result.run_dir}")
         st.code(result.summary())

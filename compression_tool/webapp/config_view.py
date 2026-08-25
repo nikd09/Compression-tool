@@ -43,9 +43,9 @@ def render(ws: Workspace) -> None:
         )
 
     material = manifest.get("material", "")
-    material_dir = ws.root / "materials"
-    xlsx_path = material_dir / f"{slugify(material)}.xlsx"
-    html_path = material_dir / f"{slugify(material)}.html"
+    reports_dir = ws.root / "reports"
+    xlsx_path = reports_dir / f"{slugify(material)}.xlsx"
+    html_path = reports_dir / f"{slugify(material)}.html"
     with st.container(border=True):
         st.markdown("##### Combined across every run of this material")
         st.caption(

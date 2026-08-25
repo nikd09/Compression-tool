@@ -21,14 +21,15 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from . import curve_cache, diagnostics, excel_export, html_report, knowledge_base
-from .material_export import export_material
 from .core import Config, analyse_test, load_tests
+from .material_export import export_material
 from .persistence import (
     Workspace,
     archive_raw,
     build_payload,
     resolve_run_dir,
     run_fingerprint,
+    sha256_file,
     slugify,
     write_json,
     write_manifest,
@@ -42,9 +43,9 @@ class SpecimenResult:
     n_cycles: int
     payload: dict
     json_path: Path
-    csv_path: Path
-    xlsx_path: Path
-    html_path: Path
+    csv_path: Optional[Path]
+    xlsx_path: Optional[Path]
+    html_path: Optional[Path]
     curve_path: Path
 
 
@@ -136,6 +137,8 @@ def ingest(
     when: Optional[datetime] = None,
     update_index: bool = True,
     gauge_length_confirmed: bool = False,
+    archive_originals: bool = True,
+    write_reports: bool = True,
 ) -> IngestResult:
     """Archive, analyse, persist and index one or more exports.
 
@@ -143,6 +146,20 @@ def ingest(
     the specimen height h0. It defaults to False, which marks every strain and
     modulus figure provisional: nothing in an export proves what the
     extensometer was clamped across, so the tool will not assume it.
+
+    `archive_originals=False` skips copying the export into raw_input/ --
+    only its SHA-256 is recorded (still needed for the specimen ID and to
+    detect a re-ingest of the same file). For someone who already keeps their
+    own originals elsewhere and does not want a second copy on disk.
+
+    `write_reports=False` skips the per-specimen and per-run Excel/CSV/HTML
+    (the "optional" rows in the layout above) -- only the JSON record and
+    curve cache are written, plus the always-on combined reports/<material>
+    workbook and dashboard covering every run. For someone who only ever
+    opens the combined export and finds the per-run copies redundant.
+    Neither flag touches the JSON record or curve cache: everything else,
+    including the combined export, is rebuilt FROM those, so they are never
+    optional.
     """
     cfg = cfg or Config()
     ws = workspace if isinstance(workspace, Workspace) else Workspace.at(workspace)
@@ -157,12 +174,21 @@ def ingest(
     for path in paths:
         if not path.exists():
             raise FileNotFoundError(path)
-        archived, digest = archive_raw(path, ws)
+        if archive_originals:
+            archived, digest = archive_raw(path, ws)
+            raw_input_path = ws.relative(archived)
+            archived_abs = str(archived)
+        else:
+            # No copy, but the hash is still needed -- it is what the
+            # specimen ID and same-file re-ingest detection are keyed on.
+            digest = sha256_file(path)
+            raw_input_path = None
+            archived_abs = None
         sources.append({
             "source_file": str(path.resolve()),
             "sha256": digest,
-            "raw_input_path": ws.relative(archived),
-            "archived_abs": str(archived),
+            "raw_input_path": raw_input_path,
+            "archived_abs": archived_abs,
         })
 
     material = material or _infer_material(paths)
@@ -194,13 +220,15 @@ def ingest(
             payload = build_payload(
                 test, df, cfg,
                 material=material,
-                raw_path=Path(source["archived_abs"]),
+                raw_path=Path(source["archived_abs"]) if source["archived_abs"] else None,
                 source_sha256=source["sha256"],
                 workspace=ws,
                 gauge_length_confirmed=gauge_length_confirmed,
             )
             stem = _unique_stem(slugify(test.label), used_names)
-            paths_written = _write_specimen_artifacts(test, df, payload, run_dir, stem)
+            paths_written = _write_specimen_artifacts(
+                test, df, payload, run_dir, stem, write_reports=write_reports,
+            )
 
             payload["_json_path"] = ws.relative(paths_written["json"])
             payload["_run_dir"] = ws.relative(run_dir)
@@ -218,7 +246,7 @@ def ingest(
             ))
 
     # 3. Run-level rollup, only when it says something a single file does not.
-    if len(result.specimens) > 1:
+    if write_reports and len(result.specimens) > 1:
         combined = run_dir / f"{slugify(material)}_{run_dir.name.split('_')[-1]}.xlsx"
         result.run_xlsx = excel_export.write_workbook(result.payloads, combined)
         excel_export.write_csv(result.payloads, combined.with_suffix(".csv"),
@@ -284,15 +312,19 @@ def _run_dir_suffix(run_dir_name: str, material: str) -> str:
 
 
 def _write_specimen_artifacts(
-    test, df, payload: dict, run_dir: Path, stem: str
-) -> dict[str, Path]:
+    test, df, payload: dict, run_dir: Path, stem: str, *, write_reports: bool = True
+) -> dict[str, Optional[Path]]:
     json_path = write_json(payload, run_dir / f"{stem}.json")
-    csv_path = excel_export.write_csv([payload], run_dir / f"{stem}.csv")
-    xlsx_path = excel_export.write_workbook([payload], run_dir / f"{stem}.xlsx")
-    html_path = html_report.write_html([payload], run_dir / f"{stem}.html")
+    csv_path = xlsx_path = html_path = None
+    if write_reports:
+        csv_path = excel_export.write_csv([payload], run_dir / f"{stem}.csv")
+        xlsx_path = excel_export.write_workbook([payload], run_dir / f"{stem}.xlsx")
+        html_path = html_report.write_html([payload], run_dir / f"{stem}.html")
     # Display-only sidecar, not part of the frozen record: the full per-cycle
     # loop shape a chart needs, which the JSON contract deliberately does not
-    # carry. Rebuildable from the archived raw file at any time.
+    # carry. Rebuildable from the archived raw file at any time. Never
+    # optional -- the combined per-material dashboard (material_export.py)
+    # and the interactive Results view both depend on it for every specimen.
     cache = curve_cache.build_curve_cache(
         test, df, specimen_id=payload["specimen"]["specimen_id"]
     )

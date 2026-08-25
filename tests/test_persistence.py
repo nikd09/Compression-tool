@@ -156,6 +156,44 @@ def test_record_points_at_a_recoverable_raw_file(workspace, single_file):
     assert sha256_file(archived) == payload["specimen"]["source_sha256"]
 
 
+def test_archive_originals_false_skips_the_copy_but_keeps_the_hash(workspace, single_file):
+    """The hash is what a re-ingest of the same file is detected from, so it
+    must survive even when nothing is actually copied into raw_input/."""
+    result = ingest([single_file], workspace, material="TALCO50", archive_originals=False)
+    ws = result.workspace
+
+    assert not ws.raw.exists() or not any(ws.raw.iterdir())
+    payload = read_json(result.specimens[0].json_path)
+    assert payload["specimen"]["raw_input_path"] is None
+    assert payload["specimen"]["source_sha256"] == sha256_file(single_file)
+
+
+def test_write_reports_false_skips_per_run_excel_csv_html_but_not_the_record(
+    workspace, series_file
+):
+    """json and curve.json are never optional -- everything else the
+    combined per-material export and the dashboard depend on is rebuilt from
+    them. csv/xlsx/html are the convenience copies this flag controls."""
+    result = ingest([series_file], workspace, material="PEEK", write_reports=False)
+
+    for specimen in result.specimens:
+        assert specimen.json_path.exists()
+        assert specimen.curve_path.exists()
+        assert specimen.csv_path is None
+        assert specimen.xlsx_path is None
+        assert specimen.html_path is None
+    assert result.run_xlsx is None
+    assert result.run_html is None
+    assert not list(result.run_dir.glob("*.xlsx"))
+    assert not list(result.run_dir.glob("*.html"))
+    assert not list(result.run_dir.glob("*.csv"))
+
+    # The combined per-material export is unaffected -- it is built from the
+    # JSON records via the index, not from these per-run report files.
+    assert result.material_xlsx is not None and result.material_xlsx.exists()
+    assert result.material_html is not None and result.material_html.exists()
+
+
 # ----------------------------------------------------------------------------
 # Run folders
 # ----------------------------------------------------------------------------

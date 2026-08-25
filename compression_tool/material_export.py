@@ -7,7 +7,7 @@ ever ingested for it, regardless of which run or ingest session it came
 from. A derived rollup, like knowledge_base.db: rebuilt from the indexed
 specimens on every call, safe to delete, never the source of truth.
 
-Written to <workspace>/materials/<material-slug>.xlsx and .html, deliberately
+Written to <workspace>/reports/<material-slug>.xlsx and .html, deliberately
 apart from the per-run archive under processed_output/<material>_<date>/ --
 so "everything for this material" is always one predictable pair of files,
 not something to reassemble by hand across however many sessions built it up.
@@ -53,7 +53,7 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
     json_paths = [ws.root / p for p in specimens["json_path"]]
     payloads = [read_json(p) for p in json_paths]
 
-    out_dir = ws.root / "materials"
+    out_dir = ws.root / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = slugify(material)
 
