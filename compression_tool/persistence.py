@@ -66,13 +66,31 @@ DB_FILENAME = "knowledge_base.db"
 
 @dataclass(frozen=True)
 class Workspace:
-    """The three directories the tool owns. Nothing is written outside them."""
+    """The directories the tool owns. Nothing is written outside them.
+
+    `index_root`, when set, moves ONLY the SQLite index (`db_path`) out of
+    `root` -- everything else (raw_input/, processed_output/, reports/)
+    still lives under `root`. Exists for a workspace whose `root` is a
+    synced folder (OneDrive, SharePoint) or a network share: syncing a
+    SQLite file that is being actively written is a well-known corruption
+    risk (the sync client and SQLite's own locking are not coordinated), and
+    a network share's file locking is unreliable for SQLite regardless. The
+    index is documented as disposable and rebuildable from the JSON records
+    (see `knowledge_base.rebuild`), so it loses nothing by living somewhere
+    that is NOT synced or shared -- typically local, per-machine storage.
+    """
 
     root: Path
+    index_root: Optional[Path] = None
 
     @classmethod
-    def at(cls, root: str | os.PathLike) -> "Workspace":
-        return cls(Path(root).expanduser().resolve())
+    def at(
+        cls, root: str | os.PathLike, *, index_root: str | os.PathLike | None = None
+    ) -> "Workspace":
+        return cls(
+            Path(root).expanduser().resolve(),
+            Path(index_root).expanduser().resolve() if index_root else None,
+        )
 
     @property
     def raw(self) -> Path:
@@ -84,11 +102,13 @@ class Workspace:
 
     @property
     def db_path(self) -> Path:
-        return self.root / DB_FILENAME
+        return (self.index_root or self.root) / DB_FILENAME
 
     def ensure(self) -> "Workspace":
         self.raw.mkdir(parents=True, exist_ok=True)
         self.processed.mkdir(parents=True, exist_ok=True)
+        if self.index_root:
+            self.index_root.mkdir(parents=True, exist_ok=True)
         return self
 
     def relative(self, path: Path) -> str:
@@ -98,6 +118,23 @@ class Workspace:
             return str(Path(path).resolve().relative_to(self.root))
         except ValueError:
             return str(Path(path).resolve())
+
+
+def default_index_root() -> Path:
+    """Where the local SQLite index lives when a caller wants `root` to stay
+    a shared/synced folder untouched by it -- see `Workspace.index_root`.
+
+    A per-machine, per-user, NOT-synced-by-default location: %LOCALAPPDATA%
+    on Windows (explicitly the "Local" app-data folder, as opposed to
+    "Roaming", precisely because Local is what OneDrive Known Folder Move
+    does not sync); XDG_CACHE_HOME or ~/.cache elsewhere. Callers decide
+    whether to use this -- it is never applied implicitly by `Workspace.at`.
+    """
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return base / "CompressionTool"
 
 
 # ----------------------------------------------------------------------------

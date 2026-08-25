@@ -57,6 +57,22 @@ def test_rebuild_reproduces_the_index_exactly(workspace, series_file, single_fil
     assert_frame_equal(before_cycles, after_cycles)
 
 
+def test_rebuild_creates_a_not_yet_existing_index_directory(workspace, series_file, tmp_path):
+    """A Workspace with index_root pointing somewhere that has never been
+    created (a fresh machine, or a cleared local cache -- the normal state
+    the very first time the webapp opens a shared workspace) must not fail
+    just because the directory does not exist yet."""
+    ingest([series_file], workspace, material="PEEK")
+
+    index_root = tmp_path / "not_yet_created" / "index"
+    assert not index_root.exists()
+    ws = Workspace.at(workspace, index_root=index_root)
+
+    assert rebuild_index(ws) == 2
+    assert ws.db_path.exists()
+    assert ws.db_path.parent == index_root
+
+
 def test_rebuild_survives_a_corrupt_record(workspace, series_file, single_file):
     """One unreadable file must not stop the rest of the archive indexing."""
     ingest([series_file], workspace, material="PEEK")

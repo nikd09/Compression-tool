@@ -77,7 +77,12 @@ print(result.summary())
     <material>.xlsx                 every specimen ever ingested for this
     <material>.html                 material, across every run -- see
                                      "Combined per-material export" below
-  knowledge_base.db                 SQLite index, rebuildable
+  knowledge_base.db                 SQLite index, rebuildable -- unless the
+                                     workspace has an index_root (the web
+                                     app always sets one), in which case
+                                     this file lives THERE instead, not
+                                     under <workspace>/ at all -- see
+                                     "Sharing the app with colleagues" below
 ```
 
 Three properties this layout is built to hold:
@@ -255,6 +260,45 @@ not Streamlit's own multipage widget):
 | Results | Pick a material and its specimens (1-8); renders the grouped-bar dashboard against their real records and curve caches. |
 | Compare | Build named groups of specimens -- any specimens, from any materials, in any combination -- and overlay one metric across the groups' means (`knowledge_base.cycles_for_specimens()`). A group is not required to be a whole material. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
+
+### Sharing the app with colleagues -- and the shared workspace
+
+`scripts/run_webapp.bat` starts the app bound to this PC's network address
+instead of only `localhost`, so colleagues on the same corporate network/VPN
+can open `http://<this-PC's-name>:8501` in a browser -- no install, no VS
+Code, no Python on their end. Whichever PC runs it has to stay on and
+connected while people are using it; closing that window takes the app down
+for everyone. **There is no login yet** (see "Still to build"), so this is a
+trusted-network stopgap, not the final answer -- and never expose it via a
+public tunnel (ngrok or similar): this is proprietary test data, and a
+tunnel would put it on the open internet with zero authentication in front
+of it.
+
+The workspace path is read from the `COMPRESSION_TOOL_WORKSPACE` environment
+variable if it is set (see the comment at the top of `run_webapp.bat` for
+how to set it), falling back to `./data` for local development. It is never
+hardcoded in source -- moving the host to a different PC later is just
+setting the same variable there, no code change.
+
+**The SQLite index is deliberately kept off whatever `COMPRESSION_TOOL_WORKSPACE`
+points at.** That path is expected to be a synced or shared folder (OneDrive,
+SharePoint, a network drive), and syncing a SQLite file while it is being
+written is a well-known way to corrupt it -- the sync client and SQLite's own
+locking are not coordinated. `Workspace.index_root` (default:
+`%LOCALAPPDATA%\CompressionTool` on Windows) moves *only* `knowledge_base.db`
+to a plain local folder on the host PC; `raw_input/`, `processed_output/` and
+`reports/` still live under the shared path exactly as before. The index is
+disposable and rebuildable from the JSON records regardless of where it
+lives, so this costs nothing -- and the very first time a shared workspace is
+opened from a PC that has no local index yet, the app rebuilds one
+automatically rather than showing an empty tool in front of non-empty data.
+
+This split is webapp-only (`webapp/common.py`'s `workspace_picker()`); the
+CLI still uses one root for everything, which is fine for a local or
+non-shared workspace. **Do not run `compression-tool ingest` directly
+against a shared `COMPRESSION_TOOL_WORKSPACE` path** -- that writes
+`knowledge_base.db` straight into the synced folder, exactly the risk the
+split exists to avoid. Ingest through the web app's Ingest tab instead.
 
 Every view is a thin layer over the public API -- `preview`, `ingest`,
 `knowledge_base`, and `dashboard_data.build_dashboard_data()`, which maps a

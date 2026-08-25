@@ -4,14 +4,21 @@ helpers every specimen picker uses so they read the same way everywhere."""
 
 from __future__ import annotations
 
+import os
 import re
 
 import streamlit as st
 
 from .. import knowledge_base
-from ..persistence import Workspace
+from ..persistence import Workspace, default_index_root
+from ..pipeline import rebuild_index
 
-DEFAULT_WORKSPACE = "./data"
+# Resolved once, at import time, from an environment variable set on the
+# HOST machine -- not hardcoded, so the same code works for whoever is
+# hosting the app today and for whoever it moves to later; only the launch
+# environment changes, never this file. Falls back to a plain relative
+# folder for local development when the variable is unset.
+DEFAULT_WORKSPACE = os.environ.get("COMPRESSION_TOOL_WORKSPACE", "./data")
 
 # The validated categorical slots (light mode; Streamlit widgets do not
 # follow the dashboard's dark-mode CSS variables, so these are the literal
@@ -159,20 +166,34 @@ def workspace_picker() -> Workspace:
     root = st.text_input(
         "Workspace",
         key="workspace_root",
-        help="Where raw_input/, processed_output/ and the index live -- every "
+        help="Where raw_input/, processed_output/ and reports/ live -- every "
         "specimen's JSON, CSV, Excel workbook and HTML report land here on "
         "every Commit, nowhere else. The same path every time this app is "
         "opened shows the same tests; pointing it elsewhere switches "
         "workspaces, it does not copy anything between them. A relative path "
         "like the default is resolved against wherever `streamlit run` was "
         "launched from -- see the resolved path below if that's unclear. "
-        "Everything here stays local: no network calls, nothing uploaded.",
+        "Everything here stays local: no network calls, nothing uploaded. "
+        "The search index is kept separately, on this machine only -- see "
+        "the note below the resolved path.",
     )
-    ws = Workspace.at(root)
+    # The searchable index is deliberately NOT under `root`: `root` is
+    # expected to be a synced or shared folder (OneDrive, a network drive),
+    # and syncing a SQLite file while it is being written is a well-known
+    # way to corrupt it. The index is disposable and rebuilt from the JSON
+    # records under `root` -- moving it off the synced path costs nothing.
+    ws = Workspace.at(root, index_root=default_index_root())
+    if not ws.db_path.exists() and ws.processed.exists() and any(ws.processed.iterdir()):
+        # First time this workspace has been opened from THIS machine (or
+        # the local index cache was cleared): there is real data under
+        # `root` but nothing indexed locally yet. Build it once now rather
+        # than showing an empty app in front of a non-empty workspace.
+        rebuild_index(ws)
     # A relative path (the default, "./data") silently depends on the launch
     # directory -- shown resolved so it is never ambiguous where a run
     # actually landed on disk.
     st.caption(f"→ `{ws.root.resolve()}`")
+    st.caption(f"Index (this machine only) → `{ws.db_path.parent}`")
     return ws
 
 
