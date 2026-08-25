@@ -10,6 +10,7 @@ as little as one that never fires.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from compression_tool import Config, ingest, preview
@@ -121,6 +122,37 @@ def test_warning_escalates_to_critical_as_the_margin_closes(signal):
     warnings = [w for w in collect(test, df, cfg)
                 if w["code"] == "first_cycle_near_discard_threshold"]
     assert warnings and warnings[0]["severity"] == "critical"
+
+
+def test_first_cycle_residual_unreachable_is_flagged(signal):
+    """residual_stress is a fraction of the GLOBAL peak (450 MPa here); at
+    0.15 that is 67.5 MPa -- above cycle 1's own 50 MPa peak, so cycle 1's
+    loading branch never reaches it and PermDef_cumulative_mm silently
+    rebases onto cycle 2 (peak 100 MPa) instead of cycle 1."""
+    stress, disp = signal
+    test = _test_data(stress, disp)
+    cfg = Config(residual_stress_frac=0.15)
+    df = analyse_test(test, cfg)
+
+    assert pd.isna(df["ResidualDisp_mm"].iloc[0])
+    assert df["ResidualDisp_mm"].notna().any()
+
+    warnings = collect(test, df, cfg)
+    assert "first_cycle_residual_unreachable" in _codes(warnings)
+    msg = [w for w in warnings if w["code"] == "first_cycle_residual_unreachable"][0]
+    assert msg["severity"] == "critical"
+    assert "cycle 2" in msg["message"]
+
+
+def test_no_residual_warning_when_cycle_1_is_reachable(signal):
+    """The default residual_stress_frac (0.02 -> 9 MPa) sits well inside
+    cycle 1's own 50 MPa peak, so no warning fires."""
+    stress, disp = signal
+    test = _test_data(stress, disp)
+    df = analyse_test(test, Config())
+
+    assert pd.notna(df["ResidualDisp_mm"].iloc[0])
+    assert "first_cycle_residual_unreachable" not in _codes(collect(test, df, Config()))
 
 
 def test_discarded_runs_are_reported_with_their_peaks(signal):

@@ -30,7 +30,7 @@ to the shape has to be a deliberate edit to that test.
 
 | Key | Type | Notes |
 |---|---|---|
-| `specimen_id` | string | 16 hex chars. Stable across rebuilds and workspaces — derived from the source hash and label, so it is safe to use as a UI key. |
+| `specimen_id` | string | 16 hex chars. Stable across rebuilds and workspaces — derived from the source hash, the material, and the label (material is part of the identity so the same export ingested under two material names does not collide on one database row), so it is safe to use as a UI key. |
 | `label` | string | From the export. |
 | `material` | string | Given at ingest. |
 | `source_filename` | string | Original filename, e.g. `Mehrstufiger_....xlsx`. **Use this for anything operator-facing** — "which file was this". Added after v2 was frozen; additive, so schema_version stayed at 2 — see the changelog at the bottom of this document. |
@@ -102,6 +102,7 @@ meaning):
 | `gauge_length_unconfirmed` | critical | `has_strain` but the gauge length has not been confirmed. |
 | `no_gauge_length` | info | No h0, so strain keys are absent rather than estimated. |
 | `first_cycle_near_discard_threshold` | caution / critical | The smallest cycle clears `major_cycle_frac × global peak` by a thin margin. Losing cycle 1 rebases every cumulative figure. Escalates to `critical` within 5% of the cliff. |
+| `first_cycle_residual_unreachable` | critical | Cycle 1 survived segmentation but its loading branch never reached the residual reference stress (a fraction of the GLOBAL peak, which a rising multi-stage test's smallest stage can sit below entirely) — `PermDef_cumulative_mm` is silently referenced to whichever later cycle reached it first, not cycle 1. |
 | `cycles_discarded_by_peak_filter` | caution | Long-enough runs were dropped for peaking too low. Message names their peaks — a low-stress run at the start is normally the machine finding contact. |
 | `variable_dwell_length` | caution | Hold lengths differ by >10%, so hold displacement is not comparable as a raw total. |
 
@@ -280,3 +281,11 @@ workbook and report showing the same thing.
   the end of the dwell, which holds only while the specimen is intact.
 - The combined run report's `<title>` no longer repeats the material name
   (was `"T050E1 - T050E1_2026-08-17"`; now `"T050E1 - 2026-08-17"`).
+- `specimen_id` now includes `material` in its hash input (previously
+  `sha256(source_sha256:label)`, now `sha256(source_sha256:material:label)`).
+  Existing records keep the ID they were ingested with -- this only changes
+  the ID assigned to specimens ingested after the change. Fixes the same
+  export ingested under two material names colliding on one database row.
+- `first_cycle_residual_unreachable` warning code added — see the table
+  above. Catches `PermDef_cumulative_mm` silently rebasing off cycle 1 when
+  cycle 1's own loading branch never reaches the residual reference stress.

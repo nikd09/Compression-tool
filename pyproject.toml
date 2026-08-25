@@ -18,7 +18,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
-webapp = ["streamlit>=1.38"]
+# altair is imported directly by webapp/compare_view.py; it was working only
+# because Streamlit happens to pull it in transitively -- undeclared here, it
+# would silently break the moment Streamlit's own dependency set shifted.
+webapp = ["streamlit>=1.38", "altair>=5.0"]
 
 [project.scripts]
 compression-tool = "compression_tool.cli:main"

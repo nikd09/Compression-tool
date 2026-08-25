@@ -128,5 +128,16 @@ def read_curve_cache(path: str | os.PathLike) -> dict:
 def curve_cache_path_for(json_path: str | os.PathLike) -> Path:
     """`<stem>.json` -> `<stem>.curve.json`, the sidecar written next to it at
     ingest time. The two are never named independently, so deriving one from
-    the other is safe rather than a guess."""
-    return Path(json_path).with_suffix("").with_suffix(".curve.json")
+    the other is safe rather than a guess.
+
+    Strips the trailing ".json" as a literal string, NOT via chained
+    `Path.with_suffix()` -- that strips at the LAST dot in the whole name, so
+    a stem containing its own dot (a specimen label like "T050E1_S1.2", or a
+    source file named "...2024.03.12.xlsx") silently truncated the stem too:
+    "T050E1_S1.2.json" -> with_suffix("") -> "T050E1_S1.2" ->
+    with_suffix(".curve.json") -> "T050E1_S1.curve.json", the WRONG specimen's
+    cache path (or none at all). Confirmed this was live: any dotted label
+    made its own curve cache unreachable.
+    """
+    p = Path(json_path)
+    return p.with_name(p.name.removesuffix(".json") + ".curve.json")

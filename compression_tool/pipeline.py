@@ -106,7 +106,15 @@ def preview(
             out.append({"source_file": path, "error": f"{type(exc).__name__}: {exc}"})
             continue
         for test in tests:
-            df = analyse_test(test, cfg)
+            try:
+                df = analyse_test(test, cfg)
+            except Exception as exc:  # noqa: BLE001 - one degenerate specimen must
+                # not take the rest of a multi-file batch's preview down with it.
+                out.append({
+                    "source_file": path, "label": test.label,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+                continue
             out.append({
                 "source_file": path,
                 "label": test.label,
@@ -212,7 +220,13 @@ def ingest(
             continue
 
         for test in tests:
-            df = analyse_test(test, cfg)
+            try:
+                df = analyse_test(test, cfg)
+            except Exception as exc:  # noqa: BLE001 - one degenerate specimen must
+                # not abort a batch mid-write: everything archived and written
+                # for earlier specimens in this call stays valid and indexed.
+                result.skipped.append((test.label, f"{type(exc).__name__}: {exc}"))
+                continue
             if df.empty:
                 result.skipped.append((test.label, "no cycles detected"))
                 continue

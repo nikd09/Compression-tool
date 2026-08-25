@@ -95,6 +95,40 @@ def _first_cycle_at_risk(
     )
 
 
+def _first_cycle_residual_unreachable(df: pd.DataFrame) -> Optional[Warning_]:
+    """PermDef_cumulative_mm is referenced to the first cycle whose residual
+    displacement could actually be READ on the loading branch -- which is not
+    necessarily cycle 1. The residual reference stress is a fraction of the
+    GLOBAL peak (core.py), so in a rising multi-stage test cycle 1's own,
+    much smaller peak can sit below it entirely; `_interp_on_branch` then
+    returns None for cycle 1 and the "- res.dropna().iloc[0]" rebase silently
+    anchors onto whichever cycle DOES reach it instead. Distinct from
+    `_first_cycle_at_risk`, which covers cycle 1 being discarded outright --
+    this covers cycle 1 surviving segmentation but still not producing a
+    residual reading.
+    """
+    if df.empty or "ResidualDisp_mm" not in df.columns:
+        return None
+    res = pd.to_numeric(df["ResidualDisp_mm"], errors="coerce")
+    if res.empty or pd.notna(res.iloc[0]) or not res.notna().any():
+        return None
+
+    first_valid_idx = res.notna().idxmax()
+    rebase_cycle = df.loc[first_valid_idx, "Cycle"] if "Cycle" in df.columns else "a later cycle"
+    return Warning_(
+        code="first_cycle_residual_unreachable",
+        severity="critical",
+        message=(
+            "Cycle 1's loading branch never reached the residual reference "
+            "stress, so PermDef_cumulative_mm is silently referenced to "
+            f"cycle {rebase_cycle} instead of cycle 1 -- every value in that "
+            "column is relative to the wrong baseline. Raise "
+            "residual_stress_frac's reach by lowering it, or note that this "
+            "material's early stage(s) cannot report a permanent-set figure."
+        ),
+    )
+
+
 def _cycles_discarded(stress: np.ndarray, cfg: Config) -> Optional[Warning_]:
     """Which long-enough runs the peak filter actually threw away.
 
@@ -212,6 +246,7 @@ def collect(
     found = [
         _gauge_length(test, has_strain, gauge_length_confirmed),
         _first_cycle_at_risk(stress, df, cfg),
+        _first_cycle_residual_unreachable(df),
         _cycles_discarded(stress, cfg),
         _variable_dwell(df),
     ]

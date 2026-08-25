@@ -62,6 +62,7 @@ CONTRACT_WARNING_CODES: tuple[str, ...] = (
     "first_cycle_near_discard_threshold",
     "cycles_discarded_by_peak_filter",
     "variable_dwell_length",
+    "first_cycle_residual_unreachable",
 )
 
 

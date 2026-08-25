@@ -176,13 +176,31 @@ def _read_series_metadata(path: str, sheets: list[str]) -> dict[int, dict]:
 
     headers = [str(v).strip().lower() for v in raw.iloc[0].tolist()]
 
-    def col_for(*keys) -> Optional[int]:
-        for i, h in enumerate(headers):
-            if any(k in h for k in keys):
-                return i
-        return None
+    def col_for(*keys, prefer_unit: Optional[str] = None) -> Optional[int]:
+        """First header containing any of `keys` as a substring.
 
-    c_h0, c_d0, c_temp = col_for("h0"), col_for("d0"), col_for("temperatur")
+        A plain substring match alone is too easy to fool: a header like
+        "dh0/h0 in %" (a relative-deviation column some exports carry
+        alongside the real measurement) also contains "h0" and, if it comes
+        first, would silently bind h0_mm to a percentage instead of a
+        length -- wrong strain and modulus, with no warning. `prefer_unit`
+        makes a header that ALSO carries the expected unit win over one that
+        does not, in one pass, before falling back to a bare substring match
+        so a genuinely differently-worded but unambiguous header (only one
+        candidate at all) still matches exactly as before.
+        """
+        candidates = [i for i, h in enumerate(headers) if any(k in h for k in keys)]
+        if not candidates:
+            return None
+        if prefer_unit:
+            for i in candidates:
+                if prefer_unit in headers[i]:
+                    return i
+        return candidates[0]
+
+    c_h0 = col_for("h0", prefer_unit="mm")
+    c_d0 = col_for("d0", prefer_unit="mm")
+    c_temp = col_for("temperatur")
 
     for _, row in raw.iloc[2:].iterrows():
         try:
@@ -339,6 +357,13 @@ def segment_cycles(stress: np.ndarray, cfg: Config) -> list[tuple[int, int]]:
     where stress falls back to the unloaded floor. Works unchanged whether the
     test peaks at 2 MPa or 450 MPa, and whether peaks are constant or rising.
     """
+    if len(stress) == 0:
+        # np.nanmax raises on a zero-size array rather than returning NaN --
+        # this is the one shape an all-NaN array (handled below, via the
+        # "no cycle cleared the floor" path) does not cover. A malformed or
+        # completely unparseable column reaches here as a zero-length array,
+        # and "no cycles" is exactly the correct answer for it too.
+        return []
     peak = float(np.nanmax(stress))
     if peak <= 0:
         return []

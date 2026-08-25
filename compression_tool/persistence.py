@@ -118,10 +118,18 @@ def config_hash(cfg: Config) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
-def specimen_id(source_sha256: str, label: str) -> str:
+def specimen_id(source_sha256: str, label: str, material: str) -> str:
     """Deterministic, so a rebuilt database reuses the same identifiers and
-    references held elsewhere do not rot."""
-    return hashlib.sha256(f"{source_sha256}:{label}".encode()).hexdigest()[:16]
+    references held elsewhere do not rot.
+
+    `material` is part of the identity, not just the label and source file:
+    without it, ingesting the same export under two material names produces
+    two JSON records that collide on one database row (specimen_id is the
+    SQLite PRIMARY KEY), and INSERT OR REPLACE silently keeps whichever was
+    written or rebuilt-from-disk last -- observed as the index disagreeing
+    with itself before and after a rebuild for exactly this case.
+    """
+    return hashlib.sha256(f"{source_sha256}:{material}:{label}".encode()).hexdigest()[:16]
 
 
 _SLUG_STRIP = re.compile(r"[^A-Za-z0-9._-]+")
@@ -242,7 +250,7 @@ def build_payload(
         "schema_version": SCHEMA_VERSION,
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "specimen": {
-            "specimen_id": specimen_id(source_sha256, test.label),
+            "specimen_id": specimen_id(source_sha256, test.label, material),
             "label": test.label,
             "material": material,
             # Operator-facing name -- what a human should read as "which file
@@ -287,10 +295,19 @@ def build_payload(
 
 
 def write_json(payload: dict, path: Path) -> Path:
+    """Write the specimen record / run manifest -- the documented source of
+    truth. Atomic (write a .partial, then os.replace): a plain `open(path,
+    "w")` truncates the destination FIRST, so a reader on another process (or
+    this one, after a dropped network-share connection) could observe a
+    zero-byte or half-written file mid-write. archive_raw already uses this
+    exact pattern for the raw copy; the record it points at needs it more,
+    not less."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
+    tmp = path.with_suffix(path.suffix + ".partial")
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+    os.replace(tmp, path)
     return path
 
 

@@ -66,6 +66,33 @@ def test_series_format_reads_every_specimen_and_its_metadata(series_file):
         assert test.temperature_c == pytest.approx(TEMPERATURE_C)
 
 
+def test_h0_column_is_not_fooled_by_a_percentage_column_named_the_same(tmp_path, signal):
+    """A results sheet can carry a relative-deviation column like "dh0/h0 in
+    %" alongside the real "h0 in mm" measurement. Both contain the substring
+    "h0"; picking whichever comes first would silently bind h0_mm to a
+    percentage -- wrong strain and modulus, with no warning. The real, mm
+    column must win regardless of column order."""
+    stress, disp = signal
+    path = write_series_workbook(
+        tmp_path / "ambiguous.xlsx", {"1": (stress, disp)}, with_metadata=False
+    )
+
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path)
+    meta = wb.create_sheet("Ergebnisse Serie ")
+    # The deviation column is placed FIRST, exactly the ordering that broke
+    # a first-substring-match resolver.
+    meta.append(["Probe", "dh0/h0 in %", "h0 in mm", "d0 in mm", "Temperatur in °C"])
+    meta.append(["Nr.", "%", "mm", "mm", "°C"])
+    meta.append(["1", 2.5, H0_MM, D0_MM, TEMPERATURE_C])
+    wb.save(path)
+
+    (test,) = load_tests(str(path))
+    assert test.h0_mm == pytest.approx(H0_MM)
+    assert test.d0_mm == pytest.approx(D0_MM)
+
+
 def test_micrometre_and_millimetre_exports_agree(tmp_path, signal):
     """Units are parsed from the header row, so the same physical test written
     in µm and in mm must analyse identically."""

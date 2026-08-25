@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from compression_tool import Config, Workspace, ingest, preview
+from compression_tool import knowledge_base as kb
 from compression_tool.persistence import (
     archive_raw,
     jsonable,
@@ -142,8 +143,30 @@ def test_specimen_id_is_stable_across_runs(workspace, series_file, tmp_path):
 
 def test_specimen_id_tracks_content_not_filename(series_file, tmp_path):
     digest = sha256_file(series_file)
-    assert specimen_id(digest, "a") != specimen_id(digest, "b")
-    assert specimen_id("other", "a") != specimen_id(digest, "a")
+    assert specimen_id(digest, "a", "M") != specimen_id(digest, "b", "M")
+    assert specimen_id("other", "a", "M") != specimen_id(digest, "a", "M")
+
+
+def test_specimen_id_includes_material(series_file):
+    """The same export ingested under two material names must not collide on
+    one database row -- specimen_id is the SQLite PRIMARY KEY, so two records
+    sharing an ID means INSERT OR REPLACE silently drops one."""
+    digest = sha256_file(series_file)
+    assert specimen_id(digest, "a", "PEEK") != specimen_id(digest, "a", "PEEK-GF30")
+
+
+def test_same_export_two_materials_indexes_both_specimens(workspace, single_file):
+    a = ingest([single_file], workspace, material="PEEK")
+    b = ingest([single_file], workspace, material="PEEK-GF30")
+
+    assert a.specimens[0].specimen_id != b.specimens[0].specimen_id
+    conn = kb.connect(a.workspace.db_path)
+    try:
+        rows = kb.list_specimens(conn)
+        assert set(rows["material"]) == {"PEEK", "PEEK-GF30"}
+        assert len(rows) == 2
+    finally:
+        conn.close()
 
 
 def test_record_points_at_a_recoverable_raw_file(workspace, single_file):
