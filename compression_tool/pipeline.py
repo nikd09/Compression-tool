@@ -70,6 +70,8 @@ class IngestResult:
             lines.append(f"  SKIPPED {name}: {why}")
         if self.run_xlsx:
             lines.append(f"Workbook : {self.run_xlsx}")
+        if self.run_html:
+            lines.append(f"Report   : {self.run_html}")
         lines.append(f"Indexed  : {self.indexed} specimen(s)")
         return "\n".join(lines)
 

@@ -159,12 +159,21 @@ def workspace_picker() -> Workspace:
     root = st.text_input(
         "Workspace",
         key="workspace_root",
-        help="Where raw_input/, processed_output/ and the index live. The "
-        "same path every time this app is opened shows the same tests; "
-        "pointing it elsewhere switches workspaces, it does not copy "
-        "anything between them.",
+        help="Where raw_input/, processed_output/ and the index live -- every "
+        "specimen's JSON, CSV, Excel workbook and HTML report land here on "
+        "every Commit, nowhere else. The same path every time this app is "
+        "opened shows the same tests; pointing it elsewhere switches "
+        "workspaces, it does not copy anything between them. A relative path "
+        "like the default is resolved against wherever `streamlit run` was "
+        "launched from -- see the resolved path below if that's unclear. "
+        "Everything here stays local: no network calls, nothing uploaded.",
     )
-    return Workspace.at(root)
+    ws = Workspace.at(root)
+    # A relative path (the default, "./data") silently depends on the launch
+    # directory -- shown resolved so it is never ambiguous where a run
+    # actually landed on disk.
+    st.caption(f"→ `{ws.root.resolve()}`")
+    return ws
 
 
 def connect_readonly(ws: Workspace):
