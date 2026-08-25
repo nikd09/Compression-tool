@@ -28,32 +28,46 @@ setlocal
 
 cd /d "%~dp0.."
 
-where python >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] "python" was not found on PATH. Install Python from
-    echo         python.org ^(check "Add python.exe to PATH" during install^),
-    echo         then run this script again.
-    pause
-    goto :eof
+REM Resolve ONE Python and use it for everything below (the install check,
+REM the auto-install, and the final launch). Two different ways this goes
+REM wrong otherwise, both confirmed live:
+REM   1. A machine with more than one Python installed (e.g. python.org +
+REM      Microsoft Store) -- a bare "streamlit"/"pip" command on PATH can
+REM      silently resolve to a DIFFERENT install than whichever one you
+REM      last ran "pip install" with.
+REM   2. A venv activated in a VS Code terminal (".venv" folder here) is
+REM      only active in THAT terminal. Double-clicking this .bat from
+REM      Explorer opens a plain new terminal that has never heard of it and
+REM      falls back to the system Python -- which never had the package
+REM      installed into it, even though "pip install" appeared to succeed
+REM      earlier in the VS Code terminal. This is what actually happened
+REM      the first time this script was used for real.
+REM A project-local ".venv" next to this script (created by VS Code, or by
+REM "python -m venv .venv") is therefore preferred whenever it exists --
+REM using it explicitly by path sidesteps both problems, since it does not
+REM depend on activation or on PATH order at all.
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
+) else (
+    where python >nul 2>nul
+    if errorlevel 1 (
+        echo [ERROR] No ".venv" here and "python" was not found on PATH either.
+        echo         Install Python from python.org ^(check "Add python.exe to
+        echo         PATH" during install^), then run this script again.
+        pause
+        goto :eof
+    )
+    set "PYTHON_EXE=python"
 )
+echo Using Python: %PYTHON_EXE%
 
-REM Always launch via "python -m streamlit", never a bare "streamlit" command.
-REM A bare "streamlit" resolves through PATH independently of "python" and
-REM can silently be a DIFFERENT Python installation's copy -- on a machine
-REM with more than one Python around (python.org install + Microsoft Store
-REM install is a common combination), that copy never received the
-REM "pip install -e" below, and the app fails with
-REM "ModuleNotFoundError: No module named 'compression_tool'" the moment it
-REM starts, even though the install appeared to succeed. Routing everything
-REM through the one "python" found above makes that class of mismatch
-REM impossible: whatever Python installs the package is the one that runs it.
-python -c "import compression_tool" >nul 2>nul
+"%PYTHON_EXE%" -c "import compression_tool" >nul 2>nul
 if errorlevel 1 (
     echo compression_tool is not installed yet for this Python -- installing now.
     echo ^(This only happens once per Python install, or after pulling code that
     echo   changes a dependency.^)
     echo.
-    python -m pip install -e ".[webapp]"
+    "%PYTHON_EXE%" -m pip install -e ".[webapp]"
     if errorlevel 1 (
         echo.
         echo [ERROR] Install failed -- see the error above.
@@ -80,6 +94,6 @@ echo Leave this window open while colleagues are using the tool. Closing it
 echo (or this PC sleeping / losing network) takes the app down for everyone.
 echo.
 
-python -m streamlit run compression_tool\webapp\app.py --server.address 0.0.0.0 --server.port 8501
+"%PYTHON_EXE%" -m streamlit run compression_tool\webapp\app.py --server.address 0.0.0.0 --server.port 8501
 
 endlocal
