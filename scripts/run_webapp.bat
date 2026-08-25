@@ -60,6 +60,9 @@ if exist ".venv\Scripts\python.exe" (
     set "PYTHON_EXE=python"
 )
 echo Using Python: %PYTHON_EXE%
+echo Checking the install -- this can take several seconds on the first run
+echo of the day, especially with antivirus scanning every file Python opens.
+echo Nothing wrong if this window looks quiet for a bit; wait for the next line.
 
 "%PYTHON_EXE%" -c "import compression_tool" >nul 2>nul
 if errorlevel 1 (
@@ -93,7 +96,15 @@ echo.
 echo Leave this window open while colleagues are using the tool. Closing it
 echo (or this PC sleeping / losing network) takes the app down for everyone.
 echo.
+echo Starting the app now -- again, a quiet gap of several seconds here is
+echo normal before the "Local URL" / "Network URL" lines appear below. Do NOT
+echo close this window or press Ctrl+C while you are waiting for them.
+echo.
 
 "%PYTHON_EXE%" -m streamlit run compression_tool\webapp\app.py --server.address 0.0.0.0 --server.port 8501
+echo.
+echo [The app has stopped. If you did not close this window yourself, scroll
+echo  up to see why -- an error would be printed above this line.]
+pause
 
 endlocal
