@@ -254,6 +254,25 @@ def cycles_for(conn: sqlite3.Connection, specimen_id: str) -> pd.DataFrame:
     )
 
 
+def cycles_for_specimens(conn: sqlite3.Connection, specimen_ids: Iterable[str]) -> pd.DataFrame:
+    """Per-cycle rows joined to specimen identity, for an explicit set of
+    specimens rather than a whole material -- what a custom comparison group
+    is built from (any specimens, from any materials, in any combination)."""
+    ids = list(specimen_ids)
+    if not ids:
+        return pd.DataFrame()
+    marks = ", ".join("?" for _ in ids)
+    return query(
+        conn,
+        f'SELECT s."material", s."label", s."h0_mm", '
+        f'       s."global_peak_mpa", s."multi_stage", c.* '
+        f"FROM cycles c JOIN specimens s ON s.\"specimen_id\" = c.\"specimen_id\" "
+        f'WHERE c."specimen_id" IN ({marks}) '
+        f'ORDER BY s."material", s."label", c."Cycle"',
+        ids,
+    )
+
+
 def cycles_for_materials(conn: sqlite3.Connection, names: Iterable[str]) -> pd.DataFrame:
     """Per-cycle rows joined to specimen identity -- the shape the Compare view
     needs to overlay several materials."""
@@ -286,5 +305,6 @@ __all__ = [
     "materials",
     "cycles_for",
     "cycles_for_materials",
+    "cycles_for_specimens",
     "query",
 ]

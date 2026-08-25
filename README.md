@@ -213,13 +213,15 @@ pip install -e ".[webapp]"
 streamlit run compression_tool/webapp/app.py
 ```
 
-Four views, matching HANDOFF.md's build order:
+Four views, matching HANDOFF.md's build order, behind an icon sidebar (`st.logo`
++ styled `st.button` rows -- see "Why not `st.navigation`" below for why it is
+not Streamlit's own multipage widget):
 
 | View | What it does |
 |---|---|
 | Ingest | Upload exports, adjust thresholds, `preview()` before committing, then `ingest()`. |
-| Results | Pick a material and up to two specimens; renders the grouped-bar dashboard (S1 / S2 / Avg) against their real records and curve caches. |
-| Compare | Overlay one metric across materials, averaged per cycle across each material's specimens (`knowledge_base.cycles_for_materials()`). |
+| Results | Pick a material and its specimens (1-8); renders the grouped-bar dashboard against their real records and curve caches. |
+| Compare | Build named groups of specimens -- any specimens, from any materials, in any combination -- and overlay one metric across the groups' means (`knowledge_base.cycles_for_specimens()`). A group is not required to be a whole material. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
 
 Every view is a thin layer over the public API -- `preview`, `ingest`,
@@ -281,6 +283,75 @@ tab underline) and never a data mark, so rebranding cannot break a validated
 data palette. The same palette is handed to Streamlit's chrome in
 `.streamlit/config.toml`, so the Compare view's charts use the same hues in
 the same order.
+
+### Comparing across specimens, not just across materials
+
+Compare builds groups from individual specimens, not whole materials. Each
+group starts pre-filled with one material's specimens as a shortcut, but
+membership is free-form from there: drop a bad trial run out of "Material A"
+without losing the rest of its mean, or fold "Material A"'s S2+S3 and
+"Material B"'s S4+S5 into one group each, spanning materials, to compare
+exactly the runs that matter. The same freedom exists one tab over: Results'
+specimen toggles (§ Specimens per test) already let a bad run be excluded from
+that view's own mean without leaving the page.
+
+### The expanded-chart dialog: a fixed, scrolling frame, not a content-fit one
+
+`components.html` embeds the dashboard in an iframe with a height Streamlit
+fixes once, in Python, before the browser ever measures anything. An earlier
+version sized that height to the dashboard's own total content (2000px+) so
+nothing inside would need a scrollbar. That broke the "expand chart" dialog:
+the dialog sizes itself off `vh`, and inside that iframe `vh` meant the
+content height, not the screen -- so a 92vh dialog came out taller than any
+real monitor, and because the frame's Python-side width estimate could not
+track the sidebar being opened or closed live in the browser, it drifted from
+the real layout besides.
+
+The fix is to stop estimating: the iframe is a fixed, screen-realistic height
+(`820px`) that scrolls INSIDE itself (`scrolling=True` on a real, non-content-fit
+box), so `vh` means the real viewport, the dialog centers in what is actually
+on screen, and it already re-measures itself on window resize -- which is what
+makes it correctly follow the sidebar being collapsed or expanded, with no
+Python-side awareness of that state needed at all. Verified with the dialog
+opened after scrolling deep into the iframe's own internal scrollbar (the
+scenario that broke before): the panel is capped at `min(78vh, 680px)`,
+deliberately well under the iframe's own 820px, so it stays fully on screen
+even though this page cannot see exactly where the outer Streamlit page has
+scrolled it to.
+
+### Why not `st.navigation`
+
+The sidebar is a manual `st.button` loop with icons, not `st.navigation` +
+`st.Page` -- Streamlit's own multipage widget. Its URL-path routing cleared
+`st.session_state` on every page switch in this environment, confirmed with an
+isolated repro (session_state came back `{}` on the destination page, not just
+one widget). A single script with the current view held in `session_state` and
+dispatched by hand has no page navigation to lose state across.
+
+That surfaced two narrower, real Streamlit gotchas worth keeping in mind
+anywhere else in this codebase a similar pattern is tempting:
+
+- **A keyed widget has exactly one call site.** The Workspace input used to be
+  re-declared inside every view (`workspace_picker()` called from each of
+  Ingest/Results/Compare/Config). Even with `st.navigation` removed, it still
+  reset on every switch, because Streamlit ties a keyed widget's carried-over
+  value to where in the script it is declared, not just its key -- the same
+  key at a different call site is a different widget as far as that carry-over
+  is concerned. Fixed by rendering it once, in `app.py`, and passing the
+  resolved `Workspace` into every view's `render(ws)` as a plain argument.
+- **`st.rerun()` mid-loop can silently drop state declared after it.** The nav
+  buttons originally called `st.rerun()` immediately inside their own loop,
+  before the Workspace input a few lines below had run. That halts the script
+  right there -- and Streamlit garbage-collects `session_state` for any keyed
+  widget that was not instantiated on the run that just completed, so the
+  workspace value was being cleared on the very run that changed the page. A
+  button click already triggers a rerun on its own; the explicit call was not
+  only unnecessary, it was cutting the script short before later widgets ever
+  ran. The one intentional `st.rerun()` left in `app.py` is the last statement
+  in `main()`, after every widget (including the newly-selected page's own)
+  has already rendered once -- it exists purely to make the sidebar's own
+  active-item highlight catch up within the same click instead of lagging one
+  behind, and nothing after it can be starved because nothing is after it.
 
 ## Still to build
 

@@ -12,16 +12,14 @@ import streamlit.components.v1 as components
 from .. import knowledge_base
 from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..dashboard_data import COMFORTABLE_SPECIMENS, MAX_SPECIMENS, build_dashboard_data
-from ..persistence import read_json
-from .common import connect_readonly, polish, workspace_picker
+from ..persistence import Workspace, read_json
+from .common import connect_readonly
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "results_dashboard.html"
 
 
-def render() -> None:
-    polish()
+def render(ws: Workspace) -> None:
     st.header("Results")
-    ws = workspace_picker()
     conn = connect_readonly(ws)
     if conn is None:
         st.info("Nothing ingested into this workspace yet — use Ingest first.")
@@ -85,53 +83,21 @@ def render() -> None:
     html = _TEMPLATE_PATH.read_text(encoding="utf-8").replace(
         "/*__DATA__*/", json.dumps(data)
     )
-    components.html(html, height=_frame_height(len(payloads)), scrolling=True)
+    # A FIXED, screen-sized frame, scrolling INSIDE itself -- not a frame sized
+    # to the content's total height. That earlier approach put the dashboard's
+    # own `vh` units (used to size the expanded-chart dialog) against the
+    # content height (2000px+), not the screen, so the dialog was never sized
+    # to what was actually visible; sizing the frame in Python at a guessed
+    # content width also could not track the sidebar being opened or closed,
+    # since that changes the real width live in the browser, not in Python.
+    # A normal scrollable box has none of that: `vh` means the real viewport,
+    # dialogs center in what is actually on screen, and the grid/dialog both
+    # already re-measure themselves on resize (see the template's own
+    # `resize` listener), so collapsing the sidebar just works.
+    components.html(html, height=_FRAME_HEIGHT_PX, scrolling=True)
 
 
-# Panel geometry, mirrored from the template so the frame is tall enough to
-# hold what the template will lay out. The template is authoritative -- these
-# constants exist only to size the iframe, and being a little generous costs
-# nothing while being short forces a scrollbar inside a scrollbar.
-_MIN_BAR, _BAR_GAP, _GROUP_PAD, _PANEL_CAP = 5, 2, 8, 530
-# The app runs layout="wide" with a ~300px sidebar, so this is the content
-# width to expect on a laptop. It is only an estimate: the grid reflows against
-# the real width, and `scrolling=True` absorbs the difference either way.
-_ASSUMED_CONTENT_PX = 1150
-
-
-def _frame_height(n_specimens: int) -> int:
-    """How tall the embedded dashboard needs to be.
-
-    Streamlit fixes an iframe's height up front, and the template's grid drops
-    to fewer columns as specimens are added, so a constant height either clips
-    a wide run or leaves a screen of blank under a narrow one.
-
-    A panel's drawn height follows the COLUMN width, not the minimum that
-    chose the column count -- the SVG scales to whatever the cell ends up
-    being. Calibrated against the rendered page at 1150px, where it now runs
-    16-75px long across 2, 4, 6 and 8 specimens: never short, never by a
-    screenful.
-    """
-    n_series = n_specimens + (1 if n_specimens > 1 else 0)   # + the Avg series
-    cell_min = max(340, min(_PANEL_CAP,
-                            9 * (n_series * (_MIN_BAR + _BAR_GAP) + _GROUP_PAD) + 60))
-    # The grid lays out inside the page's own padding, and auto-fit fits N
-    # columns when N*cell_min + (N-1)*gap <= width -- so the gap has to be in
-    # the division, not left out of it.
-    inner = _ASSUMED_CONTENT_PX - 2 * _PAGE_PAD_PX
-    cols = max(1, (inner + _GRID_GAP_PX) // (cell_min + _GRID_GAP_PX))
-    bar_panels = 9                       # every metric panel except the curves
-    rows = -(-bar_panels // cols)        # ceil
-    col_w = (inner - (cols - 1) * _GRID_GAP_PX) / cols
-    panel_h = col_w / _PANEL_ASPECT + _CELL_CHROME_PX
-    loop_h = inner / 1000 * _LOOP_VIEWBOX_H + _CELL_CHROME_PX
-    return int(_PAGE_CHROME_PX + rows * panel_h + loop_h + _SAFETY_PX)
-
-
-_GRID_GAP_PX = 14          # .grid gap, 0.85rem
-_PAGE_PAD_PX = 18          # .wrap horizontal padding, 1.15rem
-_PANEL_ASPECT = 360 / 220  # RATIO in the template
-_CELL_CHROME_PX = 24       # cell padding + title block above each plot
-_LOOP_VIEWBOX_H = 400      # the curves panel's viewBox height at width 1000
-_PAGE_CHROME_PX = 545      # header, control bar, footer, page padding
-_SAFETY_PX = 100
+# A comfortable, fixed viewport for the embedded dashboard. Not a content-fit
+# estimate -- seeing a few extra charts per scroll is a minor inconvenience;
+# a modal sized against the wrong coordinate space is a broken one.
+_FRAME_HEIGHT_PX = 820

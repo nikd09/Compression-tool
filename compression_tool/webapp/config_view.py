@@ -7,14 +7,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ..persistence import read_json
-from .common import polish, workspace_picker
+from ..persistence import Workspace, read_json
 
 
-def render() -> None:
-    polish()
+def render(ws: Workspace) -> None:
     st.header("Config")
-    ws = workspace_picker()
 
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
     if not manifests:

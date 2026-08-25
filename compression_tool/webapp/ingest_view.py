@@ -10,8 +10,8 @@ from pathlib import Path
 import streamlit as st
 
 from ..core import Config
+from ..persistence import Workspace
 from ..pipeline import ingest, preview
-from .common import polish, workspace_picker
 
 
 def _config_from_form() -> Config:
@@ -82,10 +82,8 @@ def _show_warning(w: dict) -> None:
         st.info(text)
 
 
-def render() -> None:
-    polish()
+def render(ws: Workspace) -> None:
     st.header("Ingest")
-    ws = workspace_picker()
 
     uploaded = st.file_uploader(
         "Zwick Z100 export(s)", type=["xlsx"], accept_multiple_files=True,

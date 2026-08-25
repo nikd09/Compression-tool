@@ -205,7 +205,14 @@ svg.exporting, svg.exporting *{animation:none!important;transition:none!importan
   width:100%;height:100%;}
 .dlg::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(4px);}
 .dlg .panel{background:var(--page);color:var(--ink);border-radius:var(--r-lg);
-  box-shadow:var(--shadow-3);width:min(1180px,95vw);height:min(92vh,900px);
+  box-shadow:var(--shadow-3);width:min(1180px,95vw);height:min(78vh,680px);
+  /* Deliberately well under the iframe's own fixed viewport height, not just
+     under 100%: when this page is embedded (Streamlit's components.html),
+     the outer page's scroll position can shift where the iframe's box sits
+     relative to the browser's actual visible window between the moment a
+     chart is scrolled into view and the moment its dialog opens. Margin here
+     is what keeps the whole dialog on screen through that shift, since this
+     page cannot see the outer page's scroll position to compensate exactly. */
   margin:auto;display:flex;flex-direction:column;overflow:hidden;
   border:1px solid var(--ring);}
 .dlg .bar2{display:flex;justify-content:space-between;align-items:flex-start;

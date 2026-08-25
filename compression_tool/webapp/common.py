@@ -37,8 +37,27 @@ def polish() -> None:
 
 
 def workspace_picker() -> Workspace:
+    """Render the ONE Workspace input for the whole app session.
+
+    Called exactly once, from app.py, never from inside a view. A
+    `key="workspace_root"` widget re-declared at a second call site (e.g. a
+    second `st.text_input(key="workspace_root")` inside a different view
+    function) is, to Streamlit, a *different* widget instance sharing that
+    key -- and switching to it drops the session_state value back to the
+    widget's own default instead of carrying it over. Confirmed with an
+    isolated repro: the same key at two call sites resets on every switch; a
+    single call site does not. Every view receives the resolved `Workspace`
+    as a plain argument instead of calling this again.
+    """
     st.session_state.setdefault("workspace_root", DEFAULT_WORKSPACE)
-    root = st.sidebar.text_input(
+    # Plain st.text_input, not st.sidebar.text_input: this is always called
+    # from inside app.py's own `with st.sidebar:` block now, and mixing the
+    # explicit st.sidebar.* API with an ambient `with st.sidebar:` context
+    # was the remaining cause of the reset -- each re-enters the sidebar
+    # container by a slightly different path, which is exactly the kind of
+    # position-sensitivity a keyed widget's carried-over value turned out to
+    # be sensitive to.
+    root = st.text_input(
         "Workspace",
         key="workspace_root",
         help="Where raw_input/, processed_output/ and the index live. The "

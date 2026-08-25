@@ -1,44 +1,98 @@
-"""Compare: overlay one metric across materials, averaged per cycle across
-whatever specimens each material has. The one view HANDOFF.md scoped as
-needing cross-material data rather than a single record, so it is the one
-view built on `knowledge_base.cycles_for_materials()` instead of a JSON file."""
+"""Compare: build named groups of specimens -- any specimens, from any
+materials, in any combination -- and overlay one metric across the groups'
+means. A group is not required to be "a whole material": Group A can be
+Material-X's S2+S3 while Group B is Material-Y's S4+S5, so a bad trial run in
+one material does not have to drag its whole mean into the comparison."""
 
 from __future__ import annotations
 
 import altair as alt
+import pandas as pd
 import streamlit as st
 
 from .. import knowledge_base
+from ..persistence import Workspace
 from ..schema import user_facing_cycle_columns
-from .common import connect_readonly, polish, workspace_picker
+from .common import connect_readonly
+
+MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
+_PALETTE_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"]
 
 
-def render() -> None:
-    polish()
+def _default_group_count(n_materials: int) -> int:
+    return max(2, min(n_materials, MAX_GROUPS))
+
+
+def render(ws: Workspace) -> None:
     st.header("Compare")
-    ws = workspace_picker()
     conn = connect_readonly(ws)
     if conn is None:
         st.info("Nothing ingested into this workspace yet — use Ingest first.")
         return
 
-    materials = knowledge_base.materials(conn)
-    if len(materials) < 1:
+    specimens = knowledge_base.list_specimens(conn)
+    if specimens.empty:
         st.info("No specimens indexed yet.")
         return
 
-    chosen = st.multiselect("Materials", materials, default=materials[: min(3, len(materials))])
-    if not chosen:
-        st.info("Pick at least one material.")
+    materials = sorted(specimens["material"].dropna().unique().tolist())
+    label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
+    material_by_id = dict(zip(specimens["specimen_id"], specimens["material"]))
+    all_ids = list(specimens["specimen_id"])
+
+    def option_label(sid: str) -> str:
+        return f"{material_by_id.get(sid, '—')} — {label_by_id.get(sid, sid)}"
+
+    n_groups = st.number_input(
+        "Groups to compare", min_value=1, max_value=MAX_GROUPS,
+        value=_default_group_count(len(materials)), step=1,
+        help="A group is any set of specimens you pick -- it does not have to "
+        "be a whole material. Build 'Material A, good runs only' as one group "
+        "and 'Material B, S4+S5' as another.",
+    )
+
+    st.caption(
+        "Each group starts pre-filled with one material's specimens as a "
+        "shortcut. Add or remove specimens freely -- including from a "
+        "different material -- to build exactly the comparison you want."
+    )
+
+    groups: list[dict] = []
+    cols = st.columns(min(int(n_groups), 3))
+    for i in range(int(n_groups)):
+        default_material = materials[i % len(materials)] if materials else None
+        default_ids = (
+            specimens.loc[specimens["material"] == default_material, "specimen_id"].tolist()
+            if default_material else []
+        )
+        with cols[i % len(cols)]:
+            with st.container(border=True):
+                name = st.text_input(
+                    "Name", value=default_material or f"Group {i + 1}",
+                    key=f"cmp_name_{i}",
+                )
+                chosen = st.multiselect(
+                    "Specimens", options=all_ids, default=default_ids,
+                    format_func=option_label, key=f"cmp_specimens_{i}",
+                    label_visibility="collapsed",
+                    placeholder="Pick specimens for this group",
+                )
+                st.caption(f"{len(chosen)} specimen(s)")
+                if chosen:
+                    groups.append({"name": name.strip() or f"Group {i + 1}", "ids": chosen})
+
+    if not groups:
+        st.info("Pick at least one specimen in at least one group.")
         return
 
-    df = knowledge_base.cycles_for_materials(conn, chosen)
+    # Every specimen actually used, fetched once -- groups can overlap or
+    # reuse specimens without re-querying per group.
+    used_ids = sorted({sid for g in groups for sid in g["ids"]})
+    df = knowledge_base.cycles_for_specimens(conn, used_ids)
     if df.empty:
-        st.info("No cycles for the selected materials.")
+        st.info("No cycles for the selected specimens.")
         return
 
-    # Numeric, user-facing columns only -- the same set the workbook's Cycles
-    # sheet shows, so a column picked here means what it means there too.
     has_strain = "MaxStrain_pct" in df.columns and df["MaxStrain_pct"].notna().any()
     options = [
         c for c in user_facing_cycle_columns(has_strain)
@@ -48,65 +102,76 @@ def render() -> None:
         "Metric", options, format_func=lambda c: f"{c.label} ({c.unit})" if c.unit else c.label,
     )
 
-    agg = (
-        df.groupby(["material", "Cycle"], as_index=False)[metric.key]
-        .agg(mean="mean", sd="std", n="count", lo="min", hi="max")
-    )
-    # std() is NaN for a single specimen; the whisker is simply absent there
-    # rather than being drawn as zero spread, which would claim agreement that
-    # was never measured.
-    agg["sd"] = agg["sd"].fillna(0.0)
+    by_specimen = df.set_index("specimen_id") if "specimen_id" in df.columns else None
+    rows = []
+    for g in groups:
+        sub = df[df["specimen_id"].isin(g["ids"])] if by_specimen is not None else df
+        for cycle, part in sub.groupby("Cycle"):
+            vals = part[metric.key].dropna()
+            if vals.empty:
+                continue
+            rows.append({
+                "group": g["name"], "Cycle": cycle,
+                "mean": vals.mean(), "sd": vals.std(ddof=0) if len(vals) > 1 else 0.0,
+                "n": len(vals),
+            })
+    agg = pd.DataFrame(rows)
+    if agg.empty:
+        st.info(f"No values for {metric.label} in the selected specimens.")
+        return
     agg["err_lo"] = agg["mean"] - agg["sd"]
     agg["err_hi"] = agg["mean"] + agg["sd"]
 
     show_spread = st.checkbox(
         "Show spread across specimens (±1 SD)", value=True,
-        help="Each bar is a mean. Without the spread beside it, two materials "
-        "whose specimens disagree wildly look exactly like two that agree.",
+        help="Each bar is a mean. Without the spread beside it, a group of "
+        "disagreeing specimens looks exactly like one that agrees.",
     )
 
+    group_order = [g["name"] for g in groups]
     y_title = metric.label + (f" ({metric.unit})" if metric.unit else "")
     tooltip = [
-        alt.Tooltip("material:N", title="Material"),
+        alt.Tooltip("group:N", title="Group"),
         alt.Tooltip("Cycle:O", title="Cycle"),
         alt.Tooltip("mean:Q", title=metric.label, format=".4g"),
         alt.Tooltip("sd:Q", title="SD", format=".3g"),
         alt.Tooltip("n:Q", title="Specimens"),
     ]
+    # Same fixed categorical order the Results dashboard uses -- a group's
+    # colour follows its position in the form above, not a value sort, so
+    # editing one group's specimens never repaints another group's bars.
+    color = alt.Color(
+        "group:N", title="Group",
+        scale=alt.Scale(domain=group_order, range=_PALETTE_LIGHT[: len(group_order)]),
+    )
 
     base = alt.Chart(agg)
-    # Grouped bars per cycle, one bar per material -- the same idiom as the
-    # Results dashboard, so a reader moving between the two tabs is not
-    # relearning the chart. Colours come from the theme's categorical slots.
-    bars = base.mark_bar(
-        cornerRadiusTopLeft=3, cornerRadiusTopRight=3, stroke=None,
-    ).encode(
+    bars = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, stroke=None).encode(
         x=alt.X("Cycle:O", title="Cycle", axis=alt.Axis(labelAngle=0)),
-        xOffset=alt.XOffset("material:N", title="Material"),
+        xOffset=alt.XOffset("group:N", sort=group_order),
         y=alt.Y("mean:Q", title=y_title, axis=alt.Axis(grid=True)),
-        color=alt.Color("material:N", title="Material"),
+        color=color,
         tooltip=tooltip,
     )
     layers = [bars]
     if show_spread:
         layers.append(
             base.mark_rule(strokeWidth=1.4, opacity=0.75).encode(
-                x=alt.X("Cycle:O"),
-                xOffset=alt.XOffset("material:N"),
-                y=alt.Y("err_lo:Q"), y2=alt.Y2("err_hi:Q"),
-                tooltip=tooltip,
+                x=alt.X("Cycle:O"), xOffset=alt.XOffset("group:N", sort=group_order),
+                y=alt.Y("err_lo:Q"), y2=alt.Y2("err_hi:Q"), tooltip=tooltip,
             )
         )
     chart = alt.layer(*layers).properties(height=430).configure_view(stroke=None)
     st.altair_chart(chart, use_container_width=True)
     st.caption(
-        "Each bar is the mean of every specimen indexed under that material, "
-        "for that cycle; the whisker is ±1 standard deviation across them. A "
-        "material with one specimen shows that specimen's own value and no "
-        "whisker."
+        "Each bar is the mean across that group's chosen specimens, for that "
+        "cycle; the whisker is ±1 standard deviation across them. A group of "
+        "one specimen shows that specimen's own value and no whisker."
     )
 
-    with st.expander("Underlying rows"):
+    with st.expander("Group membership and underlying rows"):
+        for g in groups:
+            st.markdown(f"**{g['name']}** — " + ", ".join(option_label(s) for s in g["ids"]))
         st.dataframe(
             df[["material", "label", "specimen_id", "Cycle", metric.key]],
             use_container_width=True, hide_index=True,

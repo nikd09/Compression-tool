@@ -134,6 +134,30 @@ def test_materials_and_cross_material_query(workspace, series_file, single_file)
         conn.close()
 
 
+def test_cycles_for_specimens_returns_only_those_specimens(workspace, series_file, single_file):
+    """A comparison group can freely mix specimens across materials -- this is
+    the query it is built from, so it must not silently pull in siblings."""
+    ingest([series_file], workspace, material="PEEK")
+    ingest([single_file], workspace, material="TALCO50")
+
+    conn = kb.connect(Workspace.at(workspace).db_path)
+    try:
+        specimens = kb.list_specimens(conn)
+        peek_s1 = specimens.loc[specimens["label"].str.endswith("1"), "specimen_id"].iloc[0]
+        talco = specimens.loc[specimens["material"] == "TALCO50", "specimen_id"].iloc[0]
+
+        df = kb.cycles_for_specimens(conn, [peek_s1, talco])
+        assert set(df["specimen_id"]) == {peek_s1, talco}
+        assert set(df["material"]) == {"PEEK", "TALCO50"}
+        # 9 cycles each, from two different materials -- a group spanning
+        # materials, exactly what a custom comparison group needs to do.
+        assert len(df) == 18
+
+        assert kb.cycles_for_specimens(conn, []).empty
+    finally:
+        conn.close()
+
+
 def test_cross_material_query_has_no_duplicate_columns(workspace, series_file):
     """The join has specimen_id on both sides. Selecting it from both returns
     two columns of that name, and any consumer that then asks for it by label

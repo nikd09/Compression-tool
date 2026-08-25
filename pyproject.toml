@@ -27,7 +27,7 @@ compression-tool = "compression_tool.cli:main"
 packages = ["compression_tool", "compression_tool.webapp"]
 
 [tool.setuptools.package-data]
-"compression_tool.webapp" = ["templates/*.html"]
+"compression_tool.webapp" = ["templates/*.html", "static/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
