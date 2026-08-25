@@ -13,7 +13,12 @@ On-disk layout and the JSON record that is the system's source of truth.
           <specimen>.csv             per-cycle table, flat
           <specimen>.xlsx            per-cycle table + summary
           <specimen>.html            standalone report
-          <material>_<date>.xlsx     all specimens of the run in one workbook
+          <material>_<date>.xlsx     all specimens of THIS RUN in one workbook
+      materials/
+        <material>.xlsx              every specimen ever ingested for this
+        <material>.html              material, across every run -- see
+                                      material_export.py. Rebuilt on every
+                                      ingest; safe to delete, like the index.
       knowledge_base.db              SQLite index, rebuildable from the JSONs
 
 The JSON records are authoritative. The database is a queryable index over

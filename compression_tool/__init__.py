@@ -14,6 +14,7 @@ reference implementation; everything else is built around it.
 """
 
 from .core import Config, TestData, analyse_test, detect_format, load_tests, segment_cycles
+from .material_export import export_material
 from .persistence import Workspace
 from .pipeline import IngestResult, SpecimenResult, ingest, preview, rebuild_index
 from .schema import SCHEMA_VERSION
@@ -28,6 +29,7 @@ __all__ = [
     "detect_format",
     "load_tests",
     "segment_cycles",
+    "export_material",
     "ingest",
     "preview",
     "rebuild_index",

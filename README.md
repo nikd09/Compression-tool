@@ -71,7 +71,11 @@ print(result.summary())
       <specimen>.csv                per-cycle table, flat
       <specimen>.xlsx               per-cycle table + summary + dictionary
       <specimen>.html               standalone report
-      <material>_<date>.xlsx        all specimens of the run, when >1
+      <material>_<date>.xlsx        all specimens of THIS RUN, when >1
+  materials/
+    <material>.xlsx                 every specimen ever ingested for this
+    <material>.html                 material, across every run -- see
+                                     "Combined per-material export" below
   knowledge_base.db                 SQLite index, rebuildable
 ```
 
@@ -161,6 +165,19 @@ The JSON contract is frozen at schema_version 2 — see
   but it is **not a creep rate** and must never be plotted as one: converting
   samples to seconds needs a constant sampling interval, which the export does
   not record. A real rate requires a time channel enabled at export.
+- **Hold detection is automatic, with one deliberate exception.** A hold is a
+  plateau at peak stress at least `hold_min_points` (20) samples long, within
+  `hold_tol_frac` (0.5%) of the peak -- reliable for the validated exports,
+  whose dwells run 900-3000+ samples. It breaks down on a fast-cycling test
+  with NO programmed dwell: turning around at peak still takes a handful of
+  samples (geometry, not a hold), and on a short enough cycle that turnaround
+  can accidentally clear `hold_min_points` and get misread as a real one --
+  observed on a ~2,100-sample-per-cycle steel mesh test, where 3 of 10 cycles
+  were flagged with a hold that was not there. `Config.detect_holds` (default
+  `True`) is the escape hatch: set it `False` -- the Ingest form's "Test has a
+  hold at peak" checkbox, or `--no-detect-holds` on the CLI -- for a test
+  known to have no dwell, and every cycle reports no hold and no creep instead
+  of a few false ones scattered through an otherwise hold-free test.
 - **Strain and modulus are conditional.** Both depend on h0 being the gauge
   length the displacement channel actually spans, which no export proves. Every
   record carries a `strain_basis` block with `gauge_length_confirmed` (default
@@ -219,7 +236,7 @@ not Streamlit's own multipage widget):
 
 | View | What it does |
 |---|---|
-| Ingest | Upload exports, adjust thresholds, `preview()` before committing, then `ingest()`. |
+| Ingest | Upload exports, adjust thresholds (including whether the test has a hold at all -- see "Hold detection" below), `preview()` before committing, then `ingest()`. |
 | Results | Pick a material and its specimens (1-8); renders the grouped-bar dashboard against their real records and curve caches. |
 | Compare | Build named groups of specimens -- any specimens, from any materials, in any combination -- and overlay one metric across the groups' means (`knowledge_base.cycles_for_specimens()`). A group is not required to be a whole material. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
@@ -294,6 +311,46 @@ without losing the rest of its mean, or fold "Material A"'s S2+S3 and
 exactly the runs that matter. The same freedom exists one tab over: Results'
 specimen toggles (§ Specimens per test) already let a bad run be excluded from
 that view's own mean without leaving the page.
+
+Each group's **Name** field only labels that group -- the chart legend and the
+"Group membership" listing below the chart -- it has no effect on which
+specimens are in it. Two groups sharing a name is not just a display
+oddity: the chart groups rows BY that name, so two identically-named groups
+would otherwise merge into one series instead of drawing two. Compare
+disambiguates automatically (appending " (2)", " (3)", ...) and shows which
+groups it renamed, rather than let that merge happen silently.
+
+### Combined per-material export: one Excel workbook, one real dashboard, across every run
+
+`material_export.export_material(ws, material)` writes
+`<workspace>/materials/<material>.xlsx` and `.html`, covering every specimen
+ever ingested for that material -- not just whichever run last triggered the
+write. It runs automatically at the end of every `ingest()` call (Config
+shows the resulting paths, with a manual "Rebuild now" for a material ingested
+before this existed, or after `rebuild`), and is exposed on the CLI as
+`compression-tool export-material <name>`.
+
+The `.html` half is a real, standalone copy of the interactive dashboard --
+the same template and the same `dashboard_data.build_dashboard_data()`
+Results renders from, with the JSON data baked directly into the file. It
+opens from disk with no server running and no network access, and every
+chart still exports its own PNG. This is a materially different thing from
+the plain-tables report `html_report.py` writes per run (see "The workbook"
+above): that one deliberately carries no charts; this one is the charted
+dashboard itself, saved.
+
+Two adjustments only this combined export needs, since it can span specimens
+that were never ingested together:
+
+- **The colour palette's `MAX_SPECIMENS` (8) ceiling still applies.** A
+  material that has outgrown it keeps every specimen in the Excel workbook
+  (a table has no such limit) but the dashboard shows only the `MAX_SPECIMENS`
+  most recently ingested, with an HTML comment at the top of the file
+  recording how many were left out and why.
+- **The page title and PNG-download filename**, which `build_dashboard_data`
+  otherwise takes from the first specimen's own source file (correct when
+  every specimen came from one ingest run, misleading once they come from
+  several), are overridden to name the material instead.
 
 ### One design system across every view, not just Results
 

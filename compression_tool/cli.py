@@ -19,6 +19,7 @@ from typing import Optional, Sequence
 
 from . import diagnostics, knowledge_base
 from .core import Config
+from .material_export import export_material
 from .persistence import Workspace
 from .pipeline import ingest, preview, rebuild_index
 
@@ -33,7 +34,12 @@ def _add_config_args(parser: argparse.ArgumentParser) -> None:
     )
     for f in fields(Config):
         flag = "--" + f.name.replace("_", "-")
-        if f.type in ("int", int):
+        if f.type in ("bool",):
+            # --flag / --no-flag, defaulting to None (Config's own default
+            # applies) rather than to False -- a plain store_true could not
+            # tell "not passed" from "explicitly disabled".
+            group.add_argument(flag, action=argparse.BooleanOptionalAction, default=None)
+        elif f.type in ("int", int):
             group.add_argument(flag, type=int, default=None, metavar="N")
         elif f.type in ("Optional[float]",):
             group.add_argument(flag, type=float, default=None, metavar="X")
@@ -82,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("rebuild", help="regenerate the database from the records on disk")
     sub.add_parser("materials", help="list known materials")
 
+    p_exp = sub.add_parser(
+        "export-material",
+        help="(re)write the combined workbook + dashboard for one material",
+    )
+    p_exp.add_argument("material")
+
     return parser
 
 
@@ -126,6 +138,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "rebuild":
         count = rebuild_index(ws)
         print(f"Rebuilt {ws.db_path} from {count} record(s).")
+        return 0
+
+    if args.command == "export-material":
+        exported = export_material(ws, args.material)
+        if not exported["xlsx"]:
+            print(f"No indexed specimens for material {args.material!r}.")
+            return 1
+        print(f"Workbook  : {exported['xlsx']}")
+        print(f"Dashboard : {exported['html']}")
         return 0
 
     conn = knowledge_base.connect(ws.db_path)

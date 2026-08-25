@@ -80,6 +80,10 @@ def render(ws: Workspace) -> None:
                 name = st.text_input(
                     "Name", value=default_material or f"Group {i + 1}",
                     key=f"cmp_name_{i}", label_visibility="collapsed",
+                    help="Labels this group in the chart legend and the "
+                    "membership list below -- it has no effect on which "
+                    "specimens are in the group, only how this group reads "
+                    "once specimens are picked below.",
                 )
                 chosen = st.multiselect(
                     "Specimens", options=all_ids, default=default_ids,
@@ -94,6 +98,25 @@ def render(ws: Workspace) -> None:
     if not groups:
         st.info("Pick at least one specimen in at least one group.")
         return
+
+    # Two groups sharing a name are indistinguishable downstream: the chart
+    # groups rows BY that name, so identically-named groups merge into one
+    # series instead of two, silently. Disambiguate rather than let that
+    # happen quietly -- a renamed group is visible; a merged one is not.
+    seen: dict[str, int] = {}
+    renamed = []
+    for g in groups:
+        seen[g["name"]] = seen.get(g["name"], 0) + 1
+        if seen[g["name"]] > 1:
+            new_name = f"{g['name']} ({seen[g['name']]})"
+            renamed.append((g["name"], new_name))
+            g["name"] = new_name
+    if renamed:
+        st.warning(
+            "Two or more groups had the same name, which the chart cannot "
+            "tell apart -- renamed to keep them distinct: "
+            + "; ".join(f"'{old}' -> '{new}'" for old, new in renamed)
+        )
 
     # Every specimen actually used, fetched once -- groups can overlap or
     # reuse specimens without re-querying per group.

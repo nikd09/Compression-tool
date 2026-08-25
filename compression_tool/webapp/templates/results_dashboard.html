@@ -1021,8 +1021,8 @@ function renderHead(){
   $("#title").textContent = (DATA.sourceFilename||"Compression Results").replace(/\.xlsx$/i,"");
   if(!s){ $("#meta").innerHTML=""; return; }
   const meta=[["Specimens",SPS.length],["Cycles",NC],
-    ["Peak",fmt(s.globalPeak,1)+" MPa"],["h₀",s.h0+" mm"],["d₀",s.d0+" mm"],
-    ["Channel",s.channel],["T",s.temp+" °C"]];
+    ["Peak",fmt(s.globalPeak,1)+" MPa"],["h₀",fmt(s.h0)+" mm"],["d₀",fmt(s.d0)+" mm"],
+    ["Channel",s.channel||"—"],["T",fmt(s.temp)+" °C"]];
   $("#meta").innerHTML=meta.map(([k,v])=>`<span class="mchip"><b>${k}</b>${v}</span>`).join("");
   $("#dlnote").textContent =
     "Charts export to PNG from the toolbar on each one, or from the expanded view.";

@@ -8,7 +8,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ..persistence import Workspace, read_json
+from ..material_export import export_material
+from ..persistence import Workspace, read_json, slugify
 from .common import short_tag
 
 
@@ -40,6 +41,30 @@ def render(ws: Workspace) -> None:
             "Ingested (UTC)", created[:10] if len(created) >= 10 else created,
             help=f"Full timestamp: {created}",
         )
+
+    material = manifest.get("material", "")
+    material_dir = ws.root / "materials"
+    xlsx_path = material_dir / f"{slugify(material)}.xlsx"
+    html_path = material_dir / f"{slugify(material)}.html"
+    with st.container(border=True):
+        st.markdown("##### Combined across every run of this material")
+        st.caption(
+            "One workbook and one standalone dashboard (open the .html file "
+            "directly in a browser -- no server needed) covering every "
+            "specimen ever ingested for this material, not just this run. "
+            "Regenerated automatically on every Commit; rebuild manually "
+            "below if this predates that or looks stale."
+        )
+        if xlsx_path.exists():
+            st.code(f"{xlsx_path}\n{html_path}", language=None)
+        else:
+            st.caption("Not built yet for this material.")
+        if st.button("Rebuild now", icon=":material/refresh:", key="rebuild_material_export"):
+            result = export_material(ws, material)
+            if result["xlsx"]:
+                st.success(f"Rebuilt from every indexed specimen of {material!r}.")
+            else:
+                st.warning(f"No indexed specimens found for {material!r}.")
 
     with st.expander("Settings this run used"):
         st.json(manifest.get("config", {}), expanded=False)

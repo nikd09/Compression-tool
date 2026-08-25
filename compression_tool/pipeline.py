@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from . import curve_cache, diagnostics, excel_export, html_report, knowledge_base
+from .material_export import export_material
 from .core import Config, analyse_test, load_tests
 from .persistence import (
     Workspace,
@@ -55,6 +56,8 @@ class IngestResult:
     specimens: list[SpecimenResult] = field(default_factory=list)
     run_xlsx: Optional[Path] = None
     run_html: Optional[Path] = None
+    material_xlsx: Optional[Path] = None
+    material_html: Optional[Path] = None
     indexed: int = 0
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
@@ -73,6 +76,10 @@ class IngestResult:
         if self.run_html:
             lines.append(f"Report   : {self.run_html}")
         lines.append(f"Indexed  : {self.indexed} specimen(s)")
+        if self.material_xlsx:
+            lines.append(f"Material workbook (all runs) : {self.material_xlsx}")
+        if self.material_html:
+            lines.append(f"Material dashboard (all runs) : {self.material_html}")
         return "\n".join(lines)
 
 
@@ -248,6 +255,15 @@ def ingest(
             result.indexed = knowledge_base.index_payloads(conn, result.payloads)
         finally:
             conn.close()
+
+        # 5. Refresh the material's combined workbook + dashboard so it
+        # covers this run too. Reads back through the index rather than the
+        # in-memory payloads above, since it must include every specimen
+        # ever ingested for this material, not just this run's -- the whole
+        # point of a rollup that outlives any one ingest session.
+        exported = export_material(ws, material)
+        result.material_xlsx = exported["xlsx"]
+        result.material_html = exported["html"]
 
     return result
 

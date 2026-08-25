@@ -22,7 +22,7 @@ def _step(n: int, title: str, sub: str = "") -> None:
     )
 
 
-def _config_from_form() -> Config:
+def _config_from_form(detect_holds: bool) -> Config:
     d = Config()
     with st.expander("Advanced: segmentation and reference thresholds"):
         st.caption(
@@ -67,6 +67,7 @@ def _config_from_form() -> Config:
         residual_stress_frac=residual_stress_frac,
         hold_tol_frac=hold_tol_frac,
         h0_mm=h0_mm,
+        detect_holds=detect_holds,
     )
 
 
@@ -132,6 +133,16 @@ def render(ws: Workspace) -> None:
             "Material", placeholder="e.g. PEEK-GF30 -- blank infers it from the filename")
     with c2:
         st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+        detect_holds = st.checkbox(
+            "Test has a hold at peak", value=True,
+            help="Uncheck for a fast-cycling test with no programmed dwell. "
+            "A short cycle still spends a few samples turning around at peak "
+            "stress -- geometry, not a hold -- and on a short enough cycle "
+            "that turnaround can accidentally look long enough to be misread "
+            "as a real one. Unchecking skips hold detection entirely, so "
+            "every cycle reports no hold and no creep, instead of a few "
+            "false ones scattered through an otherwise hold-free test.",
+        )
         gauge_confirmed = st.checkbox(
             "Gauge length confirmed",
             help="Check this only once someone has verified the displacement "
@@ -143,7 +154,7 @@ def render(ws: Workspace) -> None:
 
     st.divider()
     _step(2, "Thresholds", "Optional. Defaults work unmodified for a Zwick Z100 export.")
-    cfg = _config_from_form()
+    cfg = _config_from_form(detect_holds)
 
     if not uploaded:
         st.info("Upload one or more exports above to preview them.")

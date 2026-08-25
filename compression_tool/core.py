@@ -13,7 +13,10 @@ Design principles
 3. Multi-stage aware. Peak stress commonly RISES each cycle (50->100->...->450
    MPa). Metrics are therefore reported both per-cycle-relative AND at a common
    reference stress so cycles and materials stay comparable.
-4. Hold periods are detected from the data, never asked about.
+4. Hold periods are detected from the data by default, never asked about --
+   except the yes/no of whether a hold exists at all (`Config.detect_holds`),
+   for a fast-cycling test with no programmed dwell where turnaround at peak
+   can otherwise be mistaken for one (see `detect_hold`).
 """
 
 from __future__ import annotations
@@ -42,6 +45,12 @@ class Config:
     # --- hold detection -----------------------------------------------------
     hold_tol_frac: float = 0.005   # +/- this * cycle peak counts as "at peak"
     hold_min_points: int = 20      # shorter plateau => no hold in this cycle
+    # A fast-cycling test with NO programmed dwell still spends a handful of
+    # samples turning around at peak stress -- geometry, not a hold -- and on
+    # a short enough cycle that turnaround can accidentally clear
+    # hold_min_points, misreading it as a real dwell. Set False for a test
+    # known to have no hold rather than tuning hold_min_points per file.
+    detect_holds: bool = True
 
     # --- stiffness ----------------------------------------------------------
     stiff_lo_frac: float = 0.25    # lower bound of regression window
@@ -377,6 +386,8 @@ def detect_hold(stress: np.ndarray, cfg: Config) -> Optional[tuple[int, int]]:
     hold -- in which case creep metrics are omitted rather than computed from
     an arbitrary pair of points.
     """
+    if not cfg.detect_holds:
+        return None
     if len(stress) < cfg.hold_min_points:
         return None
     peak_idx = int(np.argmax(stress))
