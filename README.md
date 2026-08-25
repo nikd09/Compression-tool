@@ -77,6 +77,11 @@ print(result.summary())
     <material>.xlsx                 every specimen ever ingested for this
     <material>.html                 material, across every run -- see
                                      "Combined per-material export" below
+    _Overview.html                  every material at a glance, links into
+                                     each one's own report -- see "The
+                                     all-materials overview" below
+  materials.json                    the controlled material list -- see
+                                     "The controlled material list" below
   knowledge_base.db                 SQLite index, rebuildable -- unless the
                                      workspace has an index_root (the web
                                      app always sets one), in which case
@@ -412,6 +417,61 @@ that were never ingested together:
   otherwise takes from the first specimen's own source file (correct when
   every specimen came from one ingest run, misleading once they come from
   several), are overridden to name the material instead.
+
+### The all-materials overview: one page, no app required, to see and compare everything
+
+`reports_overview.build_overview(ws)` writes `<workspace>/reports/_Overview.html`
+-- every material in the workspace, its specimen/run counts, mean peak stress,
+and last-ingested date, plus a headline bar chart ranking materials by mean
+peak stress. Like the per-material export above, it is fully self-contained
+(no server, no network), rebuilt automatically on every `ingest()`, and
+exposed on the CLI as `compression-tool build-overview` and in Config as a
+manual "Rebuild now".
+
+This exists for the majority of people who only ever read results, not
+ingest them: they never need the live app running at all. Point them at
+`reports/_Overview.html` on the shared drive and they can browse every
+material, see which ones are worth a closer look, and click through to a
+material's own full dashboard -- entirely from a folder, in a browser, on a
+machine with no Python installed.
+
+Underscore-prefixed deliberately: it sorts before every material name in
+Explorer/Finder, so it is the first thing anyone sees when they open the
+`reports/` folder, not something to hunt for among however many materials
+have accumulated.
+
+### The controlled material list: one canonical spelling per material
+
+`material_registry.py` maintains `<workspace>/materials.json` -- every
+material name that has ever been ingested, so "SteelMesh" typed on Monday
+and "Steel Mesh" typed on Friday do not become two materials that never
+compare against each other in Results or Compare, silently. Two mechanisms,
+one belt-and-suspenders:
+
+- **Ingest offers a picker**, not a free-text box, once at least one material
+  exists: pick from the list, or an explicit "+ Add new material" reveals a
+  text box for a genuinely new one. The very first material in an empty
+  workspace still gets a plain text box -- there is nothing to pick from yet.
+- **`ingest()` itself normalizes what it is given**, regardless of entry
+  point (webapp, CLI, or direct API use): `add_material()` casefolds and
+  strips separators to compare names, so "steel-mesh" resolves to the
+  already-registered "SteelMesh" rather than creating a near-duplicate, even
+  if someone bypasses the picker entirely. Ingest shows an info notice when
+  this happens, naming both what was typed and what it matched to -- a
+  silent substitution would be more confusing than telling a user their
+  input was recognized as something already on file.
+
+A missing or corrupt `materials.json` never blocks ingest: `load_materials()`
+falls back to deriving the list from the index itself, so the workspace's
+real data is always the floor, and only the curated ordering/dedup a saved
+file provides is what is temporarily lost.
+
+Deliberately NOT built (a possible follow-up, not needed yet): renaming or
+merging materials that are *already* fragmented in existing data. That would
+mean rewriting `material` on already-persisted specimen JSONs and, because
+`specimen_id` is partly derived from material, changing IDs that Compare's
+session state and the SQLite index already reference -- real, but higher-risk
+work, worth doing only once an actual case of existing fragmentation shows up.
 
 ### One design system across every view, not just Results
 

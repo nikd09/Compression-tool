@@ -10,6 +10,7 @@ import streamlit as st
 
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
+from ..reports_overview import build_overview
 from .common import short_tag
 
 
@@ -65,6 +66,27 @@ def render(ws: Workspace) -> None:
                 st.success(f"Rebuilt from every indexed specimen of {material!r}.")
             else:
                 st.warning(f"No indexed specimens found for {material!r}.")
+
+    overview_path = ws.root / "reports" / "_Overview.html"
+    with st.container(border=True):
+        st.markdown("##### Overview across every material")
+        st.caption(
+            "One page listing every material in this workspace, with a "
+            "headline mean-peak-stress comparison and a link into each "
+            "material's own report -- open the .html file directly in a "
+            "browser, no server needed. Regenerated automatically on every "
+            "Commit, from any material."
+        )
+        if overview_path.exists():
+            st.code(str(overview_path), language=None)
+        else:
+            st.caption("Not built yet.")
+        if st.button("Rebuild now", icon=":material/refresh:", key="rebuild_overview"):
+            result = build_overview(ws)
+            if result:
+                st.success("Rebuilt from every indexed material.")
+            else:
+                st.warning("No indexed specimens found in this workspace.")
 
     with st.expander("Settings this run used"):
         st.json(manifest.get("config", {}), expanded=False)

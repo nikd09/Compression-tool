@@ -23,6 +23,8 @@ from typing import Iterable, Optional, Sequence
 from . import curve_cache, diagnostics, excel_export, html_report, knowledge_base
 from .core import Config, analyse_test, load_tests
 from .material_export import export_material
+from .material_registry import add_material
+from .reports_overview import build_overview
 from .persistence import (
     Workspace,
     archive_raw,
@@ -59,6 +61,7 @@ class IngestResult:
     run_html: Optional[Path] = None
     material_xlsx: Optional[Path] = None
     material_html: Optional[Path] = None
+    overview_html: Optional[Path] = None
     indexed: int = 0
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
@@ -81,6 +84,8 @@ class IngestResult:
             lines.append(f"Material workbook (all runs) : {self.material_xlsx}")
         if self.material_html:
             lines.append(f"Material dashboard (all runs) : {self.material_html}")
+        if self.overview_html:
+            lines.append(f"Materials overview (all materials) : {self.overview_html}")
         return "\n".join(lines)
 
 
@@ -199,7 +204,13 @@ def ingest(
             "archived_abs": archived_abs,
         })
 
-    material = material or _infer_material(paths)
+    # Registered (and, if it normalizes to match an existing entry, resolved
+    # to that entry's exact spelling) from every entry point uniformly --
+    # CLI, webapp, or direct API use -- so materials.json can never drift
+    # from what has actually been ingested, and "steel-mesh" typed once
+    # after "SteelMesh" already exists files under "SteelMesh" rather than
+    # quietly starting a second, never-comparable material.
+    material = add_material(ws, material or _infer_material(paths))
     fingerprint = run_fingerprint((s["sha256"] for s in sources), cfg)
     run_dir = resolve_run_dir(ws, material, fingerprint, when)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -306,6 +317,12 @@ def ingest(
         exported = export_material(ws, material)
         result.material_xlsx = exported["xlsx"]
         result.material_html = exported["html"]
+
+        # 6. Refresh the all-materials overview too -- this run may have
+        # changed this material's numbers, or (rarer) be the first time it
+        # has any specimens at all, either of which the overview page
+        # needs to reflect.
+        result.overview_html = build_overview(ws)
 
     return result
 

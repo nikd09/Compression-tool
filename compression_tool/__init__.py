@@ -15,8 +15,10 @@ reference implementation; everything else is built around it.
 
 from .core import Config, TestData, analyse_test, detect_format, load_tests, segment_cycles
 from .material_export import export_material
+from .material_registry import add_material, load_materials
 from .persistence import Workspace
 from .pipeline import IngestResult, SpecimenResult, ingest, preview, rebuild_index
+from .reports_overview import build_overview
 from .schema import SCHEMA_VERSION
 
 __all__ = [
@@ -30,6 +32,9 @@ __all__ = [
     "load_tests",
     "segment_cycles",
     "export_material",
+    "add_material",
+    "load_materials",
+    "build_overview",
     "ingest",
     "preview",
     "rebuild_index",

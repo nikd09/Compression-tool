@@ -10,8 +10,11 @@ from pathlib import Path
 import streamlit as st
 
 from ..core import Config
+from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview
+
+_NEW_MATERIAL = "+ Add new material…"
 
 
 def _step(n: int, title: str, sub: str = "") -> None:
@@ -69,6 +72,39 @@ def _config_from_form(detect_holds: bool) -> Config:
         h0_mm=h0_mm,
         detect_holds=detect_holds,
     )
+
+
+def _material_picker(ws: Workspace) -> str:
+    """A picker, not a free-text box, once at least one material exists --
+    "SteelMesh", "Steel Mesh" and "steel-mesh" typed on three different
+    days become three materials that never compare against each other in
+    Results or Compare, silently. Picking from what already exists is what
+    prevents that; "+ Add new material" is the explicit, deliberate escape
+    hatch for a genuinely new one. ingest() itself also normalizes a
+    near-duplicate typed here to the existing entry as a second line of
+    defence, so this is a nudge toward the right habit, not the only guard.
+    """
+    materials = load_materials(ws)
+    if not materials:
+        return st.text_input(
+            "Material",
+            placeholder="e.g. PEEK-GF30 -- the first material in this workspace",
+            help="Every material typed here becomes a pickable option next "
+            "time, so it never has to be retyped or matched exactly again.",
+        )
+    choice = st.selectbox(
+        "Material", materials + [_NEW_MATERIAL], index=None,
+        placeholder="Pick a material, or add a new one",
+        help="Picking from this list -- rather than retyping the name -- is "
+        "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
+        "two materials that never compare against each other.",
+    )
+    if choice == _NEW_MATERIAL:
+        return st.text_input(
+            "New material name", placeholder="e.g. PEEK-GF30",
+            label_visibility="collapsed",
+        )
+    return choice or ""
 
 
 def _save_uploads(files) -> list[Path]:
@@ -129,8 +165,7 @@ def render(ws: Workspace) -> None:
     )
     c1, c2 = st.columns([2, 1])
     with c1:
-        material = st.text_input(
-            "Material", placeholder="e.g. PEEK-GF30 -- blank infers it from the filename")
+        material = _material_picker(ws)
     with c2:
         st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
         detect_holds = st.checkbox(
@@ -195,13 +230,21 @@ def render(ws: Workspace) -> None:
             "are rebuilt from, are always written either way.",
         )
     if st.button("Commit to workspace", type="primary", icon=":material/save:"):
-        result = ingest(
-            paths, ws, material=material or None, cfg=cfg,
-            gauge_length_confirmed=gauge_confirmed,
-            archive_originals=archive_originals,
-            write_reports=write_reports,
-        )
-        st.success(f"Ingested {len(result.specimens)} specimen(s) into {result.run_dir}")
-        st.code(result.summary())
-        for name, why in result.skipped:
-            st.warning(f"Skipped {name}: {why}")
+        if not material or not material.strip():
+            st.error("Pick or type a material name above before committing.")
+        else:
+            result = ingest(
+                paths, ws, material=material.strip(), cfg=cfg,
+                gauge_length_confirmed=gauge_confirmed,
+                archive_originals=archive_originals,
+                write_reports=write_reports,
+            )
+            if result.material != material.strip():
+                st.info(
+                    f"Matched to the existing material '{result.material}' "
+                    f"instead of creating a near-duplicate of '{material.strip()}'."
+                )
+            st.success(f"Ingested {len(result.specimens)} specimen(s) into {result.run_dir}")
+            st.code(result.summary())
+            for name, why in result.skipped:
+                st.warning(f"Skipped {name}: {why}")

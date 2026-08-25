@@ -22,6 +22,7 @@ from .core import Config
 from .material_export import export_material
 from .persistence import Workspace
 from .pipeline import ingest, preview, rebuild_index
+from .reports_overview import build_overview
 
 DEFAULT_WORKSPACE = "./data"
 
@@ -101,6 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_exp.add_argument("material")
 
+    sub.add_parser(
+        "build-overview",
+        help="(re)write the all-materials overview page (reports/_Overview.html)",
+    )
+
     return parser
 
 
@@ -156,6 +162,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 1
         print(f"Workbook  : {exported['xlsx']}")
         print(f"Dashboard : {exported['html']}")
+        return 0
+
+    if args.command == "build-overview":
+        path = build_overview(ws)
+        if not path:
+            print("No indexed specimens in this workspace.")
+            return 1
+        print(f"Overview : {path}")
         return 0
 
     conn = knowledge_base.connect(ws.db_path)
