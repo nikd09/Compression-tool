@@ -26,6 +26,43 @@ REM every workspace it can see, so only run this on a network you trust.
 
 setlocal
 
+cd /d "%~dp0.."
+
+where python >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] "python" was not found on PATH. Install Python from
+    echo         python.org ^(check "Add python.exe to PATH" during install^),
+    echo         then run this script again.
+    pause
+    goto :eof
+)
+
+REM Always launch via "python -m streamlit", never a bare "streamlit" command.
+REM A bare "streamlit" resolves through PATH independently of "python" and
+REM can silently be a DIFFERENT Python installation's copy -- on a machine
+REM with more than one Python around (python.org install + Microsoft Store
+REM install is a common combination), that copy never received the
+REM "pip install -e" below, and the app fails with
+REM "ModuleNotFoundError: No module named 'compression_tool'" the moment it
+REM starts, even though the install appeared to succeed. Routing everything
+REM through the one "python" found above makes that class of mismatch
+REM impossible: whatever Python installs the package is the one that runs it.
+python -c "import compression_tool" >nul 2>nul
+if errorlevel 1 (
+    echo compression_tool is not installed yet for this Python -- installing now.
+    echo ^(This only happens once per Python install, or after pulling code that
+    echo   changes a dependency.^)
+    echo.
+    python -m pip install -e ".[webapp]"
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Install failed -- see the error above.
+        pause
+        goto :eof
+    )
+    echo.
+)
+
 if "%COMPRESSION_TOOL_WORKSPACE%"=="" (
     echo [WARNING] COMPRESSION_TOOL_WORKSPACE is not set on this PC.
     echo           The app will default to .\data next to this script instead
@@ -43,7 +80,6 @@ echo Leave this window open while colleagues are using the tool. Closing it
 echo (or this PC sleeping / losing network) takes the app down for everyone.
 echo.
 
-cd /d "%~dp0.."
-streamlit run compression_tool\webapp\app.py --server.address 0.0.0.0 --server.port 8501
+python -m streamlit run compression_tool\webapp\app.py --server.address 0.0.0.0 --server.port 8501
 
 endlocal
