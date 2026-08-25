@@ -13,10 +13,9 @@ import streamlit as st
 from .. import knowledge_base
 from ..persistence import Workspace
 from ..schema import user_facing_cycle_columns
-from .common import connect_readonly
+from .common import CATEGORICAL_LIGHT, connect_readonly, dot, short_tag
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
-_PALETTE_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"]
 
 
 def _default_group_count(n_materials: int) -> int:
@@ -39,9 +38,14 @@ def render(ws: Workspace) -> None:
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
     material_by_id = dict(zip(specimens["specimen_id"], specimens["material"]))
     all_ids = list(specimens["specimen_id"])
+    tag_by_id = {
+        sid: short_tag(label_by_id[sid], i + 1) for i, sid in enumerate(all_ids)
+    }
 
     def option_label(sid: str) -> str:
-        return f"{material_by_id.get(sid, '—')} — {label_by_id.get(sid, sid)}"
+        # Tag first, same reasoning as Results: it is what survives a
+        # truncated dropdown entry when specimens share a long filename.
+        return f"{tag_by_id[sid]} · {material_by_id.get(sid, '—')} — {label_by_id.get(sid, sid)}"
 
     n_groups = st.number_input(
         "Groups to compare", min_value=1, max_value=MAX_GROUPS,
@@ -67,9 +71,15 @@ def render(ws: Workspace) -> None:
         )
         with cols[i % len(cols)]:
             with st.container(border=True):
+                st.markdown(
+                    f'{dot(i)}<span style="font-size:.72rem;font-weight:700;'
+                    f'letter-spacing:.06em;text-transform:uppercase;opacity:.65">'
+                    f"Group {i + 1}</span>",
+                    unsafe_allow_html=True,
+                )
                 name = st.text_input(
                     "Name", value=default_material or f"Group {i + 1}",
-                    key=f"cmp_name_{i}",
+                    key=f"cmp_name_{i}", label_visibility="collapsed",
                 )
                 chosen = st.multiselect(
                     "Specimens", options=all_ids, default=default_ids,
@@ -142,7 +152,7 @@ def render(ws: Workspace) -> None:
     # editing one group's specimens never repaints another group's bars.
     color = alt.Color(
         "group:N", title="Group",
-        scale=alt.Scale(domain=group_order, range=_PALETTE_LIGHT[: len(group_order)]),
+        scale=alt.Scale(domain=group_order, range=CATEGORICAL_LIGHT[: len(group_order)]),
     )
 
     base = alt.Chart(agg)
@@ -170,8 +180,11 @@ def render(ws: Workspace) -> None:
     )
 
     with st.expander("Group membership and underlying rows"):
-        for g in groups:
-            st.markdown(f"**{g['name']}** — " + ", ".join(option_label(s) for s in g["ids"]))
+        for i, g in enumerate(groups):
+            st.markdown(
+                f"{dot(i)}**{g['name']}** — " + ", ".join(option_label(s) for s in g["ids"]),
+                unsafe_allow_html=True,
+            )
         st.dataframe(
             df[["material", "label", "specimen_id", "Cycle", metric.key]],
             use_container_width=True, hide_index=True,

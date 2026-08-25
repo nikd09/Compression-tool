@@ -295,6 +295,52 @@ exactly the runs that matter. The same freedom exists one tab over: Results'
 specimen toggles (§ Specimens per test) already let a bad run be excluded from
 that view's own mean without leaving the page.
 
+### One design system across every view, not just Results
+
+Results was the first view rebuilt with a real visual language; Ingest,
+Compare and Config used to be default Streamlit widgets stacked in a column.
+All four now share the same layer (`webapp/common.py`'s `polish()`, applied
+once from `app.py`): card surfaces for every `st.container(border=True)`,
+consistent button/expander weight, and a numbered step flow (`_step()` in
+`ingest_view.py`) walking Ingest through Upload → Thresholds → Preview →
+Commit instead of a flat list of widgets. Config's "Sources" and "Specimens"
+sections moved from `st.text()` loops to `st.dataframe()` tables so long runs
+scroll and sort instead of scrolling the whole page.
+
+Fixed alongside the restructuring: Ingest's preview cards used to vanish the
+moment Commit was clicked, because their `if st.button("Preview"): ...` block
+only rendered its contents on the run where that specific click happened —
+and Streamlit reruns the whole script on every button press, including
+Commit's. Preview results now live in
+`st.session_state["ingest_preview_rows"]` and are re-rendered on every run,
+so they stay on screen through the Commit click that follows them.
+
+**A Streamlit CSS gap, found while wiring the step badges' colour:**
+`var(--primary-color)` and `var(--secondary-background-color)` — both
+documented Streamlit theme variables — resolve to nothing in this Streamlit
+build (1.62). Confirmed by walking the DOM in a real browser
+(`getComputedStyle(el).getPropertyValue('--primary-color')` returns `''`
+everywhere, and no stylesheet defines a matching `:root` rule); the app's own
+pre-existing nav-highlight CSS only worked because it already carried a
+literal fallback (`var(--primary-color, #2a78d6)`) as a coincidence, not a
+deliberate guard. Every `var(--...)` this app relies on now carries an
+explicit fallback pulled from `.streamlit/config.toml`'s own theme literals,
+with a `@media (prefers-color-scheme: dark)` block supplying the dark-theme
+literal where the difference is visible (the step badge colour, the file
+uploader's drop-zone tint) — confirmed Streamlit itself follows
+`prefers-color-scheme` here regardless of `[theme] base`, by rendering with a
+`color-scheme: dark` browser context and comparing.
+
+`common.py` also gained two small helpers used everywhere a specimen or group
+is named: `short_tag(label, i)` pulls the trailing `_S<n>` off a specimen
+label ("S1", "S2", …), and `dot(i)` is an inline colour swatch for
+categorical slot `i`. Both exist for the same reason: a dropdown or chip
+showing full labels breaks once specimens share a long common filename
+prefix — the truncation cuts off exactly the suffix that told them apart, and
+two entries end up reading as identical. Putting the short tag first survives
+that truncation; the Results and Compare specimen pickers, and Config's
+specimen table, all use it.
+
 ### The expanded-chart dialog: a fixed, scrolling frame, not a content-fit one
 
 `components.html` embeds the dashboard in an iframe with a height Streamlit

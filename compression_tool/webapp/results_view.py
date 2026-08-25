@@ -13,7 +13,7 @@ from .. import knowledge_base
 from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..dashboard_data import COMFORTABLE_SPECIMENS, MAX_SPECIMENS, build_dashboard_data
 from ..persistence import Workspace, read_json
-from .common import connect_readonly
+from .common import connect_readonly, short_tag
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "results_dashboard.html"
 
@@ -37,12 +37,19 @@ def render(ws: Workspace) -> None:
         return
 
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
+    # The short tag goes FIRST: specimens from the same batch share a long
+    # common filename prefix, so a truncated dropdown entry or chip cuts off
+    # exactly the _S1/_S2 suffix that told them apart, leaving entries that
+    # read as identical. Put first, the tag survives that truncation.
+    tag_by_id = {
+        sid: short_tag(label, i + 1) for i, (sid, label) in enumerate(label_by_id.items())
+    }
     default = list(label_by_id)[:COMFORTABLE_SPECIMENS]
     chosen = st.multiselect(
         f"Specimens (1–{MAX_SPECIMENS})",
         options=list(label_by_id),
         default=default,
-        format_func=lambda sid: label_by_id[sid],
+        format_func=lambda sid: f"{tag_by_id[sid]} — {label_by_id[sid]}",
         max_selections=MAX_SPECIMENS,
         help="Every specimen selected here gets its own colour (S1, S2, …) plus "
         "a mean across them. Individual specimens can then be toggled on and "

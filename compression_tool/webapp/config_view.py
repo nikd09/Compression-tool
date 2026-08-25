@@ -5,13 +5,16 @@ result can always be traced back to the exact numbers behind it, per run."""
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from ..persistence import Workspace, read_json
+from .common import short_tag
 
 
 def render(ws: Workspace) -> None:
     st.header("Config")
+    st.caption("What a run was actually ingested with -- traced back per run, not the app's current form defaults.")
 
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
     if not manifests:
@@ -22,21 +25,57 @@ def render(ws: Workspace) -> None:
     chosen = st.selectbox("Run", manifests, format_func=lambda m: labels[m])
     manifest = read_json(chosen)
 
-    st.subheader(manifest.get("material", "—"))
-    c1, c2 = st.columns(2)
-    c1.metric("Specimens", len(manifest.get("specimens", [])))
-    c2.metric("Ingested", manifest.get("created_utc", "—"))
+    with st.container(border=True):
+        st.subheader(manifest.get("material", "—"))
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Specimens", len(manifest.get("specimens", [])))
+        c2.metric("Sources", len(manifest.get("sources", [])))
+        # The full ISO-8601 timestamp ("2026-08-25T10:46:42+00:00") doesn't
+        # fit a metric tile at any column width Streamlit's large metric font
+        # allows -- even "date time" truncated to the minute still clips.
+        # Date only in the tile; the exact time is one glance away, in the
+        # column header via help text.
+        created = manifest.get("created_utc", "—")
+        c3.metric(
+            "Ingested (UTC)", created[:10] if len(created) >= 10 else created,
+            help=f"Full timestamp: {created}",
+        )
 
-    st.markdown("**Settings this run used**")
-    st.json(manifest.get("config", {}), expanded=False)
+    with st.expander("Settings this run used"):
+        st.json(manifest.get("config", {}), expanded=False)
 
-    st.markdown("**Sources**")
-    for s in manifest.get("sources", []):
-        st.text(f"{s.get('source_file', '—')}  ·  sha256 {s.get('sha256', '—')[:12]}…")
+    st.markdown("##### Sources")
+    sources = manifest.get("sources", [])
+    if sources:
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "File": [s.get("source_file", "—") for s in sources],
+                    "sha256": [s.get("sha256", "—")[:12] + "…" for s in sources],
+                }
+            ),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.caption("None recorded.")
 
-    st.markdown("**Specimens**")
-    for s in manifest.get("specimens", []):
-        st.text(f"{s.get('label')}  ·  {s.get('n_cycles')} cycles  ·  {s.get('json')}")
+    st.markdown("##### Specimens")
+    specimens = manifest.get("specimens", [])
+    if specimens:
+        labels_ = [s.get("label", "—") for s in specimens]
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "": [short_tag(lbl, i + 1) for i, lbl in enumerate(labels_)],
+                    "Label": labels_,
+                    "Cycles": [s.get("n_cycles", "—") for s in specimens],
+                    "JSON": [s.get("json", "—") for s in specimens],
+                }
+            ),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.caption("None recorded.")
 
     with st.expander("Full manifest"):
         st.json(manifest)

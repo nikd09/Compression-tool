@@ -14,6 +14,14 @@ from ..persistence import Workspace
 from ..pipeline import ingest, preview
 
 
+def _step(n: int, title: str, sub: str = "") -> None:
+    st.markdown(
+        f'<div class="ct-step-head"><span class="ct-step">{n}</span><h3>{title}</h3></div>'
+        + (f'<p class="ct-step-sub">{sub}</p>' if sub else ""),
+        unsafe_allow_html=True,
+    )
+
+
 def _config_from_form() -> Config:
     d = Config()
     with st.expander("Advanced: segmentation and reference thresholds"):
@@ -82,51 +90,79 @@ def _show_warning(w: dict) -> None:
         st.info(text)
 
 
+def _render_preview_cards(rows: list[dict]) -> None:
+    for r in rows:
+        if "error" in r:
+            st.error(f"{Path(r['source_file']).name}: {r['error']}")
+            continue
+        with st.container(border=True):
+            st.subheader(r["label"])
+            c = st.columns(5)
+            c[0].metric("Cycles", r["n_cycles"])
+            c[1].metric("Holds", r["n_holds"])
+            # Rounded, not full precision: this tile is a glance-check before
+            # commit, not the record -- Config shows the exact ingested
+            # numbers afterwards. Short enough that 5 columns fit without
+            # Streamlit ellipsis-truncating the value.
+            c[2].metric("Peak", f"{r['global_peak_mpa']:.0f} MPa" if r["global_peak_mpa"] else "—")
+            c[3].metric("h0", f"{r['h0_mm']:.2f} mm" if r["h0_mm"] else "—")
+            c[4].metric("Format", r["source_format"])
+            for w in r["warnings"]:
+                _show_warning(w)
+            for n in r["notes"]:
+                st.caption(n)
+
+
 def render(ws: Workspace) -> None:
     st.header("Ingest")
+    st.caption(
+        "Upload one or more exports of the same series, look before "
+        "committing, then archive and index them."
+    )
 
+    _step(1, "Upload")
     uploaded = st.file_uploader(
         "Zwick Z100 export(s)", type=["xlsx"], accept_multiple_files=True,
+        label_visibility="collapsed",
         help="One or more .xlsx exports of the same series. Nothing is written to the workspace until Commit.",
     )
-    material = st.text_input(
-        "Material", placeholder="e.g. PEEK-GF30 -- blank infers it from the filename")
-    gauge_confirmed = st.checkbox(
-        "Gauge length confirmed",
-        help="Check this only once someone has verified the displacement "
-        "channel's extensometer spans exactly this specimen's measured "
-        "thickness h0 -- not just that h0 gives a plausible modulus. Left "
-        "unchecked, strain and modulus stay provisional and carry a "
-        "critical warning.",
-    )
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        material = st.text_input(
+            "Material", placeholder="e.g. PEEK-GF30 -- blank infers it from the filename")
+    with c2:
+        st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+        gauge_confirmed = st.checkbox(
+            "Gauge length confirmed",
+            help="Check this only once someone has verified the displacement "
+            "channel's extensometer spans exactly this specimen's measured "
+            "thickness h0 -- not just that h0 gives a plausible modulus. Left "
+            "unchecked, strain and modulus stay provisional and carry a "
+            "critical warning.",
+        )
+
+    st.divider()
+    _step(2, "Thresholds", "Optional. Defaults work unmodified for a Zwick Z100 export.")
     cfg = _config_from_form()
 
     if not uploaded:
-        st.info("Upload one or more exports to preview them.")
+        st.info("Upload one or more exports above to preview them.")
         return
-
     paths = _save_uploads(uploaded)
 
-    if st.button("Preview"):
-        for r in preview(paths, cfg, gauge_length_confirmed=gauge_confirmed):
-            if "error" in r:
-                st.error(f"{Path(r['source_file']).name}: {r['error']}")
-                continue
-            with st.container(border=True):
-                st.subheader(r["label"])
-                c = st.columns(5)
-                c[0].metric("Cycles", r["n_cycles"])
-                c[1].metric("Holds", r["n_holds"])
-                c[2].metric("Peak", f"{r['global_peak_mpa']:.1f} MPa" if r["global_peak_mpa"] else "—")
-                c[3].metric("h0", f"{r['h0_mm']} mm" if r["h0_mm"] else "—")
-                c[4].metric("Format", r["source_format"])
-                for w in r["warnings"]:
-                    _show_warning(w)
-                for n in r["notes"]:
-                    st.caption(n)
+    st.divider()
+    _step(3, "Preview", "Check format, cycle count and warnings before anything is written.")
+    if st.button("Run preview", icon=":material/visibility:"):
+        st.session_state["ingest_preview_rows"] = preview(
+            paths, cfg, gauge_length_confirmed=gauge_confirmed
+        )
+    rows = st.session_state.get("ingest_preview_rows")
+    if rows:
+        _render_preview_cards(rows)
 
     st.divider()
-    if st.button("Commit to workspace", type="primary"):
+    _step(4, "Commit", "Archives the raw file and writes the record — re-running the same file is a no-op.")
+    if st.button("Commit to workspace", type="primary", icon=":material/save:"):
         result = ingest(
             paths, ws, material=material or None, cfg=cfg,
             gauge_length_confirmed=gauge_confirmed,
