@@ -18,6 +18,7 @@ from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview, preview_dashboard_data
+from .common import utm_press_html
 
 _NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
@@ -273,6 +274,20 @@ def _render_dashboard_preview(state: dict) -> None:
     components.html(state["html"], height=_DASHBOARD_FRAME_HEIGHT_PX, scrolling=True)
 
 
+def _with_utm_animation(caption: str, fn):
+    """Runs `fn()` (a blocking call -- preview/ingest) with the UTM press
+    animation shown for its duration. The animation is CSS-driven and keeps
+    looping in the browser's own render loop once this markup has reached
+    it, independent of Python being busy; the placeholder is what lets it
+    disappear again the moment `fn()` returns, success or failure alike."""
+    placeholder = st.empty()
+    placeholder.markdown(utm_press_html(caption), unsafe_allow_html=True)
+    try:
+        return fn()
+    finally:
+        placeholder.empty()
+
+
 def render(ws: Workspace) -> None:
     _sweep_stale_uploads()
 
@@ -328,8 +343,9 @@ def render(ws: Workspace) -> None:
     st.divider()
     _step(3, "Preview", "Check format, cycle count and warnings before anything is written.")
     if st.button("Run preview", icon=":material/visibility:"):
-        st.session_state["ingest_preview_rows"] = preview(
-            paths, cfg, gauge_length_confirmed=gauge_confirmed
+        st.session_state["ingest_preview_rows"] = _with_utm_animation(
+            "Analysing…",
+            lambda: preview(paths, cfg, gauge_length_confirmed=gauge_confirmed),
         )
         # A fresh preview invalidates any dashboard built from a previous
         # one -- drop it rather than show charts for files that may no
@@ -348,8 +364,9 @@ def render(ws: Workspace) -> None:
             "export or a throwaway trial never has to be Committed just to "
             "be seen.",
         ):
-            st.session_state["ingest_preview_dashboard"] = _build_dashboard_preview(
-                paths, cfg, material, gauge_confirmed
+            st.session_state["ingest_preview_dashboard"] = _with_utm_animation(
+                "Building dashboard…",
+                lambda: _build_dashboard_preview(paths, cfg, material, gauge_confirmed),
             )
         dashboard_state = st.session_state.get("ingest_preview_dashboard")
         if dashboard_state:
@@ -382,11 +399,14 @@ def render(ws: Workspace) -> None:
         if not material or not material.strip():
             st.error("Pick or type a material name above before committing.")
         else:
-            result = ingest(
-                paths, ws, material=material.strip(), cfg=cfg,
-                gauge_length_confirmed=gauge_confirmed,
-                archive_originals=archive_originals,
-                write_reports=write_reports,
+            result = _with_utm_animation(
+                "Committing…",
+                lambda: ingest(
+                    paths, ws, material=material.strip(), cfg=cfg,
+                    gauge_length_confirmed=gauge_confirmed,
+                    archive_originals=archive_originals,
+                    write_reports=write_reports,
+                ),
             )
             # The uploaded copy has done its job -- ingest() has already
             # archived (or hashed) and read every file -- so there is

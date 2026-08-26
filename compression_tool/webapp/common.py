@@ -124,6 +124,64 @@ def dot(i: int) -> str:
     return f'<span class="ct-dot" style="background:{colour}"></span>'
 
 
+def utm_press_html(caption: str = "Analysing…") -> str:
+    """A small looping animation of a UTM crosshead compressing a specimen --
+    shown in a `st.empty()` placeholder around a call that blocks the script
+    (`ingest()`, `preview()`), since that is the one place a CSS animation
+    can run independently of Python: once this markup has actually reached
+    the browser, the animation keeps looping in its own render loop for as
+    long as the blocking call takes, with no further communication from the
+    (busy) Python side needed to keep it moving.
+
+    The stroke shape doubles as a hint at what the tool is analysing rather
+    than a generic spinner: down-hold-up, not a smooth back-and-forth --
+    echoing the load-dwell-unload cycle shape every specimen this tool
+    ingests actually goes through.
+    """
+    return f"""
+<div class="ct-utm-wrap">
+  <style>
+  .ct-utm-wrap{{display:flex;align-items:center;gap:1rem;padding:.9rem 0;}}
+  .ct-utm-svg{{flex:none;width:64px;height:64px;overflow:visible;}}
+  .ct-utm-cap{{font-size:.92rem;font-weight:600;opacity:.82;}}
+  .ct-utm-head{{animation:ctUtmPress 1.8s cubic-bezier(.5,0,.5,1) infinite;
+    transform-box:fill-box;transform-origin:50% 0%;}}
+  .ct-utm-specimen{{animation:ctUtmSquash 1.8s cubic-bezier(.5,0,.5,1) infinite;
+    transform-box:fill-box;transform-origin:50% 100%;}}
+  @keyframes ctUtmPress{{
+    0%{{transform:translateY(0)}}
+    35%{{transform:translateY(30px)}}
+    50%{{transform:translateY(33px)}}
+    65%{{transform:translateY(30px)}}
+    100%{{transform:translateY(0)}}
+  }}
+  @keyframes ctUtmSquash{{
+    0%{{transform:scaleY(1)}}
+    35%{{transform:scaleY(.78)}}
+    50%{{transform:scaleY(.74)}}
+    65%{{transform:scaleY(.78)}}
+    100%{{transform:scaleY(1)}}
+  }}
+  @media (prefers-reduced-motion: reduce){{
+    .ct-utm-head, .ct-utm-specimen{{animation:none;}}
+  }}
+  </style>
+  <svg class="ct-utm-svg" viewBox="0 0 100 100" role="img" aria-label="Compressing specimen">
+    <rect x="14" y="6" width="8" height="82" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".35"/>
+    <rect x="78" y="6" width="8" height="82" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".35"/>
+    <rect x="10" y="2" width="80" height="8" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".55"/>
+    <rect x="30" y="80" width="40" height="8" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".55"/>
+    <rect class="ct-utm-specimen" x="38" y="62" width="24" height="18" rx="2"
+      fill="var(--primary-color,#2a78d6)"/>
+    <g class="ct-utm-head">
+      <rect x="26" y="24" width="48" height="10" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".78"/>
+    </g>
+  </svg>
+  <span class="ct-utm-cap">{caption}</span>
+</div>
+"""
+
+
 _SAMPLE_SUFFIX = re.compile(r"[_\s-](S\d+)$", re.IGNORECASE)
 
 

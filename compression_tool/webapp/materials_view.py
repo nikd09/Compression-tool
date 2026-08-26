@@ -34,6 +34,19 @@ from ..reports_overview import material_rows
 # share.
 _CARD_CSS = """
 <style>
+/* A responsive grid, not a stacked full-width column -- as many cards per
+   row as actually fit (auto-fill), each a comfortable roughly-square card
+   rather than a thin full-width strip. Applied straight to the same
+   element that already carries the st-key-materials_grid class: it is the
+   outer stVerticalBlock, and each card -- one st.container(border=True,
+   key=...) per material -- is already its direct child in the DOM, so
+   nothing about how the cards are built in Python has to change for them
+   to become grid items instead of stacked rows. */
+.st-key-materials_grid{
+  display:grid!important;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;
+  gap:1rem!important;
+}
 .st-key-materials_grid button[kind="tertiary"]{
   padding:0!important; border:none!important; background:transparent!important;
   box-shadow:none!important; justify-content:flex-start!important;
@@ -113,14 +126,19 @@ def render(ws: Workspace) -> None:
                         f'margin-top:.55rem">Added {html.escape(added)}</div>',
                         unsafe_allow_html=True,
                     )
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Specimens", row["specimens"])
-                c2.metric("Runs", row["runs"])
-                c3.metric(
+                # 2x2, not a single row of 4: a card this narrow (a grid
+                # cell, not a full-width row any more) has no room for four
+                # metric columns side by side without truncating values
+                # like "0.471 mm".
+                top_l, top_r = st.columns(2)
+                top_l.metric("Specimens", row["specimens"])
+                top_r.metric("Runs", row["runs"])
+                bot_l, bot_r = st.columns(2)
+                bot_l.metric(
                     "Peak stress",
                     f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "-",
                 )
-                c4.metric(
+                bot_r.metric(
                     "Thickness (h0)",
                     f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
                 )
