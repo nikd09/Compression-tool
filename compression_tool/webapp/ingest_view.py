@@ -397,22 +397,23 @@ def render(ws: Workspace) -> None:
     st.divider()
     _step(
         3, "Preview",
-        "Check the files parse, or open the full interactive dashboard in "
-        "a new tab -- either way, before anything is written.",
+        "Check the files parse, then open the full interactive dashboard "
+        "in a new tab, before anything is written.",
     )
-    prev_col, dash_col = st.columns(2)
-    with prev_col:
-        if st.button("Run preview", icon=":material/visibility:", use_container_width=True):
-            st.session_state["ingest_preview_rows"] = _with_utm_animation(
-                "Analysing…",
-                lambda: preview(paths, cfg, gauge_length_confirmed=gauge_confirmed),
-            )
-    with dash_col:
-        if st.button("Open dashboard", icon=":material/open_in_new:", use_container_width=True):
-            st.session_state["ingest_preview_dashboard"] = _with_utm_animation(
-                "Building dashboard…",
-                lambda: _build_dashboard_preview(paths, cfg, material, gauge_confirmed),
-            )
+    if st.button("Run preview", icon=":material/visibility:"):
+        def _preview_and_build_dashboard() -> tuple[list[dict], dict]:
+            # One click, one animation, both calls -- not a second button
+            # that only appears (and still has to be clicked and waited on
+            # again) once this one finishes. "Open dashboard in a new tab"
+            # popping in once this is done IS the "preview finished, look
+            # at the results" signal, not a separate step to notice and act on.
+            rows_ = preview(paths, cfg, gauge_length_confirmed=gauge_confirmed)
+            dashboard_ = _build_dashboard_preview(paths, cfg, material, gauge_confirmed)
+            return rows_, dashboard_
+
+        rows, dashboard_state = _with_utm_animation("Analysing…", _preview_and_build_dashboard)
+        st.session_state["ingest_preview_rows"] = rows
+        st.session_state["ingest_preview_dashboard"] = dashboard_state
 
     rows = st.session_state.get("ingest_preview_rows")
     if rows:
