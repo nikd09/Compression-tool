@@ -158,6 +158,29 @@ def default_index_root() -> Path:
     return base / "CompressionTool"
 
 
+def workspace_index_root(root: str | os.PathLike) -> Path:
+    """A per-WORKSPACE subdirectory under default_index_root() -- so two
+    different workspace roots opened from the same machine never share one
+    local SQLite index.
+
+    Without this, every caller that passed `index_root=default_index_root()`
+    got the exact same fixed path back regardless of `root`: opening
+    workspace B, on a machine that had already built a local index for
+    workspace A, would find A's index already sitting at that path and use
+    it as-is -- silently showing A's materials and specimens under B's name,
+    with nothing in the UI to suggest anything was wrong. Confirmed live:
+    pointing the webapp at a second, unrelated workspace folder on the same
+    machine did exactly that.
+
+    The hash is what actually guarantees two different roots never collide;
+    the slug in front of it is only so a human skimming the cache directory
+    can tell which subfolder belongs to which workspace at a glance.
+    """
+    resolved = str(Path(root).expanduser().resolve())
+    digest = hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:12]
+    return default_index_root() / f"{slugify(Path(root).name) or 'workspace'}-{digest}"
+
+
 # ----------------------------------------------------------------------------
 # Hashing and naming
 # ----------------------------------------------------------------------------

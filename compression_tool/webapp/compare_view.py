@@ -194,12 +194,29 @@ def render(ws: Workspace) -> None:
                 y=alt.Y("err_lo:Q"), y2=alt.Y2("err_hi:Q"), tooltip=tooltip,
             )
         )
+    # Direct labels stay SELECTIVE, same threshold and reasoning as the
+    # Results dashboard's own bar charts: past three groups, a number on
+    # every bar is dozens of labels fighting for the same strip of space,
+    # and the fullscreen/PNG-export view -- which is exactly where hovering
+    # for the tooltip is not an option -- would be the most crowded of all.
+    # Below that threshold, this is also what makes the value actually
+    # visible there, which the hover-only tooltip alone cannot do.
+    if len(group_order) <= 3:
+        layers.append(
+            base.mark_text(dy=-6, fontSize=9, fontWeight=600).encode(
+                x=alt.X("Cycle:O"), xOffset=alt.XOffset("group:N", sort=group_order),
+                y=alt.Y("mean:Q"), text=alt.Text("mean:Q", format=".3g"),
+            )
+        )
     chart = alt.layer(*layers).properties(height=430).configure_view(stroke=None)
     st.altair_chart(chart, use_container_width=True)
     st.caption(
         "Each bar is the mean across that group's chosen specimens, for that "
         "cycle; the whisker is ±1 standard deviation across them. A group of "
-        "one specimen shows that specimen's own value and no whisker."
+        "one specimen shows that specimen's own value and no whisker. Bars "
+        "carry a value label at 3 groups or fewer -- past that, a number on "
+        "every bar is too many labels for the space; hover a bar for its "
+        "exact value instead."
     )
 
     with st.expander("Group membership and underlying rows"):

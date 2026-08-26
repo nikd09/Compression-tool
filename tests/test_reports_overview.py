@@ -13,7 +13,10 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from compression_tool import Workspace, build_overview, ingest
+from compression_tool.reports_overview import material_rows
 
 
 def _embedded_data(html: str) -> dict:
@@ -59,6 +62,29 @@ def test_material_stats_are_correct(workspace, series_file):
     assert entry["specimens"] == 2
     assert entry["runs"] == 1
     assert entry["meanPeak"] is not None and entry["meanPeak"] > 0
+    assert entry["meanH0"] == pytest.approx(0.471)
+    assert entry["dateAdded"]
+
+
+def test_date_added_is_the_earliest_ingest_not_the_latest(workspace, single_file, series_file):
+    """A material's 'date added' is when it first showed up in this
+    workspace, not its most recent activity -- ingesting it again later
+    must not move that date forward."""
+    a = ingest([single_file], workspace, material="PEEK")
+    b = ingest([series_file], workspace, material="PEEK")
+    ws = a.workspace
+
+    expected_earliest = min(
+        a.specimens[0].payload["created_utc"],
+        b.specimens[0].payload["created_utc"],
+    )
+    (row,) = material_rows(ws)
+    assert row["dateAdded"] == expected_earliest
+
+
+def test_material_rows_is_empty_for_a_workspace_with_nothing_ingested(workspace):
+    ws = Workspace.at(workspace).ensure()
+    assert material_rows(ws) == []
 
 
 def test_link_slug_matches_the_material_export_filename(workspace, series_file):

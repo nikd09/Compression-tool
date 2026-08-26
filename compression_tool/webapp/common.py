@@ -10,7 +10,7 @@ import re
 import streamlit as st
 
 from .. import knowledge_base
-from ..persistence import Workspace, default_index_root
+from ..persistence import Workspace, workspace_index_root
 from ..pipeline import rebuild_index
 
 # Resolved once, at import time, from an environment variable set on the
@@ -182,7 +182,10 @@ def workspace_picker() -> Workspace:
     # and syncing a SQLite file while it is being written is a well-known
     # way to corrupt it. The index is disposable and rebuilt from the JSON
     # records under `root` -- moving it off the synced path costs nothing.
-    ws = Workspace.at(root, index_root=default_index_root())
+    # Scoped per workspace (workspace_index_root, not the bare
+    # default_index_root() base) so switching this field to a different
+    # folder can never pick up a previous workspace's already-built index.
+    ws = Workspace.at(root, index_root=workspace_index_root(root))
     if not ws.db_path.exists() and ws.processed.exists() and any(ws.processed.iterdir()):
         # First time this workspace has been opened from THIS machine (or
         # the local index cache was cleared): there is real data under

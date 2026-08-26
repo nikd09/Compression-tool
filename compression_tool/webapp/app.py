@@ -15,7 +15,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from compression_tool.webapp import compare_view, config_view, ingest_view, results_view
+from compression_tool.webapp import (
+    compare_view,
+    config_view,
+    ingest_view,
+    materials_view,
+    results_view,
+)
 from compression_tool.webapp.common import polish, workspace_picker
 
 st.set_page_config(page_title="Compression Tool", page_icon="📊", layout="wide")
@@ -48,6 +54,7 @@ _STATIC = Path(__file__).parent / "static"
 # widget -- see common.workspace_picker's docstring.
 NAV_ITEMS = [
     ("Ingest", ":material/upload_file:", ingest_view.render),
+    ("Materials", ":material/inventory_2:", materials_view.render),
     ("Results", ":material/bar_chart:", results_view.render),
     ("Compare", ":material/compare_arrows:", compare_view.render),
     ("Config", ":material/tune:", config_view.render),

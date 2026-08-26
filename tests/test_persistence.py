@@ -15,6 +15,7 @@ import pytest
 
 from compression_tool import Config, Workspace, ingest, preview
 from compression_tool import knowledge_base as kb
+from compression_tool import persistence
 from compression_tool.persistence import (
     archive_raw,
     jsonable,
@@ -25,8 +26,68 @@ from compression_tool.persistence import (
     sha256_file,
     slugify,
     specimen_id,
+    workspace_index_root,
     write_manifest,
 )
+
+
+# ----------------------------------------------------------------------------
+# workspace_index_root -- see its docstring for the bug this exists to
+# prevent: two different workspaces on one machine silently sharing a
+# local index. default_index_root() is monkeypatched to a tmp_path-based
+# base throughout, so these tests never touch the real machine-wide cache.
+# ----------------------------------------------------------------------------
+
+
+def test_workspace_index_root_differs_for_different_roots(tmp_path, monkeypatch):
+    monkeypatch.setattr(persistence, "default_index_root", lambda: tmp_path / "cache")
+    a = workspace_index_root(tmp_path / "workspace-a")
+    b = workspace_index_root(tmp_path / "workspace-b")
+    assert a != b
+    assert a.parent == tmp_path / "cache"
+    assert b.parent == tmp_path / "cache"
+
+
+def test_workspace_index_root_is_stable_for_the_same_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(persistence, "default_index_root", lambda: tmp_path / "cache")
+    root = tmp_path / "workspace"
+    assert workspace_index_root(root) == workspace_index_root(root)
+
+
+def test_workspace_index_root_normalizes_equivalent_paths(tmp_path, monkeypatch):
+    """A relative path and its resolved absolute form must land on the same
+    index -- otherwise the same workspace opened two different ways looks
+    like two different workspaces and gets needlessly reindexed."""
+    monkeypatch.setattr(persistence, "default_index_root", lambda: tmp_path / "cache")
+    (tmp_path / "workspace").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert workspace_index_root("workspace") == workspace_index_root(tmp_path / "workspace")
+
+
+def test_two_workspaces_on_one_machine_do_not_share_an_index(
+    tmp_path, series_file, single_file, monkeypatch
+):
+    """The bug this exists to prevent, reproduced directly: opening a
+    second, different workspace from the same machine must never surface
+    the first workspace's already-indexed materials under the second
+    workspace's name. Confirmed live before this fix -- switching the
+    webapp's Workspace field between two real folders on one machine did
+    exactly that, because index_root=default_index_root() alone resolves to
+    one fixed path no matter which workspace passes it in."""
+    monkeypatch.setattr(persistence, "default_index_root", lambda: tmp_path / "cache")
+
+    root_a, root_b = tmp_path / "workspace-a", tmp_path / "workspace-b"
+    ws_a = Workspace.at(root_a, index_root=workspace_index_root(root_a))
+    ws_b = Workspace.at(root_b, index_root=workspace_index_root(root_b))
+
+    ingest([series_file], ws_a, material="PEEK")
+    ingest([single_file], ws_b, material="TALCO50")
+
+    conn_b = kb.connect(ws_b.db_path)
+    try:
+        assert kb.materials(conn_b) == ["TALCO50"]
+    finally:
+        conn_b.close()
 
 
 # ----------------------------------------------------------------------------

@@ -265,13 +265,14 @@ pip install -e ".[webapp]"
 streamlit run compression_tool/webapp/app.py
 ```
 
-Four views, matching HANDOFF.md's build order, behind an icon sidebar (`st.logo`
-+ styled `st.button` rows -- see "Why not `st.navigation`" below for why it is
-not Streamlit's own multipage widget):
+Five views behind an icon sidebar (`st.logo` + styled `st.button` rows -- see
+"Why not `st.navigation`" below for why it is not Streamlit's own multipage
+widget):
 
 | View | What it does |
 |---|---|
 | Ingest | Upload exports, adjust thresholds (including whether the test has a hold at all -- see "Hold detection" below), `preview()` before committing, then `ingest()`. |
+| Materials | One card per material -- specimens, runs, mean peak stress, mean thickness (h0), date added -- see "The Materials library" below. |
 | Results | Pick a material and its specimens (1-8); renders the grouped-bar dashboard against their real records and curve caches. |
 | Compare | Build named groups of specimens -- any specimens, from any materials, in any combination -- and overlay one metric across the groups' means (`knowledge_base.cycles_for_specimens()`). A group is not required to be a whole material. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
@@ -299,14 +300,27 @@ setting the same variable there, no code change.
 points at.** That path is expected to be a synced or shared folder (OneDrive,
 SharePoint, a network drive), and syncing a SQLite file while it is being
 written is a well-known way to corrupt it -- the sync client and SQLite's own
-locking are not coordinated. `Workspace.index_root` (default:
-`%LOCALAPPDATA%\CompressionTool` on Windows) moves *only* `knowledge_base.db`
-to a plain local folder on the host PC; `Raw exports/`, `Records/` and
-`reports/` still live under the shared path exactly as before. The index is
-disposable and rebuildable from the JSON records regardless of where it
-lives, so this costs nothing -- and the very first time a shared workspace is
-opened from a PC that has no local index yet, the app rebuilds one
-automatically rather than showing an empty tool in front of non-empty data.
+locking are not coordinated. `Workspace.index_root`, set by the webapp to
+`workspace_index_root(root)` (default base: `%LOCALAPPDATA%\CompressionTool`
+on Windows), moves *only* `knowledge_base.db` to a plain local folder on the
+host PC; `Raw exports/`, `Records/` and `reports/` still live under the
+shared path exactly as before. The index is disposable and rebuildable from
+the JSON records regardless of where it lives, so this costs nothing -- and
+the very first time a shared workspace is opened from a PC that has no local
+index yet, the app rebuilds one automatically rather than showing an empty
+tool in front of non-empty data.
+
+`workspace_index_root()` scopes that local folder to a hash of the resolved
+workspace root, not just the machine -- `default_index_root()` alone is one
+fixed path regardless of which workspace points at it, so opening a SECOND,
+different workspace on a machine that already had a first one indexed would
+otherwise find that first index already sitting at the same path and use it
+as-is: every view would silently show the first workspace's materials and
+specimens under the second workspace's name, with nothing in the UI to
+suggest anything was wrong. In practice this only bites someone who points
+the Workspace field at more than one real folder from the same machine, but
+it is silent and serious when it does, so the per-workspace subfolder is not
+optional the way it might look from the two-line diff that added it.
 
 This split is webapp-only (`webapp/common.py`'s `workspace_picker()`); the
 CLI still uses one root for everything, which is fine for a local or
@@ -394,6 +408,16 @@ would otherwise merge into one series instead of drawing two. Compare
 disambiguates automatically (appending " (2)", " (3)", ...) and shows which
 groups it renamed, rather than let that merge happen silently.
 
+Bars carry a direct value label at 3 groups or fewer -- the same threshold
+and reasoning as the Results dashboard's own bar charts (`PANELS` in
+`results_dashboard.html`): past that, a number on every bar is dozens of
+labels fighting for the same strip of space. This is also what Vega-Lite's
+own fullscreen and PNG-download actions (the toolbar icons above the chart)
+render, since it is the same chart spec at a different size -- there is no
+separate "expanded" variant to add labels to, unlike Results' custom SVG
+charts, which draw the small grid cell and the expanded dialog from the
+same function.
+
 ### Combined per-material export: one Excel workbook, one real dashboard, across every run
 
 `material_export.export_material(ws, material)` writes
@@ -428,27 +452,39 @@ that were never ingested together:
   every specimen came from one ingest run, misleading once they come from
   several), are overridden to name the material instead.
 
-### The all-materials overview: one page, no app required, to see and compare everything
+### The Materials library: one card per material, in the app and out of it
 
-`reports_overview.build_overview(ws)` writes `<workspace>/reports/_Overview.html`
--- every material in the workspace, its specimen/run counts, mean peak stress,
-and last-ingested date, plus a headline bar chart ranking materials by mean
-peak stress. Like the per-material export above, it is fully self-contained
-(no server, no network), rebuilt automatically on every `ingest()`, and
-exposed on the CLI as `compression-tool build-overview` and in Config as a
-manual "Rebuild now".
+`reports_overview.material_rows(ws)` computes one row per material --
+specimens, runs, mean peak stress, mean thickness (h0), and the date this
+material was first added to the workspace (the earliest `created_utc` among
+its specimens, not its most recent activity) -- and is the single
+computation behind two presentations that always agree with each other:
 
-This exists for the majority of people who only ever read results, not
-ingest them: they never need the live app running at all. Point them at
-`reports/_Overview.html` on the shared drive and they can browse every
-material, see which ones are worth a closer look, and click through to a
-material's own full dashboard -- entirely from a folder, in a browser, on a
-machine with no Python installed.
+- **The "Materials" tab** (`materials_view.py`), in the app's left nav
+  between Ingest and Results: one card per material, the properties above,
+  the date in small type at the top right. Deliberately just the index --
+  no chart, no per-cycle detail -- Results and Compare already own the deep
+  dive, per material and across materials respectively.
+- **`reports_overview.build_overview(ws)`**, which writes the same rows into
+  `<workspace>/reports/_Overview.html` -- fully self-contained (no server, no
+  network), rebuilt automatically on every `ingest()`, and exposed on the CLI
+  as `compression-tool build-overview` and in Config as a manual
+  "Rebuild now". This exists for the majority of people who only ever read
+  results, not ingest them: they never need the live app running at all.
+  Point them at `reports/_Overview.html` on the shared drive and they can
+  browse every material and click through to its own full dashboard --
+  entirely from a folder, in a browser, on a machine with no Python
+  installed. Underscore-prefixed deliberately: it sorts before every
+  material name in Explorer/Finder, so it is the first thing anyone sees
+  when they open the `reports/` folder.
 
-Underscore-prefixed deliberately: it sorts before every material name in
-Explorer/Finder, so it is the first thing anyone sees when they open the
-`reports/` folder, not something to hunt for among however many materials
-have accumulated.
+An earlier version of this page led with a "mean peak stress by material"
+bar chart ranking every material against each other. Dropped: a single
+number ranking materials against each other by one metric is a comparison
+Compare already does properly, across whichever metric and whichever
+specimens actually matter for that comparison -- a fixed bar chart on the
+index page was never that, just a chart that happened to be easy to build
+from data already on hand.
 
 ### The controlled material list: one canonical spelling per material
 
