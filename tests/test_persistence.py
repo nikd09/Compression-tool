@@ -13,7 +13,7 @@ import math
 import numpy as np
 import pytest
 
-from compression_tool import Config, Workspace, ingest, preview
+from compression_tool import Config, Workspace, ingest, preview, preview_dashboard_data
 from compression_tool import knowledge_base as kb
 from compression_tool import persistence
 from compression_tool.persistence import (
@@ -451,3 +451,74 @@ def test_preview_reports_failure_instead_of_raising(tmp_path):
     broken.write_bytes(b"nope")
     (row,) = preview([broken])
     assert "error" in row
+
+
+# ----------------------------------------------------------------------------
+# preview_dashboard_data -- the full charted dashboard, before Commit
+# ----------------------------------------------------------------------------
+
+
+def test_preview_dashboard_data_writes_nothing(workspace, series_file):
+    """Not just no workspace on disk: no material registered, no audit
+    record, nothing at all -- looking must never leave a trace."""
+    ws = Workspace.at(workspace)
+    result = preview_dashboard_data([series_file])
+
+    assert not ws.root.exists()
+    assert len(result["payloads"]) == 2
+    assert len(result["curves"]) == 2
+    assert result["skipped"] == []
+    assert result["truncated"] is False
+
+
+def test_preview_dashboard_data_payloads_feed_build_dashboard_data(workspace, series_file):
+    """The whole point is a real chart -- pin that the payloads this
+    produces are actually usable by the same function Results renders
+    from, not just shaped similarly to what ingest() writes."""
+    from compression_tool.dashboard_data import build_dashboard_data
+
+    result = preview_dashboard_data([series_file], material="PEEK-preview")
+    data = build_dashboard_data(result["payloads"], result["curves"])
+
+    assert len(data["specimens"]) == 2
+    assert all(s["cycles"] for s in data["specimens"])
+    assert data["specimens"][0]["cycles"][0]["pts"], "curve points must be present"
+
+
+def test_preview_dashboard_data_infers_material_like_ingest(workspace, single_file):
+    result = preview_dashboard_data([single_file])
+    assert result["material"] == "TALCO50"
+    assert result["payloads"][0]["specimen"]["material"] == "TALCO50"
+
+
+def test_preview_dashboard_data_uses_the_given_material_without_registering_it(
+    workspace, single_file
+):
+    result = preview_dashboard_data([single_file], material="A Brand New Material")
+    assert result["material"] == "A Brand New Material"
+    # Never persisted -- there is no workspace on disk to have written it to.
+    assert not workspace.exists()
+
+
+def test_preview_dashboard_data_skips_a_broken_file_without_failing_the_rest(
+    workspace, single_file, tmp_path
+):
+    broken = tmp_path / "broken.xlsx"
+    broken.write_bytes(b"not an excel file at all")
+
+    result = preview_dashboard_data([broken, single_file])
+    assert len(result["payloads"]) == 1
+    assert result["skipped"] and result["skipped"][0][0] == "broken.xlsx"
+
+
+def test_preview_dashboard_data_truncates_past_max_specimens(workspace, series_file):
+    from compression_tool.dashboard_data import MAX_SPECIMENS
+
+    # series_file has 2 specimens; five copies of the same path is a cheap
+    # way to exceed MAX_SPECIMENS (8) without a bespoke ten-specimen fixture.
+    result = preview_dashboard_data([series_file] * 5)
+
+    assert result["total_specimens"] == 10
+    assert result["truncated"] is True
+    assert len(result["payloads"]) == MAX_SPECIMENS
+    assert len(result["curves"]) == MAX_SPECIMENS

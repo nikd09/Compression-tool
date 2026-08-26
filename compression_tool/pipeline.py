@@ -144,6 +144,86 @@ def preview(
     return out
 
 
+def preview_dashboard_data(
+    paths: Sequence[str | os.PathLike],
+    cfg: Optional[Config] = None,
+    *,
+    material: Optional[str] = None,
+    gauge_length_confirmed: bool = False,
+) -> dict:
+    """Everything `dashboard_data.build_dashboard_data()` needs, for every
+    specimen across `paths`, built entirely in memory.
+
+    Nothing is archived, written to disk, or registered as a material --
+    `build_payload()` and `curve_cache.build_curve_cache()` are both pure
+    assembly, and even the material name is used only to label the charts,
+    never passed to `add_material()`. For the Ingest screen: the same
+    charted dashboard Results renders, available before any decision to
+    Commit, so a re-check of an old export or a throwaway trial never has
+    to become a permanent entry just to be looked at.
+
+    Reading the file's bytes to hash them is the only disk I/O -- the same
+    cost `ingest()` already pays before archiving, just without the archive
+    step after it.
+    """
+    from .dashboard_data import MAX_SPECIMENS  # local: avoids a module-level
+    # import cycle (dashboard_data has no reason to import pipeline, but
+    # pipeline importing it at module scope would still make the two
+    # modules' import order matter for no benefit -- this is the only use).
+
+    cfg = cfg or Config()
+    paths = [Path(p).expanduser() for p in paths]
+    resolved_material = material or _infer_material(paths)
+
+    payloads: list[dict] = []
+    curves: list[dict] = []
+    skipped: list[tuple[str, str]] = []
+    for path in paths:
+        try:
+            tests = load_tests(str(path), cfg)
+        except Exception as exc:  # noqa: BLE001 - one bad file must not blank
+            # the whole preview; every other file's specimens still render.
+            skipped.append((path.name, f"{type(exc).__name__}: {exc}"))
+            continue
+        digest = sha256_file(path)
+        for test in tests:
+            try:
+                df = analyse_test(test, cfg)
+            except Exception as exc:  # noqa: BLE001 - same reasoning as ingest():
+                # one degenerate specimen must not take the rest down with it.
+                skipped.append((test.label, f"{type(exc).__name__}: {exc}"))
+                continue
+            if df.empty:
+                skipped.append((test.label, "no cycles detected"))
+                continue
+            payload = build_payload(
+                test, df, cfg,
+                material=resolved_material, raw_path=None, source_sha256=digest,
+                gauge_length_confirmed=gauge_length_confirmed,
+            )
+            payloads.append(payload)
+            curves.append(curve_cache.build_curve_cache(
+                test, df, specimen_id=payload["specimen"]["specimen_id"]
+            ))
+
+    total = len(payloads)
+    truncated = total > MAX_SPECIMENS
+    if truncated:
+        # Same limit and same "keep the newest" reasoning as
+        # material_export.py's combined dashboard -- the chart's colour
+        # palette has a hard ceiling, not something a preview can special-case.
+        payloads, curves = payloads[-MAX_SPECIMENS:], curves[-MAX_SPECIMENS:]
+
+    return {
+        "material": resolved_material,
+        "payloads": payloads,
+        "curves": curves,
+        "skipped": skipped,
+        "truncated": truncated,
+        "total_specimens": total,
+    }
+
+
 def ingest(
     paths: Iterable[str | os.PathLike],
     workspace: str | os.PathLike | Workspace,

@@ -389,6 +389,31 @@ data palette. The same palette is handed to Streamlit's chrome in
 `.streamlit/config.toml`, so the Compare view's charts use the same hues in
 the same order.
 
+### The full dashboard, before Commit
+
+Ingest's Step 3 ("Preview") already showed a summary card per specimen --
+cycle count, peak stress, h0, format, warnings -- without writing anything.
+"Show full interactive dashboard" goes further: the exact same charted
+dashboard Results renders for an already-committed material, built from the
+uploaded files directly, still without writing anything.
+
+`pipeline.preview_dashboard_data()` is what makes this possible without
+duplicating the dashboard: `persistence.build_payload()` and
+`curve_cache.build_curve_cache()` are both pure assembly functions already,
+called by `ingest()` before anything is written to disk, so a preview can
+call the exact same two functions and simply never take the archive/write
+steps that come after them in `ingest()`. The material name is used only to
+label the charts -- it is never passed to `add_material()`, so looking at a
+file never registers a material either. The only disk I/O is reading the
+file's own bytes to hash them, the same cost `ingest()` already pays before
+archiving.
+
+This exists for re-checking an old export, or looking at a throwaway trial,
+without either becoming a permanent Materials entry just because someone
+wanted to see it. `preview()`'s summary cards remain the fast path for "does
+this look right"; the full dashboard is for "let me actually look at the
+curves" before deciding whether Commit is worth it at all.
+
 ### Comparing across specimens, not just across materials
 
 Compare builds groups from individual specimens, not whole materials. Each
@@ -516,6 +541,22 @@ Compare already does properly, across whichever metric and whichever
 specimens actually matter for that comparison -- a fixed bar chart on the
 index page was never that, just a chart that happened to be easy to build
 from data already on hand.
+
+**The Materials cards hover** (a shadow lift and an accent-coloured border)
+-- and, while adding that, `webapp/common.py`'s app-wide equivalent for
+every `st.container(border=True)` card turned out to have been a silent
+no-op the whole time: it targets `[data-testid="stVerticalBlockBorderWrapper"]`,
+a testid that does not exist anywhere in the installed Streamlit version's
+rendered DOM (confirmed live -- zero matches, on every tab). Streamlit
+now applies the border directly to the `stVerticalBlock` element itself, via
+an auto-generated class name that is identical across every bordered
+container on the page (and not something to hardcode -- it is a build
+implementation detail, not a stable selector). Materials' cards work around
+that by giving each card its own `st.container(..., key=...)`, which
+Streamlit *does* still expose as a stable `st-key-<key>` class on that same
+element regardless of Streamlit-internal DOM changes -- the fix is scoped to
+Materials for now; `common.py`'s app-wide rule is still the original,
+currently-inert selector.
 
 ### The controlled material list: one canonical spelling per material
 

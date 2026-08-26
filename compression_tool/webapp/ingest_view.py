@@ -4,20 +4,29 @@ CLI -- this view calls the exact same two functions, nothing is reimplemented.""
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 import time
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from ..core import Config
+from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
-from ..pipeline import ingest, preview
+from ..pipeline import ingest, preview, preview_dashboard_data
 
 _NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
+_DASHBOARD_TEMPLATE_PATH = (
+    Path(__file__).parent / "templates" / "results_dashboard.html"
+)
+# Same tuning as results_view.py / materials_view.py -- one template, three
+# call sites, all sized for the same normal, screen-realistic viewport.
+_DASHBOARD_FRAME_HEIGHT_PX = 820
 # How long an orphaned upload directory (left behind by a session that was
 # killed rather than closed normally -- a browser tab crash, a re-deployed
 # server -- is kept around before the sweep below removes it. Generous on
@@ -214,6 +223,56 @@ def _render_preview_cards(rows: list[dict]) -> None:
                 st.caption(n)
 
 
+def _build_dashboard_preview(
+    paths: list[Path], cfg: Config, material: str, gauge_confirmed: bool
+) -> dict:
+    """The same charted dashboard Results renders, for files that are not
+    (and may never be) committed. Built entirely in memory via
+    pipeline.preview_dashboard_data() -- nothing here writes to the
+    workspace or registers a material, so re-checking an old export, or
+    looking at a throwaway trial, never has to become a permanent Materials
+    entry just to be looked at.
+
+    Returns a plain dict rather than rendering directly, so the result can
+    be cached in session_state and redisplayed on every later rerun (a
+    checkbox ticked elsewhere in the form, say) without rebuilding it --
+    the same reason `preview()`'s rows are cached rather than recomputed
+    every run.
+    """
+    result = preview_dashboard_data(
+        paths, cfg,
+        material=material.strip() if material and material.strip() else None,
+        gauge_length_confirmed=gauge_confirmed,
+    )
+    html = None
+    if result["payloads"]:
+        data = build_dashboard_data(result["payloads"], result["curves"])
+        html = _DASHBOARD_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
+            "/*__DATA__*/", json.dumps(data)
+        )
+    return {
+        "skipped": result["skipped"],
+        "truncated": result["truncated"],
+        "total_specimens": result["total_specimens"],
+        "html": html,
+    }
+
+
+def _render_dashboard_preview(state: dict) -> None:
+    for name, why in state["skipped"]:
+        st.warning(f"Skipped {name}: {why}")
+    if not state["html"]:
+        st.warning("Nothing to chart: every file failed to analyse, or had no cycles.")
+        return
+    if state["truncated"]:
+        st.caption(
+            f"Showing the {MAX_SPECIMENS} most recent of {state['total_specimens']} "
+            f"specimens; the dashboard's colour palette has a hard "
+            f"{MAX_SPECIMENS}-series limit."
+        )
+    components.html(state["html"], height=_DASHBOARD_FRAME_HEIGHT_PX, scrolling=True)
+
+
 def render(ws: Workspace) -> None:
     _sweep_stale_uploads()
 
@@ -272,9 +331,29 @@ def render(ws: Workspace) -> None:
         st.session_state["ingest_preview_rows"] = preview(
             paths, cfg, gauge_length_confirmed=gauge_confirmed
         )
+        # A fresh preview invalidates any dashboard built from a previous
+        # one -- drop it rather than show charts for files that may no
+        # longer be the ones attached.
+        st.session_state.pop("ingest_preview_dashboard", None)
     rows = st.session_state.get("ingest_preview_rows")
     if rows:
         _render_preview_cards(rows)
+
+        if st.button(
+            "Show full interactive dashboard", icon=":material/bar_chart:",
+            help="The same charted dashboard the Results tab renders for an "
+            "already-committed material, built here from these uploaded "
+            "files directly. Nothing is written to the workspace and no "
+            "material is registered by looking, so re-checking an old "
+            "export or a throwaway trial never has to be Committed just to "
+            "be seen.",
+        ):
+            st.session_state["ingest_preview_dashboard"] = _build_dashboard_preview(
+                paths, cfg, material, gauge_confirmed
+            )
+        dashboard_state = st.session_state.get("ingest_preview_dashboard")
+        if dashboard_state:
+            _render_dashboard_preview(dashboard_state)
 
     st.divider()
     _step(4, "Commit", "Archives the raw file and writes the record - re-running the same file is a no-op.")

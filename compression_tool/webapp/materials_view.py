@@ -18,10 +18,20 @@ from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
 
-# Scoped via st.container(key=...) -- a documented, stable Streamlit hook
-# for exactly this (style one specific container's contents without a
-# fragile sibling-selector trick) -- so this cannot leak onto a tertiary
-# button anywhere else the app might add one later.
+# Scoped via st.container(key=...) -- a documented, stable Streamlit hook for
+# exactly this (style one specific container's contents without a fragile
+# sibling-selector trick) -- so this cannot leak onto a tertiary button, or a
+# bordered container, anywhere else the app might add one later.
+#
+# Cards are targeted by [class*="st-key-mat_card_"], not
+# [data-testid="stVerticalBlockBorderWrapper"] -- that testid, which the
+# rest of this app's hover rule (webapp/common.py) still uses, no longer
+# exists in the installed Streamlit version (confirmed live: zero matches
+# anywhere in the rendered DOM, on every tab). border=True now applies
+# directly to the stVerticalBlock itself; giving each card its own key is
+# what makes it addressable at all without relying on the auto-generated,
+# version-tied emotion-cache class name every bordered container happens to
+# share.
 _CARD_CSS = """
 <style>
 .st-key-materials_grid button[kind="tertiary"]{
@@ -34,6 +44,18 @@ _CARD_CSS = """
   color:var(--text-color,inherit)!important;
 }
 .st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#2a78d6)!important; }
+
+.st-key-materials_grid [class*="st-key-mat_card_"]{
+  padding:.85rem 1rem!important;
+  transition:box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+}
+.st-key-materials_grid [class*="st-key-mat_card_"]:hover{
+  box-shadow:0 8px 22px rgba(0,0,0,.10);
+  transform:translateY(-2px);
+  border-color:var(--primary-color,#2a78d6);
+}
+.st-key-materials_grid [data-testid="stMetricValue"]{ font-size:1.3rem!important; }
+.st-key-materials_grid [data-testid="stMetricLabel"]{ font-size:.66rem!important; }
 </style>
 """
 
@@ -78,7 +100,7 @@ def render(ws: Workspace) -> None:
     clicked_material = None
     with st.container(key="materials_grid"):
         for row in rows:
-            with st.container(border=True):
+            with st.container(border=True, key=f"mat_card_{row['slug']}"):
                 name_col, added_col = st.columns([5, 2])
                 with name_col:
                     if st.button(row["material"], key=f"open_material_{row['slug']}", type="tertiary"):

@@ -18,7 +18,7 @@ from .core import Config, TestData, analyse_test, detect_format, load_tests, seg
 from .material_export import export_material
 from .material_registry import add_material, load_materials
 from .persistence import Workspace
-from .pipeline import IngestResult, SpecimenResult, ingest, preview, rebuild_index
+from .pipeline import IngestResult, SpecimenResult, ingest, preview, preview_dashboard_data, rebuild_index
 from .reports_overview import build_overview
 from .schema import SCHEMA_VERSION
 
@@ -39,6 +39,7 @@ __all__ = [
     "list_audit_entries",
     "ingest",
     "preview",
+    "preview_dashboard_data",
     "rebuild_index",
     "SCHEMA_VERSION",
 ]
