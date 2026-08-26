@@ -68,10 +68,20 @@ def render(ws: Workspace) -> None:
         )
 
     row_by_id = specimens.set_index("specimen_id")
-    payloads, curves, missing_curve = [], [], []
+    payloads, curves, missing_curve, missing_record = [], [], [], []
     for sid in chosen:
         json_path = ws.root / row_by_id.loc[sid, "json_path"]
-        payloads.append(read_json(json_path))
+        try:
+            payloads.append(read_json(json_path))
+        except (FileNotFoundError, OSError):
+            # The index still lists this specimen but its record is gone
+            # from disk -- someone (or something) deleted it outside the
+            # app, most likely straight from Explorer/the share, which
+            # only ever touches files, never the index that still points
+            # at them. Skip it rather than crash the whole tab; Config's
+            # "Reindex from disk" is what clears the index of it for good.
+            missing_record.append(label_by_id[sid])
+            continue
         curve_path = curve_cache_path_for(json_path)
         if curve_path.exists():
             curves.append(read_curve_cache(curve_path))
@@ -79,12 +89,21 @@ def render(ws: Workspace) -> None:
             curves.append(None)
             missing_curve.append(label_by_id[sid])
 
+    if missing_record:
+        st.error(
+            "The index still lists " + ", ".join(missing_record) + " but its "
+            "record no longer exists on disk - it was likely deleted outside "
+            "the app. Go to Config and use \"Reindex from disk\" to bring the "
+            "index back in line with what is actually there."
+        )
     if missing_curve:
         st.warning(
             "No curve cache found for: " + ", ".join(missing_curve) + ". "
             "The stress-displacement panel will be empty for it; re-ingest "
             "to generate one. Every other chart is unaffected."
         )
+    if not payloads:
+        return
 
     data = build_dashboard_data(payloads, curves)
     html = _TEMPLATE_PATH.read_text(encoding="utf-8").replace(

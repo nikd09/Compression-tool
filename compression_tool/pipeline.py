@@ -264,6 +264,22 @@ def ingest(
     paths = [Path(p).expanduser() for p in paths]
     if not paths:
         raise ValueError("ingest needs at least one file")
+    if not material or not material.strip():
+        # No fallback to the file stem here (preview()/preview_dashboard_data()
+        # still infer one, but that is a cosmetic chart title for something
+        # never written to disk). Committing is different: the file stem is
+        # whatever the export happened to be named -- "Mehrstufiger
+        # Druckversuch Vergleichstest 2 T050LR1.xlsx" -- not a material code,
+        # and once it is the material every specimen JSON, run folder and
+        # report gets built under that name. Failing here, before anything is
+        # archived, is what makes a material name mandatory in practice, not
+        # just in the webapp form that happens to check for one -- a CLI or
+        # script call bypassed that check entirely before this existed.
+        raise ValueError(
+            "a material name is required to ingest -- pass material=... "
+            "(or -m/--material on the CLI); it is not inferred from the file name"
+        )
+    material = material.strip()
 
     # 1. Archive first -- the original is preserved even if the analysis fails.
     sources: list[dict] = []
@@ -293,7 +309,7 @@ def ingest(
     # from what has actually been ingested, and "steel-mesh" typed once
     # after "SteelMesh" already exists files under "SteelMesh" rather than
     # quietly starting a second, never-comparable material.
-    material = add_material(ws, material or _infer_material(paths))
+    material = add_material(ws, material)
     fingerprint = run_fingerprint((s["sha256"] for s in sources), cfg)
     # resolve_run_dir claims the folder itself (exclusive-create) -- nothing
     # left to mkdir here.

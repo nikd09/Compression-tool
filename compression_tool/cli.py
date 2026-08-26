@@ -74,8 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ing = sub.add_parser("ingest", help="archive, analyse, persist and index")
     p_ing.add_argument("files", nargs="+")
-    p_ing.add_argument("-m", "--material", default=None,
-                       help="material name; defaults to the file stem")
+    p_ing.add_argument("-m", "--material", required=True,
+                       help="material name, e.g. PEEK-GF30 -- required; a "
+                            "short material code, not the export's file name")
     p_ing.add_argument("--no-index", action="store_true",
                        help="write the records but leave the database untouched")
     p_ing.add_argument("--gauge-length-confirmed", action="store_true",

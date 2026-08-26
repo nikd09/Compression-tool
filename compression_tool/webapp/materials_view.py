@@ -14,6 +14,8 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
+from .. import permissions
+from ..material_admin import delete_material, rename_material
 from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
@@ -109,6 +111,7 @@ def render(ws: Workspace) -> None:
         st.info(f"No materials match “{query}”.")
         return
 
+    can_manage = permissions.is_admin(ws)
     st.markdown(_CARD_CSS, unsafe_allow_html=True)
     clicked_material = None
     with st.container(key="materials_grid"):
@@ -142,9 +145,108 @@ def render(ws: Workspace) -> None:
                     "Thickness (h0)",
                     f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
                 )
+                if can_manage:
+                    rn_col, del_col = st.columns(2)
+                    with rn_col:
+                        if st.button(
+                            "Rename", key=f"rename_material_{row['slug']}",
+                            icon=":material/edit:", use_container_width=True,
+                        ):
+                            _rename_dialog(ws, row["material"])
+                    with del_col:
+                        if st.button(
+                            "Delete", key=f"delete_material_{row['slug']}",
+                            icon=":material/delete:", use_container_width=True,
+                        ):
+                            _delete_dialog(ws, row["material"])
     if clicked_material:
         st.session_state[_SESSION_KEY] = clicked_material
         st.rerun()
+
+
+@st.dialog("Rename material")
+def _rename_dialog(ws: Workspace, material: str) -> None:
+    st.caption(
+        f"Renames \"{material}\" everywhere it appears: every run folder, "
+        f"specimen record, curve cache and report. Materials, Compare and "
+        f"Results all pick up the new name immediately - nothing needs "
+        f"re-ingesting."
+    )
+    new_name = st.text_input("New name", value=material)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Rename", type="primary", use_container_width=True):
+            if not new_name.strip():
+                st.error("New name cannot be empty.")
+            elif new_name.strip() == material:
+                st.info("That's already the current name.")
+            else:
+                try:
+                    result = rename_material(ws, material, new_name.strip())
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    if result["failed"]:
+                        # st.toast, not st.warning/st.success below: this
+                        # dialog closes via st.rerun() right after, which
+                        # would otherwise discard the message before it was
+                        # ever seen -- a toast is the one Streamlit element
+                        # that survives past the rerun that triggers it.
+                        st.toast(
+                            f"Renamed to '{result['material']}', but "
+                            f"{len(result['failed'])} run folder(s) could not "
+                            f"be moved on disk (records were still updated, "
+                            f"so they show correctly here - only the folder "
+                            f"name on disk still reads old): "
+                            + ", ".join(result["failed"]),
+                            icon=":material/warning:",
+                        )
+                    else:
+                        st.toast(f"Renamed to '{result['material']}'.", icon=":material/check:")
+                    st.rerun()
+    with c2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+
+
+@st.dialog("Delete material")
+def _delete_dialog(ws: Workspace, material: str) -> None:
+    st.error(
+        f"This permanently deletes every run, specimen record, curve cache "
+        f"and report for \"{material}\". This cannot be undone from inside "
+        f"the app."
+    )
+    delete_raw = st.checkbox(
+        "Also delete its archived raw exports",
+        help="Off by default: a raw export is content-addressed and can be "
+        "shared with another material's specimens - the same file ingested "
+        "a second time under a different name reuses the identical archived "
+        "copy. Left unchecked, only this material's own records, curve "
+        "caches and reports are removed; a raw file still used elsewhere is "
+        "never deleted even if this is checked.",
+    )
+    confirm = st.text_input(f'Type "{material}" to confirm')
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(
+            "Delete permanently", type="primary", use_container_width=True,
+            disabled=(confirm != material),
+        ):
+            try:
+                result = delete_material(ws, material, delete_raw=delete_raw)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state.pop(_SESSION_KEY, None)
+                st.toast(
+                    f"Deleted {result['removed_specimens']} specimen(s) "
+                    f"across {result['removed_run_dirs']} run(s).",
+                    icon=":material/check:",
+                )
+                st.rerun()
+    with c2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
 
 
 def _render_material_dashboard(ws: Workspace, material: str) -> None:

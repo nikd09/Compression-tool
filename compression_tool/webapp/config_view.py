@@ -8,7 +8,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .. import audit
+from .. import audit, knowledge_base, permissions
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..reports_overview import build_overview
@@ -18,6 +18,24 @@ from .common import short_tag
 def render(ws: Workspace) -> None:
     st.header("Config")
     st.caption("What a run was actually ingested with, traced back per run, not the app's current form defaults.")
+
+    with st.container(border=True):
+        st.markdown("##### Index")
+        st.caption(
+            "The database every tab reads from, built from the JSON records "
+            "under Records/. It only ever grows or updates when this app "
+            "writes to it - if a record's file was deleted outside the app "
+            "(Explorer, the shared drive) the index still lists it until "
+            "reindexed, and a tab that then tries to open it will show an "
+            "error instead of the material. Rebuilding is always safe: the "
+            "JSON records are the source of truth, the index is only ever "
+            "derived from them."
+        )
+        if st.button("Reindex from disk", icon=":material/refresh:", key="reindex_from_disk"):
+            count = knowledge_base.rebuild(ws)
+            st.success(f"Reindexed {count} specimen record(s) from disk.")
+
+    _render_admin_access(ws)
 
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
     if not manifests:
@@ -157,3 +175,62 @@ def render(ws: Workspace) -> None:
         "form defaults. The two can differ once someone changes a threshold on "
         "the Ingest tab for a later run."
     )
+
+
+def _render_admin_access(ws: Workspace) -> None:
+    """Who may Rename or Delete a material from the Materials tab -- see
+    permissions.py for what this does and does not actually enforce (a
+    shared, hand-editable allowlist keyed on the OS username, not a login
+    system)."""
+    with st.container(border=True):
+        st.markdown("##### Admin access")
+        me = permissions.current_user()
+        if not permissions.admins_configured(ws):
+            st.caption(
+                f"Nobody has restricted this yet - every visitor, including "
+                f"you ({me}), can currently rename or delete a material from "
+                f"the Materials tab. Claim admin access to restrict Rename "
+                f"and Delete to specific people from here on."
+            )
+            if st.button("Claim admin access for myself", icon=":material/shield:"):
+                permissions.claim_admin(ws)
+                st.rerun()
+            return
+
+        admins = permissions.load_admins(ws)
+        is_admin = permissions.is_admin(ws)
+        if is_admin:
+            st.caption(
+                f"Signed in as {me} - listed as an admin. Rename and Delete "
+                f"are visible on the Materials tab. Add or remove people below; "
+                f"this only checks the OS username the app is running under, "
+                f"the same identity Config's audit log already records."
+            )
+            st.dataframe(
+                pd.DataFrame({"Admin": admins}), use_container_width=True, hide_index=True,
+            )
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                new_name = st.text_input(
+                    "Add admin (Windows/OS username)", key="cfg_add_admin",
+                    label_visibility="collapsed", placeholder="e.g. n7215177",
+                )
+            with c2:
+                if st.button("Add", key="cfg_add_admin_btn") and new_name.strip():
+                    permissions.add_admin(ws, new_name.strip())
+                    st.rerun()
+            removable = [a for a in admins if a.casefold() != me.casefold()]
+            if removable:
+                to_remove = st.selectbox(
+                    "Remove an admin", [""] + removable, key="cfg_remove_admin",
+                )
+                if to_remove and st.button("Remove", key="cfg_remove_admin_btn"):
+                    permissions.remove_admin(ws, to_remove)
+                    st.rerun()
+        else:
+            st.caption(
+                f"Signed in as {me} - not on the admin list ({', '.join(admins)}). "
+                f"Rename and Delete are hidden on the Materials tab. Ask one of "
+                f"them to add you above, or edit admins.json directly at the "
+                f"workspace root."
+            )

@@ -86,3 +86,13 @@ def add_material(ws: Workspace, name: str) -> str:
 
     _save(ws, existing + [name])
     return name
+
+
+def remove_material(ws: Workspace, name: str) -> None:
+    """Drop `name` from the registry -- matched the same normalized way
+    add_material() resolves a near-duplicate, so removing "PEEK-GF30"
+    also removes an entry saved as "peek gf30". A no-op if it was not
+    registered."""
+    key = _normalize(name)
+    remaining = [n for n in load_materials(ws) if _normalize(n) != key]
+    _save(ws, remaining)

@@ -51,8 +51,21 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
     # Oldest first, so a capped dashboard slice (below) keeps the newest runs
     # rather than whichever sorted first.
     specimens = specimens.sort_values("created_utc")
-    json_paths = [ws.root / p for p in specimens["json_path"]]
-    payloads = [read_json(p) for p in json_paths]
+    all_json_paths = [ws.root / p for p in specimens["json_path"]]
+    # The index can outlive the record it points at -- a file removed
+    # outside the app (Explorer, the share) leaves the DB row behind since
+    # nothing but a reindex touches it. Skip a specimen whose record is
+    # gone rather than let one stale row take down the whole material's
+    # export; knowledge_base.rebuild() is what actually clears it out.
+    json_paths, payloads = [], []
+    for p in all_json_paths:
+        try:
+            payloads.append(read_json(p))
+            json_paths.append(p)
+        except (FileNotFoundError, OSError):
+            continue
+    if not payloads:
+        return {"xlsx": None, "html": None}
 
     out_dir = ws.root / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)

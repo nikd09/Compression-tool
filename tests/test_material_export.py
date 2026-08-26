@@ -71,3 +71,29 @@ def test_html_title_names_the_material_not_one_specimens_file(workspace, series_
     result = export_material(ws, "PEEK-GF30")
     html = result["html"].read_text(encoding="utf-8")
     assert "<title>PEEK-GF30 - Compression Results</title>" in html
+
+
+def test_survives_a_specimen_record_deleted_outside_the_app(
+    workspace, series_file, single_file
+):
+    """The index can still list a specimen whose JSON record was deleted
+    straight from disk (Explorer, the shared drive) rather than through
+    the app -- nothing but a reindex clears it out. Building the combined
+    export must skip that one record, not crash and take the whole
+    material's report down with it."""
+    ingest([series_file], workspace, material="PEEK")
+    result = ingest([single_file], workspace, material="PEEK")
+
+    # Delete one specimen's record straight off disk, index untouched --
+    # exactly what happens when someone removes a file from Explorer.
+    stale_json = next(iter(result.specimens)).json_path
+    stale_json.unlink()
+
+    ws = Workspace.at(workspace)
+    exported = export_material(ws, "PEEK")
+    assert exported["xlsx"] is not None and exported["xlsx"].exists()
+
+    book = load_workbook(exported["xlsx"], read_only=True)
+    header = next(book["Summary"].iter_rows(min_row=3, max_row=3, values_only=True))
+    # Only the 2 specimens whose records still exist -- 3 ingested, 1 deleted.
+    assert len([c for c in header[1:] if c is not None]) == 2

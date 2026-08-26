@@ -403,9 +403,15 @@ def test_manifest_lists_sources_and_specimens(workspace, series_file):
     assert all(s["n_cycles"] == 9 for s in manifest["specimens"])
 
 
-def test_material_defaults_to_the_file_stem(workspace, single_file):
-    result = ingest([single_file], workspace)
-    assert result.material == "TALCO50"
+def test_material_is_required_to_ingest(workspace, single_file):
+    """No more silent fallback to the file stem (e.g. "Mehrstufiger
+    Druckversuch Vergleichstest 2 T050LR1") -- a material name has to be
+    given explicitly to commit anything, on every entry point, not just
+    the webapp form that happens to check for one."""
+    with pytest.raises(ValueError, match="material"):
+        ingest([single_file], workspace)
+    with pytest.raises(ValueError, match="material"):
+        ingest([single_file], workspace, material="   ")
 
 
 @pytest.mark.parametrize(

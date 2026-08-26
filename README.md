@@ -584,12 +584,75 @@ falls back to deriving the list from the index itself, so the workspace's
 real data is always the floor, and only the curated ordering/dedup a saved
 file provides is what is temporarily lost.
 
-Deliberately NOT built (a possible follow-up, not needed yet): renaming or
-merging materials that are *already* fragmented in existing data. That would
-mean rewriting `material` on already-persisted specimen JSONs and, because
-`specimen_id` is partly derived from material, changing IDs that Compare's
-session state and the SQLite index already reference -- real, but higher-risk
-work, worth doing only once an actual case of existing fragmentation shows up.
+**A material name is required to ingest, on every entry point.** `ingest()`
+used to fall back to the file stem (`_infer_material()`) when no material was
+given -- harmless for `preview()`, where it only ever labels a chart that is
+never written to disk, but the CLI exposed the same fallback on `ingest()`
+itself, silently. A `.xlsx` export's file name is rarely a material code
+("Mehrstufiger Druckversuch Vergleichstest 2 T050LR1" was a real one, ingested
+from the CLI without `-m`), and it is now permanent the moment it lands: the
+Materials card, the Compare legend, the `reports/<material>` file names, all
+of it. `ingest()` now raises `ValueError` rather than infer anything if
+`material` is empty; the CLI's `-m/--material` is `required=True` to match.
+The webapp form already blocked an empty Commit before this -- the CLI was the
+actual gap. Ingest also warns (non-blocking) when a typed material name looks
+like it was pasted straight from the file name rather than written as a code.
+
+**Renaming and deleting a material** (`material_admin.py`), available from
+each card on the Materials tab. Both operations edit the JSON records --
+the source of truth -- and then call `knowledge_base.rebuild()`, the same
+full drop-and-reindex-from-disk the app already uses to recover from any
+index/disk disagreement, rather than trying to hand-patch the database:
+
+- **Rename** rewrites `material` on every specimen JSON in every run folder
+  that material owns, recomputes `specimen_id` for each (it is partly derived
+  from material, so it changes with a rename), updates `run.json`, moves the
+  run folder to match the new name (best-effort -- a folder that cannot be
+  moved, e.g. a file open elsewhere, still gets everything inside it
+  correctly re-indexed under the new name; only its folder name on disk keeps
+  reading old), regenerates `reports/<material>.{xlsx,html}` under the new
+  slug and removes the stale pair under the old one, and updates
+  `materials.json`.
+- **Delete** removes every run folder that material owns (JSON records, curve
+  caches, per-run exports), its `reports/<material>.{xlsx,html}`, and its
+  `materials.json` entry. Off by default: `Raw exports/` is content-addressed
+  (the same file re-ingested under a second material name reuses the archived
+  copy), so a raw export is only ever removed if `delete_raw=True` is passed
+  AND no other remaining specimen still references it.
+
+Both are gated in the webapp by `permissions.is_admin(ws)` -- see "Who may
+rename or delete a material" below -- and Delete requires typing the exact
+material name to confirm before the button enables.
+
+**A stale index self-heals, but the app no longer crashes on it either way.**
+The SQLite index can still list a specimen whose JSON record was removed
+straight from disk (Explorer, the shared drive) rather than through the app --
+nothing but a reindex touches it otherwise. Results and `material_export.py`
+now skip a specimen whose record is missing (with a visible error naming it)
+instead of raising `FileNotFoundError` out of the whole tab, and Config gained
+a plain "Reindex from disk" button (`knowledge_base.rebuild()`) next to the
+existing per-material and overview rebuilds, for exactly this case.
+
+### Who may rename or delete a material
+
+`permissions.py` gates Rename and Delete behind `<workspace>/admins.json` --
+a plain list of OS usernames, matched against `getpass.getuser()`
+case-insensitively, the same identity `audit.py` already attributes every
+ingest to. The same pattern as `materials.json`: a small, shared,
+hand-editable file at the workspace root, not a login system.
+
+Unrestricted -- both buttons visible to everyone -- until `admins.json`
+exists. The first person to open Config's "Admin access" panel and click
+"Claim admin access for myself" seeds it with just their username; every
+visitor after that is restricted to whoever is listed, manageable from the
+same panel by an existing admin (or by hand-editing `admins.json` on the
+share). This app has no authentication (see "Still to build" and the
+deployment notes) -- nothing here proves who is actually at the keyboard,
+only what the OS happens to report. It exists to keep the many people who
+only read from ever seeing the buttons, and to keep an accidental click from
+a casual visitor from renaming or deleting a shared material -- not to stop
+someone deliberately editing the file or running as another account. Real
+per-person enforcement needs the app hosted behind corporate SSO.
 
 ### Concurrent ingest: the filesystem decides who owns a run folder
 

@@ -132,6 +132,21 @@ def _material_picker(ws: Workspace) -> str:
     return choice or ""
 
 
+def _looks_like_a_filename(material: str, uploaded) -> bool:
+    """True if `material` is basically one of the uploaded files' own
+    names, not a material code -- the export's file name (something like
+    "Mehrstufiger Druckversuch Vergleichstest 2 T050LR1") typed straight
+    into the Material field, unedited, is exactly what turns into a
+    Materials card nobody can read at a glance and that everyone still has
+    to guess the right short name for in Compare. Length is the tell: a
+    real material code is short; a file name pasted whole is not."""
+    if not material or len(material) < 20:
+        return False
+    stems = {Path(f.name).stem.casefold() for f in uploaded}
+    key = material.casefold()
+    return any(key == stem or stem in key or key in stem for stem in stems)
+
+
 def _sweep_stale_uploads() -> None:
     """Best-effort cleanup for upload directories a crashed session never
     got to remove itself -- a browser tab killed mid-upload, a server
@@ -325,6 +340,15 @@ def render(ws: Workspace) -> None:
             "thickness h0, not just that h0 gives a plausible modulus. Left "
             "unchecked, strain and modulus stay provisional and carry a "
             "critical warning.",
+        )
+
+    if uploaded and _looks_like_a_filename(material, uploaded):
+        st.warning(
+            f"'{material}' looks like the export's file name, not a material "
+            f"code. A short code (e.g. 'T050LR1') reads far better as a "
+            f"Materials card and in Compare's legend - the file name itself "
+            f"is already kept, in full, on every specimen record. This can "
+            f"still be fixed after Commit, from the Materials tab."
         )
 
     st.divider()
