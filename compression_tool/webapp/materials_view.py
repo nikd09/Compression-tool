@@ -58,7 +58,7 @@ _CARD_CSS = """
   font-size:1.05rem!important; font-weight:650!important; letter-spacing:-.012em!important;
   color:var(--text-color,inherit)!important;
 }
-.st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#2a78d6)!important; }
+.st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#d6006e)!important; }
 
 .st-key-materials_grid [class*="st-key-mat_card_"]{
   padding:.85rem 1rem!important;
@@ -67,10 +67,14 @@ _CARD_CSS = """
 .st-key-materials_grid [class*="st-key-mat_card_"]:hover{
   box-shadow:0 8px 22px rgba(0,0,0,.10);
   transform:translateY(-2px);
-  border-color:var(--primary-color,#2a78d6);
+  border-color:var(--primary-color,#d6006e);
 }
 .st-key-materials_grid [data-testid="stMetricValue"]{ font-size:1.3rem!important; }
 .st-key-materials_grid [data-testid="stMetricLabel"]{ font-size:.66rem!important; }
+@media (prefers-color-scheme: dark){
+  .st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#e0227e)!important; }
+  .st-key-materials_grid [class*="st-key-mat_card_"]:hover{ border-color:var(--primary-color,#e0227e); }
+}
 </style>
 """
 
@@ -124,9 +128,14 @@ def render(ws: Workspace) -> None:
                 with added_col:
                     added = row["dateAdded"]
                     added = added[:10] if len(added) >= 10 else added
+                    # No "Added " prefix and white-space:nowrap -- with the
+                    # label there, "Added 2026-08-26" wrapped inside this
+                    # narrow a column (a grid cell now, not a full-width row),
+                    # dropping the date onto its own second line. The date
+                    # alone, forced onto one line, is what actually fits.
                     st.markdown(
                         f'<div style="text-align:right;font-size:.72rem;opacity:.6;'
-                        f'margin-top:.55rem">Added {html.escape(added)}</div>',
+                        f'margin-top:.55rem;white-space:nowrap">{html.escape(added)}</div>',
                         unsafe_allow_html=True,
                     )
                 # 2x2, not a single row of 4: a card this narrow (a grid

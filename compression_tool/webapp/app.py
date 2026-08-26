@@ -62,25 +62,55 @@ NAV_ITEMS = [
 
 _NAV_CSS = """
 <style>
-  section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]
-    div.stButton > button{
-    justify-content:flex-start; border:none; background:transparent;
-    font-weight:560; padding:.4rem .6rem; border-radius:.5rem;
-    box-shadow:none;
-  }
+  /* The nav row's own button -- flat by default, an accent bar and a
+     slight rightward shift on hover, the same bar solid and already "in"
+     for whichever page is active. The first rule this replaced targeted
+     [data-testid="stVerticalBlockBorderWrapper"] wrapping the button,
+     which -- like every other use of that testid in this app -- turned out
+     to not exist anywhere in this Streamlit version's DOM (see README,
+     "Materials cards hover"); it never matched anything, so removing it
+     changes nothing about what actually painted before this. */
   section[data-testid="stSidebar"] div.stButton > button{
-    justify-content:flex-start; border:1px solid transparent; background:transparent;
-    color:var(--text-color,inherit); font-weight:560; padding:.4rem .6rem;
-    border-radius:.5rem; box-shadow:none; width:100%;
+    position:relative; justify-content:flex-start; border:1px solid transparent;
+    background:transparent; color:var(--text-color,inherit); font-weight:560;
+    padding:.5rem .6rem .5rem .7rem; border-radius:.5rem; box-shadow:none;
+    width:100%; transition:background-color .16s ease, padding-left .16s ease,
+    color .16s ease;
+  }
+  section[data-testid="stSidebar"] div.stButton > button::before{
+    content:""; position:absolute; left:-2px; top:20%; bottom:20%; width:3px;
+    border-radius:2px; background:#d6006e;
+    transform:scaleY(0); transition:transform .18s ease;
   }
   section[data-testid="stSidebar"] div.stButton > button:hover{
-    background:rgba(127,127,127,.10); border-color:transparent;
+    background:rgba(127,127,127,.10); border-color:transparent; padding-left:.95rem;
+  }
+  section[data-testid="stSidebar"] div.stButton > button:hover::before{
+    transform:scaleY(.6);
   }
   section[data-testid="stSidebar"] div.stButton > button[kind="primary"]{
-    background:rgba(42,120,214,.12); color:var(--primary-color,#2a78d6);
+    background:rgba(214,0,110,.12); color:#d6006e;
     border-color:transparent;
   }
-  section[data-testid="stSidebar"] div.stButton > button p{font-size:.92rem;}
+  section[data-testid="stSidebar"] div.stButton > button[kind="primary"]::before{
+    transform:scaleY(1);
+  }
+  section[data-testid="stSidebar"] div.stButton > button p{
+    font-size:.92rem; transition:transform .16s ease;
+  }
+  section[data-testid="stSidebar"] div.stButton > button:hover p{
+    transform:translateX(1px);
+  }
+  /* EQYO's own dark surface pairs a brighter magenta step with it for
+     contrast -- see .streamlit/config.toml's [theme.dark], the same pair. */
+  @media (prefers-color-scheme: dark){
+    section[data-testid="stSidebar"] div.stButton > button::before{
+      background:#e0227e;
+    }
+    section[data-testid="stSidebar"] div.stButton > button[kind="primary"]{
+      background:rgba(224,34,126,.18); color:#e0227e;
+    }
+  }
 </style>
 """
 

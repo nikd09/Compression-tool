@@ -19,7 +19,7 @@ def render(ws: Workspace) -> None:
     st.header("Config")
     st.caption("What a run was actually ingested with, traced back per run, not the app's current form defaults.")
 
-    with st.container(border=True):
+    with st.container(border=True, key="card_index"):
         st.markdown("##### Index")
         st.caption(
             "The database every tab reads from, built from the JSON records "
@@ -46,7 +46,7 @@ def render(ws: Workspace) -> None:
     chosen = st.selectbox("Run", manifests, format_func=lambda m: labels[m])
     manifest = read_json(chosen)
 
-    with st.container(border=True):
+    with st.container(border=True, key="card_run_summary"):
         st.subheader(manifest.get("material", "-"))
         c1, c2, c3 = st.columns(3)
         c1.metric("Specimens", len(manifest.get("specimens", [])))
@@ -66,7 +66,7 @@ def render(ws: Workspace) -> None:
     reports_dir = ws.root / "reports"
     xlsx_path = reports_dir / f"{slugify(material)}.xlsx"
     html_path = reports_dir / f"{slugify(material)}.html"
-    with st.container(border=True):
+    with st.container(border=True, key="card_material_export"):
         st.markdown("##### Combined across every run of this material")
         st.caption(
             "One workbook and one standalone dashboard (open the .html file "
@@ -87,7 +87,7 @@ def render(ws: Workspace) -> None:
                 st.warning(f"No indexed specimens found for {material!r}.")
 
     overview_path = ws.root / "reports" / "_Overview.html"
-    with st.container(border=True):
+    with st.container(border=True, key="card_overview_export"):
         st.markdown("##### Overview across every material")
         st.caption(
             "One page listing every material in this workspace, with its "
@@ -109,7 +109,7 @@ def render(ws: Workspace) -> None:
 
     entries = audit.list_entries(ws, limit=15)
     if entries:
-        with st.container(border=True):
+        with st.container(border=True, key="card_recent_activity"):
             st.markdown("##### Recent activity")
             st.caption(
                 "Who ingested what, and when: one record per Commit, "
@@ -182,7 +182,7 @@ def _render_admin_access(ws: Workspace) -> None:
     permissions.py for what this does and does not actually enforce (a
     shared, hand-editable allowlist keyed on the OS username, not a login
     system)."""
-    with st.container(border=True):
+    with st.container(border=True, key="card_admin_access"):
         st.markdown("##### Admin access")
         me = permissions.current_user()
         if not permissions.admins_configured(ws):

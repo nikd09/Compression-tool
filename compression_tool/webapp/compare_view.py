@@ -84,7 +84,7 @@ def render(ws: Workspace) -> None:
             if default_material else []
         )
         with cols[i % len(cols)]:
-            with st.container(border=True):
+            with st.container(border=True, key=f"card_group_{i}"):
                 st.markdown(
                     f'{dot(i)}<span style="font-size:.72rem;font-weight:700;'
                     f'letter-spacing:.06em;text-transform:uppercase;opacity:.65">'

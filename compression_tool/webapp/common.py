@@ -51,15 +51,36 @@ _POLISH = """
   div[data-testid="stMetricLabel"]{font-size:.72rem;text-transform:uppercase;
     letter-spacing:.06em;font-weight:650;opacity:.72;}
 
-  /* Bordered containers (st.container(border=True)) -- the one card style
-     used everywhere a view groups related controls, matching the dashboard
-     .cell surfaces so the whole app reads as one system. */
-  div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > div[data-testid="stVerticalBlock"]){
+  /* Bordered containers (st.container(border=True, key="card_...")) -- the
+     one card style used everywhere a view groups related controls, matching
+     the dashboard's own .cell surfaces so the whole app reads as one system.
+
+     This used to target [data-testid="stVerticalBlockBorderWrapper"], which
+     turned out to not exist ANYWHERE in this Streamlit version's rendered
+     DOM (confirmed live) -- border=True now styles the stVerticalBlock
+     itself, via an auto-generated class shared identically by every bordered
+     container, not a stable thing to select. `key=` is: Streamlit still
+     guarantees a stable `st-key-<key>` class on that element regardless of
+     its own internal markup churn. Every st.container(border=True) call
+     site that wants this treatment opts in with a key starting "card_" --
+     compare_view.py, config_view.py, ingest_view.py and materials_view.py
+     (which layers its own richer, clickable-card styling in _CARD_CSS on
+     top of this) all follow that convention now; a bordered container added
+     later without one simply will not pick this up, the same way it never
+     did before this fix -- see README, "Materials cards hover". */
+  [class*="st-key-card_"]{
     border-radius:.7rem!important;
-    transition:box-shadow .15s ease, border-color .15s ease;
+    transition:box-shadow .18s ease, border-color .18s ease;
   }
-  div[data-testid="stVerticalBlockBorderWrapper"]:hover{
-    box-shadow:0 2px 10px rgba(0,0,0,.05);
+  [class*="st-key-card_"]:hover{
+    box-shadow:0 3px 14px rgba(0,0,0,.07);
+    border-color:rgba(214,0,110,.45)!important;
+  }
+  @media (prefers-color-scheme: dark){
+    [class*="st-key-card_"]:hover{
+      box-shadow:0 3px 14px rgba(0,0,0,.28);
+      border-color:rgba(224,34,126,.55)!important;
+    }
   }
 
   /* File uploader: a calmer dashed drop-zone instead of the default block.
@@ -72,11 +93,11 @@ _POLISH = """
      browser's prefers-color-scheme regardless of [theme] base. */
   [data-testid="stFileUploaderDropzone"]{
     border-radius:.7rem!important;
-    background:color-mix(in srgb, var(--secondary-background-color, #f2f1ed) 55%, transparent)!important;
+    background:color-mix(in srgb, var(--secondary-background-color, #f5eef1) 55%, transparent)!important;
   }
   @media (prefers-color-scheme: dark){
     [data-testid="stFileUploaderDropzone"]{
-      background:color-mix(in srgb, var(--secondary-background-color, #232322) 55%, transparent)!important;
+      background:color-mix(in srgb, var(--secondary-background-color, #241521) 55%, transparent)!important;
     }
   }
 
@@ -94,10 +115,10 @@ _POLISH = """
      above (confirmed empty via DOM inspection) -- same fix, same reasoning. */
   .ct-step{display:inline-flex;align-items:center;justify-content:center;
     width:1.55rem;height:1.55rem;border-radius:50%;
-    background:var(--primary-color, #2a78d6);color:#fff;font-weight:700;font-size:.82rem;
+    background:var(--primary-color, #d6006e);color:#fff;font-weight:700;font-size:.82rem;
     margin-right:.55rem;flex:none;}
   @media (prefers-color-scheme: dark){
-    .ct-step{background:var(--primary-color, #3987e5);}
+    .ct-step{background:var(--primary-color, #e0227e);}
   }
   .ct-step-head{display:flex;align-items:center;gap:.1rem;margin-bottom:.15rem;}
   .ct-step-head h3{margin:0!important;}
@@ -125,29 +146,55 @@ def dot(i: int) -> str:
 
 
 def utm_press_html(caption: str = "Analysing…") -> str:
-    """A small looping animation of a UTM crosshead compressing a specimen --
-    shown in a `st.empty()` placeholder around a call that blocks the script
-    (`ingest()`, `preview()`), since that is the one place a CSS animation
-    can run independently of Python: once this markup has actually reached
-    the browser, the animation keeps looping in its own render loop for as
-    long as the blocking call takes, with no further communication from the
-    (busy) Python side needed to keep it moving.
+    """A large, centered looping animation of a UTM crosshead compressing a
+    specimen -- shown in a `st.empty()` placeholder around a call that
+    blocks the script (`ingest()`, `preview()`), since that is the one place
+    a CSS animation can run independently of Python: once this markup has
+    actually reached the browser, the animation keeps looping in its own
+    render loop for as long as the blocking call takes, with no further
+    communication from the (busy) Python side needed to keep it moving.
 
-    The stroke shape doubles as a hint at what the tool is analysing rather
-    than a generic spinner: down-hold-up, not a smooth back-and-forth --
-    echoing the load-dwell-unload cycle shape every specimen this tool
-    ingests actually goes through.
+    Sized as the centrepiece of whatever moment it appears in (Ingest's
+    Preview/Commit), not a small inline spinner beside other content -- a
+    big, unmissable stand-in for "the machine is working" while nothing else
+    on the page can update. The stroke shape doubles as a hint at what the
+    tool is analysing rather than a generic spinner: down-hold-up, not a
+    smooth back-and-forth -- echoing the load-dwell-unload cycle shape
+    every specimen this tool ingests actually goes through.
     """
     return f"""
 <div class="ct-utm-wrap">
   <style>
-  .ct-utm-wrap{{display:flex;align-items:center;gap:1rem;padding:.9rem 0;}}
-  .ct-utm-svg{{flex:none;width:64px;height:64px;overflow:visible;}}
-  .ct-utm-cap{{font-size:.92rem;font-weight:600;opacity:.82;}}
+  .ct-utm-wrap{{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:1.1rem;padding:2.6rem 1rem;border-radius:1rem;
+    background:color-mix(in srgb, var(--secondary-background-color,#f2f1ed) 45%, transparent);
+  }}
+  @media (prefers-color-scheme: dark){{
+    .ct-utm-wrap{{background:color-mix(in srgb, var(--secondary-background-color,#232322) 55%, transparent);}}
+  }}
+  .ct-utm-svg{{flex:none;width:220px;height:220px;overflow:visible;
+    filter:drop-shadow(0 6px 18px rgba(0,0,0,.12));}}
+  .ct-utm-cap{{font-size:1.15rem;font-weight:650;opacity:.85;letter-spacing:-.01em;}}
   .ct-utm-head{{animation:ctUtmPress 1.8s cubic-bezier(.5,0,.5,1) infinite;
     transform-box:fill-box;transform-origin:50% 0%;}}
   .ct-utm-specimen{{animation:ctUtmSquash 1.8s cubic-bezier(.5,0,.5,1) infinite;
     transform-box:fill-box;transform-origin:50% 100%;}}
+  .ct-utm-glow{{animation:ctUtmGlow 1.8s cubic-bezier(.5,0,.5,1) infinite;
+    transform-box:fill-box;transform-origin:50% 100%;}}
+  .ct-utm-specimen, .ct-utm-glow{{fill:#d6006e;}}
+  /* var(--text-color) does not actually resolve in this Streamlit build
+     (confirmed empty via DOM inspection, same gap as --primary-color and
+     --secondary-background-color elsewhere in this file) -- its fallback,
+     a near-black, is what always rendered, on every theme. Harmless in
+     light mode; in dark mode it drew the whole machine frame as
+     near-black on a near-black card, effectively invisible. Explicit
+     per-theme fill on this class is the actual fix, not the var(). */
+  .ct-utm-ink{{fill:#0b0b0b;}}
+  @media (prefers-color-scheme: dark){{
+    .ct-utm-specimen, .ct-utm-glow{{fill:#e0227e;}}
+    .ct-utm-ink{{fill:#f4f2f1;}}
+  }}
   @keyframes ctUtmPress{{
     0%{{transform:translateY(0)}}
     35%{{transform:translateY(30px)}}
@@ -162,19 +209,26 @@ def utm_press_html(caption: str = "Analysing…") -> str:
     65%{{transform:scaleY(.78)}}
     100%{{transform:scaleY(1)}}
   }}
+  @keyframes ctUtmGlow{{
+    0%{{opacity:.18;transform:scaleX(1)}}
+    35%{{opacity:.5;transform:scaleX(1.35)}}
+    50%{{opacity:.6;transform:scaleX(1.42)}}
+    65%{{opacity:.5;transform:scaleX(1.35)}}
+    100%{{opacity:.18;transform:scaleX(1)}}
+  }}
   @media (prefers-reduced-motion: reduce){{
-    .ct-utm-head, .ct-utm-specimen{{animation:none;}}
+    .ct-utm-head, .ct-utm-specimen, .ct-utm-glow{{animation:none;}}
   }}
   </style>
   <svg class="ct-utm-svg" viewBox="0 0 100 100" role="img" aria-label="Compressing specimen">
-    <rect x="14" y="6" width="8" height="82" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".35"/>
-    <rect x="78" y="6" width="8" height="82" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".35"/>
-    <rect x="10" y="2" width="80" height="8" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".55"/>
-    <rect x="30" y="80" width="40" height="8" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".55"/>
-    <rect class="ct-utm-specimen" x="38" y="62" width="24" height="18" rx="2"
-      fill="var(--primary-color,#2a78d6)"/>
+    <ellipse class="ct-utm-glow" cx="50" cy="84" rx="20" ry="4"/>
+    <rect class="ct-utm-ink" x="14" y="6" width="8" height="82" rx="2" opacity=".35"/>
+    <rect class="ct-utm-ink" x="78" y="6" width="8" height="82" rx="2" opacity=".35"/>
+    <rect class="ct-utm-ink" x="10" y="2" width="80" height="8" rx="2" opacity=".55"/>
+    <rect class="ct-utm-ink" x="30" y="80" width="40" height="8" rx="2" opacity=".55"/>
+    <rect class="ct-utm-specimen" x="38" y="62" width="24" height="18" rx="2"/>
     <g class="ct-utm-head">
-      <rect x="26" y="24" width="48" height="10" rx="2" fill="var(--text-color,#0b0b0b)" opacity=".78"/>
+      <rect class="ct-utm-ink" x="26" y="24" width="48" height="10" rx="2" opacity=".78"/>
     </g>
   </svg>
   <span class="ct-utm-cap">{caption}</span>

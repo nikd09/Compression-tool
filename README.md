@@ -554,9 +554,27 @@ container on the page (and not something to hardcode -- it is a build
 implementation detail, not a stable selector). Materials' cards work around
 that by giving each card its own `st.container(..., key=...)`, which
 Streamlit *does* still expose as a stable `st-key-<key>` class on that same
-element regardless of Streamlit-internal DOM changes -- the fix is scoped to
-Materials for now; `common.py`'s app-wide rule is still the original,
-currently-inert selector.
+element regardless of Streamlit-internal DOM changes.
+
+That fix is now app-wide, not just Materials: every other `st.container(
+border=True)` in the app (Config's info panels, each Compare group, each
+Ingest preview card) has a `key="card_..."` too, and `common.py`'s
+`_POLISH` targets `[class*="st-key-card_"]` instead of the dead testid --
+one hover rule (a shadow lift, a blue-tinted border), shared by every one of
+them. Materials keeps its own richer card CSS layered on top (grid layout,
+a bigger clickable title) rather than merging into the shared rule, since it
+is deliberately a different kind of card -- keyed `mat_card_<slug>`, outside
+the `card_` convention, so the two never collide. The one thing this buys
+back is scoped: a bordered container added later still needs its own
+`key="card_..."` to opt in -- there is no way, in this Streamlit version, to
+catch every `border=True` container automatically without one.
+
+The left nav picked up the same kind of polish along the way: each item now
+gets a thin accent bar that grows in on hover and sits solid on whichever
+page is active, plus a slight rightward shift and icon nudge on hover
+(`app.py`'s `_NAV_CSS`) -- and lost a second dead rule in the process, one
+that targeted the same nonexistent `stVerticalBlockBorderWrapper` testid for
+no visible effect either.
 
 ### The controlled material list: one canonical spelling per material
 

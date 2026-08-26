@@ -217,11 +217,11 @@ def _show_warning(w: dict) -> None:
 
 
 def _render_preview_cards(rows: list[dict]) -> None:
-    for r in rows:
+    for i, r in enumerate(rows):
         if "error" in r:
             st.error(f"{Path(r['source_file']).name}: {r['error']}")
             continue
-        with st.container(border=True):
+        with st.container(border=True, key=f"card_preview_{i}"):
             st.subheader(r["label"])
             c = st.columns(5)
             c[0].metric("Cycles", r["n_cycles"])
