@@ -6,6 +6,8 @@ one material does not have to drag its whole mean into the comparison."""
 
 from __future__ import annotations
 
+import html
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -272,8 +274,14 @@ def render(ws: Workspace) -> None:
 
     with st.expander("Group membership and underlying rows"):
         for i, g in enumerate(groups):
+            # html.escape on the two pieces that are not fixed templates:
+            # the group name (typed freely, above) and each specimen's own
+            # material/label (free text at Ingest time, persisted). Neither
+            # is sanitised anywhere upstream, and this line is the one place
+            # in Compare that puts either through unsafe_allow_html.
+            members = ", ".join(html.escape(option_label(s)) for s in g["ids"])
             st.markdown(
-                f"{dot(i)}**{g['name']}**: " + ", ".join(option_label(s) for s in g["ids"]),
+                f"{dot(i)}**{html.escape(g['name'])}**: " + members,
                 unsafe_allow_html=True,
             )
         st.dataframe(

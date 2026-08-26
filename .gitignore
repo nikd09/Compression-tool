@@ -34,6 +34,7 @@ reports/
 audit/
 knowledge_base.db
 materials.json
+admins.json
 
 # Real instrument exports used by the regression pins. Drop them in locally;
 # they are not redistributed here.

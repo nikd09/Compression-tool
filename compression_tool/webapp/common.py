@@ -334,7 +334,23 @@ def workspace_picker() -> Workspace:
 def connect_readonly(ws: Workspace):
     """A connection for browsing, or None if this workspace has nothing
     indexed yet. Read-only views say so plainly rather than create an empty
-    database just by being opened."""
+    database just by being opened.
+
+    A schema mismatch (the index was built under an older/newer
+    SCHEMA_VERSION than this code) shows a clear message and halts the
+    script with `st.stop()` -- not returning None -- so it reads as its
+    own error, not silently as "nothing indexed yet" (every caller's own
+    `if conn is None` fallback is exactly that message, which would be
+    actively misleading here: this workspace is not empty, its index just
+    needs rebuilding). This is the one call site that catches it: Materials'
+    and Config's own knowledge_base.connect() calls (material_export.py,
+    reports_overview.py) are not routed through here and would still raise
+    it raw, as an ordinary Streamlit traceback.
+    """
     if not ws.db_path.exists():
         return None
-    return knowledge_base.connect(ws.db_path)
+    try:
+        return knowledge_base.connect(ws.db_path)
+    except knowledge_base.SchemaVersionMismatch as exc:
+        st.error(str(exc))
+        st.stop()

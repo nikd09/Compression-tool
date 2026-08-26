@@ -73,14 +73,45 @@ INDEX_DDL = (
 # ----------------------------------------------------------------------------
 
 
+class SchemaVersionMismatch(RuntimeError):
+    """The index on disk was built under a different SCHEMA_VERSION than
+    this code expects. `ensure_schema()`'s CREATE TABLE IF NOT EXISTS never
+    migrates an existing table's columns -- left alone, a real mismatch
+    (a column added or renamed since) would surface later as a raw
+    sqlite3.OperationalError from whichever INSERT first names a column
+    the old table does not have, nowhere near here and with no hint that a
+    rebuild is what it actually needs. rebuild() (drop then recreate) is
+    the fix -- it is unaffected by this check, it opens its own connection
+    and does not call connect()."""
+
+
 def connect(db_path: str | Path) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _check_schema_version(conn)
     ensure_schema(conn)
     return conn
+
+
+def _check_schema_version(conn: sqlite3.Connection) -> None:
+    try:
+        row = conn.execute(
+            'SELECT "value" FROM meta WHERE "key" = ?', ("schema_version",)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return  # no meta table yet -- a brand-new database, nothing to check
+    if row is None or row[0] == str(SCHEMA_VERSION):
+        return
+    raise SchemaVersionMismatch(
+        f"This index was built under schema {row[0]!r}; this version of the "
+        f"tool expects schema {SCHEMA_VERSION!r}. Rebuild the index from "
+        f"disk (Config -> \"Reindex from disk\", or `compression-tool "
+        f"rebuild` on the CLI) rather than using it as it is -- the JSON "
+        f"records under Records/ are unaffected either way."
+    )
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -304,6 +335,7 @@ def cycles_for_materials(conn: sqlite3.Connection, names: Iterable[str]) -> pd.D
 
 __all__ = [
     "connect",
+    "SchemaVersionMismatch",
     "ensure_schema",
     "rebuild",
     "upsert_payload",

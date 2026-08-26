@@ -8,6 +8,8 @@ Most of these tests exist to keep that true.
 
 from __future__ import annotations
 
+import pytest
+
 from compression_tool import Workspace, ingest, rebuild_index
 from compression_tool import knowledge_base as kb
 from compression_tool.schema import CYCLE_COLUMNS, SPECIMEN_FIELDS
@@ -209,3 +211,38 @@ def test_notes_survive_into_the_index(workspace, single_file):
         assert row["displacement_channel"] == "Sonder LAA"
     finally:
         conn.close()
+
+
+def test_connect_rejects_a_mismatched_schema_version(workspace, series_file):
+    """CREATE TABLE IF NOT EXISTS (ensure_schema) never migrates an
+    existing table's columns -- an index built under a different
+    SCHEMA_VERSION has to be caught explicitly, or it fails later as a
+    raw, confusing sqlite3.OperationalError the first time some INSERT
+    names a column the old table does not have."""
+    result = ingest([series_file], workspace, material="PEEK")
+    conn = kb.connect(result.workspace.db_path)
+    conn.execute(
+        'UPDATE meta SET "value" = ? WHERE "key" = ?', ("999", "schema_version")
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(kb.SchemaVersionMismatch, match="999"):
+        kb.connect(result.workspace.db_path)
+
+
+def test_rebuild_recovers_from_a_mismatched_schema_version(workspace, series_file):
+    """rebuild() is the documented fix for exactly this -- it drops and
+    recreates the schema itself rather than calling connect(), so it must
+    never be blocked by the same check connect() enforces."""
+    result = ingest([series_file], workspace, material="PEEK")
+    conn = kb.connect(result.workspace.db_path)
+    conn.execute(
+        'UPDATE meta SET "value" = ? WHERE "key" = ?', ("999", "schema_version")
+    )
+    conn.commit()
+    conn.close()
+
+    assert rebuild_index(result.workspace) == 2
+    conn = kb.connect(result.workspace.db_path)  # no longer raises
+    conn.close()
