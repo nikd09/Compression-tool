@@ -74,12 +74,12 @@ _POLISH = """
   }
   [class*="st-key-card_"]:hover{
     box-shadow:0 3px 14px rgba(0,0,0,.07);
-    border-color:rgba(214,0,110,.45)!important;
+    border-color:rgba(42,120,214,.45)!important;
   }
   @media (prefers-color-scheme: dark){
     [class*="st-key-card_"]:hover{
       box-shadow:0 3px 14px rgba(0,0,0,.28);
-      border-color:rgba(224,34,126,.55)!important;
+      border-color:rgba(57,135,229,.55)!important;
     }
   }
 
@@ -115,10 +115,10 @@ _POLISH = """
      above (confirmed empty via DOM inspection) -- same fix, same reasoning. */
   .ct-step{display:inline-flex;align-items:center;justify-content:center;
     width:1.55rem;height:1.55rem;border-radius:50%;
-    background:var(--primary-color, #d6006e);color:#fff;font-weight:700;font-size:.82rem;
+    background:var(--primary-color, #2a78d6);color:#fff;font-weight:700;font-size:.82rem;
     margin-right:.55rem;flex:none;}
   @media (prefers-color-scheme: dark){
-    .ct-step{background:var(--primary-color, #e0227e);}
+    .ct-step{background:var(--primary-color, #3987e5);}
   }
   .ct-step-head{display:flex;align-items:center;gap:.1rem;margin-bottom:.15rem;}
   .ct-step-head h3{margin:0!important;}
@@ -154,25 +154,44 @@ def utm_press_html(caption: str = "Analysing…") -> str:
     render loop for as long as the blocking call takes, with no further
     communication from the (busy) Python side needed to keep it moving.
 
-    Sized as the centrepiece of whatever moment it appears in (Ingest's
-    Preview/Commit), not a small inline spinner beside other content -- a
-    big, unmissable stand-in for "the machine is working" while nothing else
-    on the page can update. The stroke shape doubles as a hint at what the
-    tool is analysing rather than a generic spinner: down-hold-up, not a
-    smooth back-and-forth -- echoing the load-dwell-unload cycle shape
-    every specimen this tool ingests actually goes through.
+    Rendered as a fixed, full-viewport overlay -- not inline content where
+    it landed in the page -- centred regardless of scroll position or
+    screen size: this used to sit right where the triggering button was,
+    which on a long form (Ingest's Preview/Commit) could be well below the
+    fold, invisible until someone scrolled down to it. `position:fixed` on
+    the backdrop is what actually fixes that; centring an inline element
+    with a scroll-into-view call would only have chased the symptom on one
+    viewport size and broken on the next.
+
+    The card itself is still the centrepiece of whatever moment it appears
+    in -- a big, unmissable stand-in for "the machine is working" while
+    nothing else on the page can update. The stroke shape doubles as a hint
+    at what the tool is analysing rather than a generic spinner:
+    down-hold-up, not a smooth back-and-forth -- echoing the
+    load-dwell-unload cycle shape every specimen this tool ingests actually
+    goes through.
     """
     return f"""
+<div class="ct-utm-overlay">
 <div class="ct-utm-wrap">
   <style>
+  .ct-utm-overlay{{
+    position:fixed; inset:0; z-index:99999;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(8,8,8,.45);
+    animation:ctUtmFadeIn .15s ease;
+  }}
   .ct-utm-wrap{{
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:1.1rem;padding:2.6rem 1rem;border-radius:1rem;
-    background:color-mix(in srgb, var(--secondary-background-color,#f2f1ed) 45%, transparent);
+    gap:1.1rem;padding:2.8rem 2.4rem;border-radius:1.1rem;
+    max-width:min(92vw,440px);
+    background:#f9f9f7;
+    box-shadow:0 24px 64px rgba(0,0,0,.35);
   }}
   @media (prefers-color-scheme: dark){{
-    .ct-utm-wrap{{background:color-mix(in srgb, var(--secondary-background-color,#232322) 55%, transparent);}}
+    .ct-utm-wrap{{background:#1a1a19;}}
   }}
+  @keyframes ctUtmFadeIn{{ from{{opacity:0}} to{{opacity:1}} }}
   .ct-utm-svg{{flex:none;width:220px;height:220px;overflow:visible;
     filter:drop-shadow(0 6px 18px rgba(0,0,0,.12));}}
   .ct-utm-cap{{font-size:1.15rem;font-weight:650;opacity:.85;letter-spacing:-.01em;}}
@@ -182,7 +201,7 @@ def utm_press_html(caption: str = "Analysing…") -> str:
     transform-box:fill-box;transform-origin:50% 100%;}}
   .ct-utm-glow{{animation:ctUtmGlow 1.8s cubic-bezier(.5,0,.5,1) infinite;
     transform-box:fill-box;transform-origin:50% 100%;}}
-  .ct-utm-specimen, .ct-utm-glow{{fill:#d6006e;}}
+  .ct-utm-specimen, .ct-utm-glow{{fill:#2a78d6;}}
   /* var(--text-color) does not actually resolve in this Streamlit build
      (confirmed empty via DOM inspection, same gap as --primary-color and
      --secondary-background-color elsewhere in this file) -- its fallback,
@@ -192,7 +211,7 @@ def utm_press_html(caption: str = "Analysing…") -> str:
      per-theme fill on this class is the actual fix, not the var(). */
   .ct-utm-ink{{fill:#0b0b0b;}}
   @media (prefers-color-scheme: dark){{
-    .ct-utm-specimen, .ct-utm-glow{{fill:#e0227e;}}
+    .ct-utm-specimen, .ct-utm-glow{{fill:#3987e5;}}
     .ct-utm-ink{{fill:#f4f2f1;}}
   }}
   @keyframes ctUtmPress{{
@@ -232,6 +251,7 @@ def utm_press_html(caption: str = "Analysing…") -> str:
     </g>
   </svg>
   <span class="ct-utm-cap">{caption}</span>
+</div>
 </div>
 """
 

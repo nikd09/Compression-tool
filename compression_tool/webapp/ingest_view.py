@@ -216,27 +216,33 @@ def _show_warning(w: dict) -> None:
         st.info(text)
 
 
-def _render_preview_cards(rows: list[dict]) -> None:
-    for i, r in enumerate(rows):
+def _render_preview_diagnostics(rows: list[dict]) -> None:
+    """Errors and warnings only -- no per-specimen metric tiles. Preview
+    used to show cycles/holds/peak/h0/format in a small card per file, but
+    the dashboard rendered right below it (see _render_dashboard_preview)
+    already carries the same numbers in its own per-specimen header chips,
+    so a metric tile here was showing the same thing twice. What is NOT
+    in the dashboard anywhere -- a file that failed outright, or a CAUTION
+    about a discard threshold or a provisional strain basis -- still has
+    to surface here, before anyone starts reading the charts.
+
+    Still labelled per specimen, just with a plain bold line rather than a
+    full card: two specimens run under the same config often hit the same
+    warning types with only a sample index or a sample count differing,
+    which without a label between them reads as one block of text repeated
+    rather than two specimens each flagging their own thing.
+    """
+    for r in rows:
         if "error" in r:
             st.error(f"{Path(r['source_file']).name}: {r['error']}")
             continue
-        with st.container(border=True, key=f"card_preview_{i}"):
-            st.subheader(r["label"])
-            c = st.columns(5)
-            c[0].metric("Cycles", r["n_cycles"])
-            c[1].metric("Holds", r["n_holds"])
-            # Rounded, not full precision: this tile is a glance-check before
-            # commit, not the record -- Config shows the exact ingested
-            # numbers afterwards. Short enough that 5 columns fit without
-            # Streamlit ellipsis-truncating the value.
-            c[2].metric("Peak", f"{r['global_peak_mpa']:.0f} MPa" if r["global_peak_mpa"] else "-")
-            c[3].metric("h0", f"{r['h0_mm']:.2f} mm" if r["h0_mm"] else "-")
-            c[4].metric("Format", r["source_format"])
-            for w in r["warnings"]:
-                _show_warning(w)
-            for n in r["notes"]:
-                st.caption(n)
+        if not r["warnings"] and not r["notes"]:
+            continue
+        st.markdown(f"**{r['label']}**")
+        for w in r["warnings"]:
+            _show_warning(w)
+        for n in r["notes"]:
+            st.caption(n)
 
 
 def _build_dashboard_preview(
@@ -365,36 +371,32 @@ def render(ws: Workspace) -> None:
     paths = _save_uploads(uploaded)
 
     st.divider()
-    _step(3, "Preview", "Check format, cycle count and warnings before anything is written.")
+    _step(
+        3, "Preview",
+        "Check format, cycle count and warnings, then the full interactive "
+        "dashboard, before anything is written.",
+    )
     if st.button("Run preview", icon=":material/visibility:"):
-        st.session_state["ingest_preview_rows"] = _with_utm_animation(
-            "Analysing…",
-            lambda: preview(paths, cfg, gauge_length_confirmed=gauge_confirmed),
-        )
-        # A fresh preview invalidates any dashboard built from a previous
-        # one -- drop it rather than show charts for files that may no
-        # longer be the ones attached.
-        st.session_state.pop("ingest_preview_dashboard", None)
+        def _preview_and_build_dashboard() -> tuple[list[dict], dict]:
+            # One animation overlay for both calls, not two shown back to
+            # back: the dashboard is what should appear the moment this
+            # button is clicked, not behind a second button and a second
+            # wait once the small per-file cards this used to show first
+            # have already been read.
+            rows_ = preview(paths, cfg, gauge_length_confirmed=gauge_confirmed)
+            dashboard_ = _build_dashboard_preview(paths, cfg, material, gauge_confirmed)
+            return rows_, dashboard_
+
+        rows, dashboard_state = _with_utm_animation("Analysing…", _preview_and_build_dashboard)
+        st.session_state["ingest_preview_rows"] = rows
+        st.session_state["ingest_preview_dashboard"] = dashboard_state
+
     rows = st.session_state.get("ingest_preview_rows")
     if rows:
-        _render_preview_cards(rows)
-
-        if st.button(
-            "Show full interactive dashboard", icon=":material/bar_chart:",
-            help="The same charted dashboard the Results tab renders for an "
-            "already-committed material, built here from these uploaded "
-            "files directly. Nothing is written to the workspace and no "
-            "material is registered by looking, so re-checking an old "
-            "export or a throwaway trial never has to be Committed just to "
-            "be seen.",
-        ):
-            st.session_state["ingest_preview_dashboard"] = _with_utm_animation(
-                "Building dashboard…",
-                lambda: _build_dashboard_preview(paths, cfg, material, gauge_confirmed),
-            )
-        dashboard_state = st.session_state.get("ingest_preview_dashboard")
-        if dashboard_state:
-            _render_dashboard_preview(dashboard_state)
+        _render_preview_diagnostics(rows)
+    dashboard_state = st.session_state.get("ingest_preview_dashboard")
+    if dashboard_state:
+        _render_dashboard_preview(dashboard_state)
 
     st.divider()
     _step(4, "Commit", "Archives the raw file and writes the record - re-running the same file is a no-op.")

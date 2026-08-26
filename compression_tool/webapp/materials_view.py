@@ -58,7 +58,7 @@ _CARD_CSS = """
   font-size:1.05rem!important; font-weight:650!important; letter-spacing:-.012em!important;
   color:var(--text-color,inherit)!important;
 }
-.st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#d6006e)!important; }
+.st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#2a78d6)!important; }
 
 .st-key-materials_grid [class*="st-key-mat_card_"]{
   padding:.85rem 1rem!important;
@@ -67,13 +67,13 @@ _CARD_CSS = """
 .st-key-materials_grid [class*="st-key-mat_card_"]:hover{
   box-shadow:0 8px 22px rgba(0,0,0,.10);
   transform:translateY(-2px);
-  border-color:var(--primary-color,#d6006e);
+  border-color:var(--primary-color,#2a78d6);
 }
 .st-key-materials_grid [data-testid="stMetricValue"]{ font-size:1.3rem!important; }
 .st-key-materials_grid [data-testid="stMetricLabel"]{ font-size:.66rem!important; }
 @media (prefers-color-scheme: dark){
-  .st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#e0227e)!important; }
-  .st-key-materials_grid [class*="st-key-mat_card_"]:hover{ border-color:var(--primary-color,#e0227e); }
+  .st-key-materials_grid button[kind="tertiary"]:hover p{ color:var(--primary-color,#3987e5)!important; }
+  .st-key-materials_grid [class*="st-key-mat_card_"]:hover{ border-color:var(--primary-color,#3987e5); }
 }
 </style>
 """

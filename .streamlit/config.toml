@@ -2,34 +2,18 @@
 # embeds. Both palettes are the same surfaces and inks the dashboard template
 # declares, so the app around the charts does not look like a different tool.
 #
-# primaryColor/linkColor and both borderColor pairs carry Saint-Gobain's EQYO
-# brand magenta -- everywhere the app already had ONE accent colour to spend
-# (buttons, links, focus, the sidebar's active/hover state, card-hover
-# borders), it now spends it on the brand rather than a generic blue. Deliberately
-# NOT applied to chartCategoricalColors below: that palette is validated for
-# distinguishing up to 8 specimen series at once (colourblind-safe spacing,
-# the same hues the results dashboard's own template uses), and folding a
-# ninth brand colour into it risks making one specimen's series read as
-# another's -- a data-integrity concern a decorative accent colour is not
-# worth touching for.
-#
-# Light and dark deliberately read differently, on request: EQYO's own site
-# is a dark, near-black plum canvas with the magenta as a bright accent on
-# it -- exactly what dark mode replicates here (backgroundColor below is that
-# same deep plum, not this app's previous neutral almost-black). Light mode
-# stays a light, neutral working surface -- explicitly NOT black -- with the
-# same magenta doing the accent work instead of a colour wash across the
-# whole page, since a data-dense tool needs its background to stay out of the
-# way of the charts and tables sitting on it.
+# chartCategoricalColors is the validated categorical palette in its fixed slot
+# order -- the Compare view's charts therefore use the same hues, in the same
+# order, as the dashboard's specimen series.
 
 [theme]
 base = "light"
-primaryColor = "#d6006e"
-backgroundColor = "#faf8f9"
-secondaryBackgroundColor = "#f5eef1"
-textColor = "#150a10"
-linkColor = "#d6006e"
-borderColor = "#e8dde2"
+primaryColor = "#2a78d6"
+backgroundColor = "#f9f9f7"
+secondaryBackgroundColor = "#f2f1ed"
+textColor = "#0b0b0b"
+linkColor = "#2a78d6"
+borderColor = "#e1e0d9"
 showWidgetBorder = true
 baseRadius = "0.55rem"
 buttonRadius = "0.4rem"
@@ -41,30 +25,28 @@ chartCategoricalColors = [
 ]
 
 [theme.sidebar]
-backgroundColor = "#f5eef1"
-secondaryBackgroundColor = "#faf8f9"
-borderColor = "#e8dde2"
+backgroundColor = "#f2f1ed"
+secondaryBackgroundColor = "#f9f9f7"
+borderColor = "#e1e0d9"
 
-# Dark is selected, not an automatic flip: this is EQYO's own dark plum
-# surface (sampled from eqyo.com's header/background, not a generic
-# near-black), with a brighter magenta step so the same brand accent still
-# has enough contrast to read against it.
+# Dark is selected, not an automatic flip: these are the dark steps of the same
+# hues, chosen for the dark surface and validated against it.
 [theme.dark]
-backgroundColor = "#1a0e16"
-secondaryBackgroundColor = "#241521"
+backgroundColor = "#0d0d0d"
+secondaryBackgroundColor = "#1a1a19"
 textColor = "#ffffff"
-primaryColor = "#e0227e"
-linkColor = "#e0227e"
-borderColor = "#3a2434"
+primaryColor = "#3987e5"
+linkColor = "#3987e5"
+borderColor = "#2c2c2a"
 chartCategoricalColors = [
   "#3987e5", "#d95926", "#199e70", "#c98500",
   "#d55181", "#008300", "#9085e9", "#e66767",
 ]
 
 [theme.dark.sidebar]
-backgroundColor = "#241521"
-secondaryBackgroundColor = "#2e1a29"
-borderColor = "#3a2434"
+backgroundColor = "#1a1a19"
+secondaryBackgroundColor = "#232322"
+borderColor = "#2c2c2a"
 
 [server]
 # The uploader has to take a full multi-specimen export; the 200 MB default is

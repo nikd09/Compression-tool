@@ -24,7 +24,7 @@ from compression_tool.webapp import (
 )
 from compression_tool.webapp.common import polish, workspace_picker
 
-st.set_page_config(page_title="Compression Tool", page_icon="📊", layout="wide")
+st.set_page_config(page_title="CompressLab", page_icon="📊", layout="wide")
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -79,7 +79,7 @@ _NAV_CSS = """
   }
   section[data-testid="stSidebar"] div.stButton > button::before{
     content:""; position:absolute; left:-2px; top:20%; bottom:20%; width:3px;
-    border-radius:2px; background:#d6006e;
+    border-radius:2px; background:#2a78d6;
     transform:scaleY(0); transition:transform .18s ease;
   }
   section[data-testid="stSidebar"] div.stButton > button:hover{
@@ -89,7 +89,7 @@ _NAV_CSS = """
     transform:scaleY(.6);
   }
   section[data-testid="stSidebar"] div.stButton > button[kind="primary"]{
-    background:rgba(214,0,110,.12); color:#d6006e;
+    background:rgba(42,120,214,.12); color:#2a78d6;
     border-color:transparent;
   }
   section[data-testid="stSidebar"] div.stButton > button[kind="primary"]::before{
@@ -101,14 +101,14 @@ _NAV_CSS = """
   section[data-testid="stSidebar"] div.stButton > button:hover p{
     transform:translateX(1px);
   }
-  /* EQYO's own dark surface pairs a brighter magenta step with it for
-     contrast -- see .streamlit/config.toml's [theme.dark], the same pair. */
+  /* [theme.dark]'s own brighter blue step, same pair as everywhere else
+     in this file that reads var(--primary-color) -- see common.py. */
   @media (prefers-color-scheme: dark){
     section[data-testid="stSidebar"] div.stButton > button::before{
-      background:#e0227e;
+      background:#3987e5;
     }
     section[data-testid="stSidebar"] div.stButton > button[kind="primary"]{
-      background:rgba(224,34,126,.18); color:#e0227e;
+      background:rgba(57,135,229,.18); color:#3987e5;
     }
   }
 </style>

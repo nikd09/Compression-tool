@@ -1,4 +1,4 @@
-# Compression Analysis Tool
+# CompressLab
 
 Ingestion, metrics and persistence for load-controlled cyclic / multi-stage
 compression tests exported from a Zwick Z100.
