@@ -203,12 +203,41 @@ def render(ws: Workspace) -> None:
     # visible there, which the hover-only tooltip alone cannot do.
     if len(group_order) <= 3:
         layers.append(
-            base.mark_text(dy=-6, fontSize=9, fontWeight=600).encode(
+            base.mark_text(dy=-7, fontSize=11, fontWeight=600).encode(
                 x=alt.X("Cycle:O"), xOffset=alt.XOffset("group:N", sort=group_order),
                 y=alt.Y("mean:Q"), text=alt.Text("mean:Q", format=".3g"),
             )
         )
-    chart = alt.layer(*layers).properties(height=430).configure_view(stroke=None)
+    # A title, matching every chart on the Results tab having one -- this
+    # was the one chart in the app without it. Subtitle carries the unit
+    # separately, the same title/unit split the Results panels use, rather
+    # than folding it into one long title string.
+    #
+    # Font sizes bumped across the board, not only for the fullscreen/PNG
+    # view: it is the same Vega-Lite spec at every size Streamlit renders it
+    # -- inline, fullscreen, or exported -- there is no separate "large"
+    # variant to size up only there the way Results' custom SVG charts have.
+    # Fullscreen stretches the plot area by expanding width only (height
+    # stays fixed), so default-sized text reads fine inline and small once
+    # stretched; sizing up here is what keeps axis labels, the legend and
+    # the value labels legible at that width too.
+    chart = (
+        alt.layer(*layers)
+        .properties(
+            height=430,
+            title=alt.TitleParams(
+                text=metric.label, subtitle=metric.unit or None,
+                # Vega-Lite's fontWeight is a fixed enum (100-900 in steps of
+                # 100, or a named keyword) -- not an arbitrary CSS weight
+                # like the rest of this app's "650" convention uses.
+                fontSize=16, fontWeight=600, anchor="start",
+                subtitleFontSize=12, offset=16,
+            ),
+        )
+        .configure_view(stroke=None)
+        .configure_axis(labelFontSize=12, titleFontSize=13)
+        .configure_legend(labelFontSize=12, titleFontSize=13, symbolSize=110)
+    )
     st.altair_chart(chart, use_container_width=True)
     st.caption(
         "Each bar is the mean across that group's chosen specimens, for that "

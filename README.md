@@ -418,6 +418,17 @@ separate "expanded" variant to add labels to, unlike Results' custom SVG
 charts, which draw the small grid cell and the expanded dialog from the
 same function.
 
+The chart also carries a title -- the picked metric, with its unit as a
+subtitle -- matching every panel on the Results tab already having one; this
+was the one chart in the app without it. Axis, legend and value-label font
+sizes are set explicitly rather than left at Vega-Lite's defaults, for the
+same "one spec, several sizes" reason as the labels above: Streamlit's
+fullscreen expands the plot area by stretching its WIDTH only (the
+configured `height=430` does not change), so default-sized text that reads
+fine inline gets relatively smaller once stretched -- sizing the fonts up
+here is what keeps them legible at every size this same spec ever renders
+at, not just the compact inline one.
+
 ### Combined per-material export: one Excel workbook, one real dashboard, across every run
 
 `material_export.export_material(ws, material)` writes
