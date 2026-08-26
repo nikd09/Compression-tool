@@ -178,7 +178,6 @@ def utm_press_html(caption: str = "Analysing…") -> str:
   .ct-utm-overlay{{
     position:fixed; inset:0; z-index:99999;
     display:flex; align-items:center; justify-content:center;
-    background:rgba(8,8,8,.45);
     animation:ctUtmFadeIn .15s ease;
   }}
   .ct-utm-wrap{{

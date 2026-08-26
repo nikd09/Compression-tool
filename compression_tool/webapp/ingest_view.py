@@ -25,9 +25,6 @@ _UPLOAD_PREFIX = "compression_tool_upload_"
 _DASHBOARD_TEMPLATE_PATH = (
     Path(__file__).parent / "templates" / "results_dashboard.html"
 )
-# Same tuning as results_view.py / materials_view.py -- one template, three
-# call sites, all sized for the same normal, screen-realistic viewport.
-_DASHBOARD_FRAME_HEIGHT_PX = 820
 # How long an orphaned upload directory (left behind by a session that was
 # killed rather than closed normally -- a browser tab crash, a re-deployed
 # server -- is kept around before the sweep below removes it. Generous on
@@ -206,43 +203,18 @@ def _save_uploads(files) -> list[Path]:
     return paths
 
 
-def _show_warning(w: dict) -> None:
-    text = f"**{w['severity'].upper()}**: {w['message']}"
-    if w["severity"] == "critical":
-        st.error(text)
-    elif w["severity"] == "caution":
-        st.warning(text)
-    else:
-        st.info(text)
-
-
-def _render_preview_diagnostics(rows: list[dict]) -> None:
-    """Errors and warnings only -- no per-specimen metric tiles. Preview
-    used to show cycles/holds/peak/h0/format in a small card per file, but
-    the dashboard rendered right below it (see _render_dashboard_preview)
-    already carries the same numbers in its own per-specimen header chips,
-    so a metric tile here was showing the same thing twice. What is NOT
-    in the dashboard anywhere -- a file that failed outright, or a CAUTION
-    about a discard threshold or a provisional strain basis -- still has
-    to surface here, before anyone starts reading the charts.
-
-    Still labelled per specimen, just with a plain bold line rather than a
-    full card: two specimens run under the same config often hit the same
-    warning types with only a sample index or a sample count differing,
-    which without a label between them reads as one block of text repeated
-    rather than two specimens each flagging their own thing.
-    """
+def _render_preview_errors(rows: list[dict]) -> None:
+    """A file that failed to parse outright, nothing else. Preview used to
+    also surface every CAUTION/CRITICAL diagnostic (a discard threshold, a
+    provisional strain basis) here -- dropped on request: the dashboard
+    (built separately, see _build_dashboard_preview/_render_dashboard_preview)
+    is now the one place those are read from, not duplicated in two places.
+    A file that could not be analysed at all is different -- silently
+    showing nothing for it would look like Preview did nothing, not that
+    the file was rejected."""
     for r in rows:
         if "error" in r:
             st.error(f"{Path(r['source_file']).name}: {r['error']}")
-            continue
-        if not r["warnings"] and not r["notes"]:
-            continue
-        st.markdown(f"**{r['label']}**")
-        for w in r["warnings"]:
-            _show_warning(w)
-        for n in r["notes"]:
-            st.caption(n)
 
 
 def _build_dashboard_preview(
@@ -280,6 +252,58 @@ def _build_dashboard_preview(
     }
 
 
+_OPEN_IN_NEW_TAB_HEIGHT_PX = 56
+
+
+def _open_in_new_tab_button(html: str, label: str = "Open dashboard in a new tab") -> None:
+    """A button that opens `html` as a genuine new browser tab -- a real
+    page, not an iframe embedded in the Ingest page itself.
+
+    Not `st.link_button` to a `data:` URL: modern Chromium refuses that as
+    a TOP-LEVEL navigation outright (confirmed live -- a plain `<a
+    href="data:...", target="_blank">` click produces nothing, no new tab,
+    no error) -- a spoofing-prevention restriction Chrome shipped some
+    years back that specifically targets the data: scheme. blob: URLs are
+    not covered by it: this builds the page as a Blob client-side, in the
+    button's own click handler, and window.open()s the object URL that
+    creates -- confirmed live to actually open a working new tab with the
+    dashboard rendered.
+    """
+    # The dashboard template has its own <script> tags -- embedded verbatim
+    # inside a JSON string, a literal "</script" in there closes THIS
+    # function's own outer <script> tag early as far as the browser's HTML
+    # parser is concerned (it does not know or care that it is sitting
+    # inside a JS string), truncating the click handler and spilling the
+    # rest of the JS as literal page text. Splitting the sequence keeps it
+    # byte-identical once JS-parsed (\/ is just /) while no longer matching
+    # a closing tag.
+    payload = json.dumps(html).replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT")
+    snippet = f"""
+<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+<style>
+  #ct-open-dashboard{{
+    display:inline-flex; align-items:center; gap:.5rem;
+    background:#2a78d6; color:#fff; border:none; border-radius:.4rem;
+    padding:.5rem 1rem; font-size:.92rem; font-weight:600; cursor:pointer;
+  }}
+  #ct-open-dashboard:hover{{ filter:brightness(1.08); }}
+  @media (prefers-color-scheme: dark){{
+    #ct-open-dashboard{{ background:#3987e5; }}
+  }}
+</style>
+<button id="ct-open-dashboard">↗ {label}</button>
+</div>
+<script>
+  document.getElementById('ct-open-dashboard').addEventListener('click', function() {{
+    const blob = new Blob([{payload}], {{type: 'text/html'}});
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }});
+</script>
+"""
+    components.html(snippet, height=_OPEN_IN_NEW_TAB_HEIGHT_PX)
+
+
 def _render_dashboard_preview(state: dict) -> None:
     for name, why in state["skipped"]:
         st.warning(f"Skipped {name}: {why}")
@@ -292,7 +316,7 @@ def _render_dashboard_preview(state: dict) -> None:
             f"specimens; the dashboard's colour palette has a hard "
             f"{MAX_SPECIMENS}-series limit."
         )
-    components.html(state["html"], height=_DASHBOARD_FRAME_HEIGHT_PX, scrolling=True)
+    _open_in_new_tab_button(state["html"])
 
 
 def _with_utm_animation(caption: str, fn):
@@ -373,27 +397,26 @@ def render(ws: Workspace) -> None:
     st.divider()
     _step(
         3, "Preview",
-        "Check format, cycle count and warnings, then the full interactive "
-        "dashboard, before anything is written.",
+        "Check the files parse, or open the full interactive dashboard in "
+        "a new tab -- either way, before anything is written.",
     )
-    if st.button("Run preview", icon=":material/visibility:"):
-        def _preview_and_build_dashboard() -> tuple[list[dict], dict]:
-            # One animation overlay for both calls, not two shown back to
-            # back: the dashboard is what should appear the moment this
-            # button is clicked, not behind a second button and a second
-            # wait once the small per-file cards this used to show first
-            # have already been read.
-            rows_ = preview(paths, cfg, gauge_length_confirmed=gauge_confirmed)
-            dashboard_ = _build_dashboard_preview(paths, cfg, material, gauge_confirmed)
-            return rows_, dashboard_
-
-        rows, dashboard_state = _with_utm_animation("Analysing…", _preview_and_build_dashboard)
-        st.session_state["ingest_preview_rows"] = rows
-        st.session_state["ingest_preview_dashboard"] = dashboard_state
+    prev_col, dash_col = st.columns(2)
+    with prev_col:
+        if st.button("Run preview", icon=":material/visibility:", use_container_width=True):
+            st.session_state["ingest_preview_rows"] = _with_utm_animation(
+                "Analysing…",
+                lambda: preview(paths, cfg, gauge_length_confirmed=gauge_confirmed),
+            )
+    with dash_col:
+        if st.button("Open dashboard", icon=":material/open_in_new:", use_container_width=True):
+            st.session_state["ingest_preview_dashboard"] = _with_utm_animation(
+                "Building dashboard…",
+                lambda: _build_dashboard_preview(paths, cfg, material, gauge_confirmed),
+            )
 
     rows = st.session_state.get("ingest_preview_rows")
     if rows:
-        _render_preview_diagnostics(rows)
+        _render_preview_errors(rows)
     dashboard_state = st.session_state.get("ingest_preview_dashboard")
     if dashboard_state:
         _render_dashboard_preview(dashboard_state)
