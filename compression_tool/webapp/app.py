@@ -54,9 +54,9 @@ _STATIC = Path(__file__).parent / "static"
 # widget -- see common.workspace_picker's docstring.
 NAV_ITEMS = [
     ("Ingest", ":material/upload_file:", ingest_view.render),
-    ("Materials", ":material/inventory_2:", materials_view.render),
     ("Results", ":material/bar_chart:", results_view.render),
     ("Compare", ":material/compare_arrows:", compare_view.render),
+    ("Materials", ":material/inventory_2:", materials_view.render),
     ("Config", ":material/tune:", config_view.render),
 ]
 

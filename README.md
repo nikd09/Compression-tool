@@ -272,9 +272,9 @@ widget):
 | View | What it does |
 |---|---|
 | Ingest | Upload exports, adjust thresholds (including whether the test has a hold at all -- see "Hold detection" below), `preview()` before committing, then `ingest()`. |
-| Materials | One card per material -- specimens, runs, mean peak stress, mean thickness (h0), date added -- see "The Materials library" below. |
 | Results | Pick a material and its specimens (1-8); renders the grouped-bar dashboard against their real records and curve caches. |
 | Compare | Build named groups of specimens -- any specimens, from any materials, in any combination -- and overlay one metric across the groups' means (`knowledge_base.cycles_for_specimens()`). A group is not required to be a whole material. |
+| Materials | One card per material, searchable -- specimens, runs, mean peak stress, mean thickness (h0), date added -- click one to open its full combined dashboard in place. See "The Materials library" below. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
 
 ### Sharing the app with colleagues -- and the shared workspace
@@ -460,11 +460,17 @@ material was first added to the workspace (the earliest `created_utc` among
 its specimens, not its most recent activity) -- and is the single
 computation behind two presentations that always agree with each other:
 
-- **The "Materials" tab** (`materials_view.py`), in the app's left nav
-  between Ingest and Results: one card per material, the properties above,
-  the date in small type at the top right. Deliberately just the index --
-  no chart, no per-cycle detail -- Results and Compare already own the deep
-  dive, per material and across materials respectively.
+- **The "Materials" tab** (`materials_view.py`), in the app's left nav after
+  Compare: a searchable grid of cards, deliberately styled to match the
+  static page below rather than look like a third, different design --
+  the properties above, the date in small type at the top right. Clicking a
+  material's name switches the tab to that material's full combined
+  dashboard (`reports/<material>.html`, embedded the same way Results embeds
+  its own -- `streamlit.components.v1.html`), with a "← Back to Materials"
+  button to return to the grid. Deliberately no chart of its own on the grid
+  itself -- Results and Compare already own the deep dive, per material and
+  across materials respectively; this tab is the index and the door into
+  each material's real charts, not a second place to chart from.
 - **`reports_overview.build_overview(ws)`**, which writes the same rows into
   `<workspace>/reports/_Overview.html` -- fully self-contained (no server, no
   network), rebuilt automatically on every `ingest()`, and exposed on the CLI
