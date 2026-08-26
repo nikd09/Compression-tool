@@ -213,18 +213,25 @@ def render(ws: Workspace) -> None:
     # separately, the same title/unit split the Results panels use, rather
     # than folding it into one long title string.
     #
-    # Font sizes bumped across the board, not only for the fullscreen/PNG
-    # view: it is the same Vega-Lite spec at every size Streamlit renders it
-    # -- inline, fullscreen, or exported -- there is no separate "large"
-    # variant to size up only there the way Results' custom SVG charts have.
-    # Fullscreen stretches the plot area by expanding width only (height
-    # stays fixed), so default-sized text reads fine inline and small once
-    # stretched; sizing up here is what keeps axis labels, the legend and
-    # the value labels legible at that width too.
+    # width is FIXED, not use_container_width=True: Vega-Lite text is set in
+    # absolute pixels and does not scale with the chart's size the way
+    # Results' hand-built SVG charts do (every dimension in that template,
+    # bar widths down to font sizes, is a function of one base width, so
+    # scaling the SVG up for the expanded dialog or a PNG export scales
+    # everything together and the proportions never change). Letting this
+    # chart stretch to the full page width -- confirmed live, a Vega-Lite
+    # spec copied out of this app at "width": 1340 -- grows the plot area
+    # while the text stays the same absolute size, so it reads smaller as a
+    # fraction of the chart the wider the window is, and the SAME width is
+    # what "Download as PNG" captures: a screen-filling chart downloads as a
+    # huge image with comparatively tiny text once pasted into a document at
+    # a normal page width. A fixed, moderate width keeps that ratio close to
+    # what Results' own PNG exports already look like, at every size this
+    # spec is ever rendered or exported at, not just on screen.
     chart = (
         alt.layer(*layers)
         .properties(
-            height=430,
+            width=820, height=480,
             title=alt.TitleParams(
                 text=metric.label, subtitle=metric.unit or None,
                 # Vega-Lite's fontWeight is a fixed enum (100-900 in steps of
@@ -238,14 +245,16 @@ def render(ws: Workspace) -> None:
         .configure_axis(labelFontSize=12, titleFontSize=13)
         .configure_legend(labelFontSize=12, titleFontSize=13, symbolSize=110)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, use_container_width=False)
     st.caption(
         "Each bar is the mean across that group's chosen specimens, for that "
         "cycle; the whisker is ±1 standard deviation across them. A group of "
         "one specimen shows that specimen's own value and no whisker. Bars "
         "carry a value label at 3 groups or fewer -- past that, a number on "
         "every bar is too many labels for the space; hover a bar for its "
-        "exact value instead."
+        "exact value instead. The toolbar's copy icon copies the chart's "
+        "underlying spec as text, not an image -- use \"Download PNG\" for "
+        "an image file to paste elsewhere."
     )
 
     with st.expander("Group membership and underlying rows"):

@@ -421,13 +421,27 @@ same function.
 The chart also carries a title -- the picked metric, with its unit as a
 subtitle -- matching every panel on the Results tab already having one; this
 was the one chart in the app without it. Axis, legend and value-label font
-sizes are set explicitly rather than left at Vega-Lite's defaults, for the
-same "one spec, several sizes" reason as the labels above: Streamlit's
-fullscreen expands the plot area by stretching its WIDTH only (the
-configured `height=430` does not change), so default-sized text that reads
-fine inline gets relatively smaller once stretched -- sizing the fonts up
-here is what keeps them legible at every size this same spec ever renders
-at, not just the compact inline one.
+sizes are set explicitly rather than left at Vega-Lite's defaults.
+
+**The chart's width is fixed (`width=820`), not `use_container_width=True`.**
+Vega-Lite text is set in absolute pixels and does not scale with the chart's
+size the way Results' hand-built SVG charts do -- every dimension in that
+template, bar widths down to font sizes, is a function of one base width, so
+scaling the SVG up for the expanded dialog or a PNG export scales everything
+together and the on-screen proportions never change. Compare has no such
+scale-invariance: letting the chart stretch to the full page width (a
+Vega-Lite spec copied out of a wide browser window read `"width": 1340`)
+grows the plot area while the text stays the same absolute size, so it reads
+smaller the wider the window is -- and "Download PNG" downloads exactly what
+is on screen, so a screen-filling chart became a huge image with
+comparatively tiny text once pasted into a Word or PowerPoint page at normal
+size. A fixed, moderate width keeps text a healthy fraction of the image at
+every size this spec is ever rendered or downloaded at, confirmed by
+downloading and viewing the PNG directly rather than only checking the
+in-app view. Streamlit's own fullscreen toolbar action still stretches to
+the viewport regardless of the spec's configured width -- that one render
+path is outside what the Python API controls -- which is what the explicit
+font-size bump above is for.
 
 ### Combined per-material export: one Excel workbook, one real dashboard, across every run
 
