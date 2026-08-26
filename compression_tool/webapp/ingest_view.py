@@ -45,7 +45,7 @@ def _config_from_form(detect_holds: bool) -> Config:
     with st.expander("Advanced: segmentation and reference thresholds"):
         st.caption(
             "Every threshold is relative to the test's own peak stress, never "
-            "absolute -- the same knobs `--unload-frac` etc. expose on the "
+            "absolute: the same knobs `--unload-frac` etc. expose on the "
             "command line. Defaults work unmodified for a Zwick Z100 export; "
             "change one only if Preview below shows a stage being lost or a "
             "cycle miscounted."
@@ -103,14 +103,14 @@ def _material_picker(ws: Workspace) -> str:
     if not materials:
         return st.text_input(
             "Material",
-            placeholder="e.g. PEEK-GF30 -- the first material in this workspace",
+            placeholder="e.g. PEEK-GF30, the first material in this workspace",
             help="Every material typed here becomes a pickable option next "
             "time, so it never has to be retyped or matched exactly again.",
         )
     choice = st.selectbox(
         "Material", materials + [_NEW_MATERIAL], index=None,
         placeholder="Pick a material, or add a new one",
-        help="Picking from this list -- rather than retyping the name -- is "
+        help="Picking from this list, rather than retyping the name, is "
         "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
         "two materials that never compare against each other.",
     )
@@ -182,7 +182,7 @@ def _save_uploads(files) -> list[Path]:
 
 
 def _show_warning(w: dict) -> None:
-    text = f"**{w['severity'].upper()}** — {w['message']}"
+    text = f"**{w['severity'].upper()}**: {w['message']}"
     if w["severity"] == "critical":
         st.error(text)
     elif w["severity"] == "caution":
@@ -205,8 +205,8 @@ def _render_preview_cards(rows: list[dict]) -> None:
             # commit, not the record -- Config shows the exact ingested
             # numbers afterwards. Short enough that 5 columns fit without
             # Streamlit ellipsis-truncating the value.
-            c[2].metric("Peak", f"{r['global_peak_mpa']:.0f} MPa" if r["global_peak_mpa"] else "—")
-            c[3].metric("h0", f"{r['h0_mm']:.2f} mm" if r["h0_mm"] else "—")
+            c[2].metric("Peak", f"{r['global_peak_mpa']:.0f} MPa" if r["global_peak_mpa"] else "-")
+            c[3].metric("h0", f"{r['h0_mm']:.2f} mm" if r["h0_mm"] else "-")
             c[4].metric("Format", r["source_format"])
             for w in r["warnings"]:
                 _show_warning(w)
@@ -238,7 +238,7 @@ def render(ws: Workspace) -> None:
             "Test has a hold at peak", value=True,
             help="Uncheck for a fast-cycling test with no programmed dwell. "
             "A short cycle still spends a few samples turning around at peak "
-            "stress -- geometry, not a hold -- and on a short enough cycle "
+            "stress (geometry, not a hold), and on a short enough cycle "
             "that turnaround can accidentally look long enough to be misread "
             "as a real one. Unchecking skips hold detection entirely, so "
             "every cycle reports no hold and no creep, instead of a few "
@@ -248,7 +248,7 @@ def render(ws: Workspace) -> None:
             "Gauge length confirmed",
             help="Check this only once someone has verified the displacement "
             "channel's extensometer spans exactly this specimen's measured "
-            "thickness h0 -- not just that h0 gives a plausible modulus. Left "
+            "thickness h0, not just that h0 gives a plausible modulus. Left "
             "unchecked, strain and modulus stay provisional and carry a "
             "critical warning.",
         )
@@ -277,7 +277,7 @@ def render(ws: Workspace) -> None:
         _render_preview_cards(rows)
 
     st.divider()
-    _step(4, "Commit", "Archives the raw file and writes the record — re-running the same file is a no-op.")
+    _step(4, "Commit", "Archives the raw file and writes the record - re-running the same file is a no-op.")
     c1, c2 = st.columns(2)
     with c1:
         archive_originals = st.checkbox(
@@ -285,7 +285,7 @@ def render(ws: Workspace) -> None:
             help="Copies the export into Raw exports/ before analysis, so a "
             "result can always be traced back to the exact bytes that "
             "produced it. Uncheck if you already keep your own copies "
-            "elsewhere and do not want a second one on disk -- the file's "
+            "elsewhere and do not want a second one on disk. The file's "
             "SHA-256 is still recorded either way, which is what a "
             "re-ingest of the same file is detected from.",
         )
@@ -295,7 +295,7 @@ def render(ws: Workspace) -> None:
             help="Writes a per-specimen and per-run Excel workbook, CSV and "
             "HTML report alongside the JSON record. Uncheck if you only "
             "open the combined report in reports/<material> (see Config) "
-            "and find these per-run copies redundant -- the JSON record "
+            "and find these per-run copies redundant. The JSON record "
             "and curve cache, which the combined report and every chart "
             "are rebuilt from, are always written either way.",
         )

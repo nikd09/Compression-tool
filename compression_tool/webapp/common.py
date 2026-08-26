@@ -166,15 +166,15 @@ def workspace_picker() -> Workspace:
     root = st.text_input(
         "Workspace",
         key="workspace_root",
-        help="Where Raw exports/, Records/ and reports/ live -- every "
+        help="Where Raw exports/, Records/ and reports/ live: every "
         "specimen's JSON, CSV, Excel workbook and HTML report land here on "
         "every Commit, nowhere else. The same path every time this app is "
         "opened shows the same tests; pointing it elsewhere switches "
         "workspaces, it does not copy anything between them. A relative path "
         "like the default is resolved against wherever `streamlit run` was "
-        "launched from -- see the resolved path below if that's unclear. "
+        "launched from; see the resolved path below if that's unclear. "
         "Everything here stays local: no network calls, nothing uploaded. "
-        "The search index is kept separately, on this machine only -- see "
+        "The search index is kept separately, on this machine only; see "
         "the note below the resolved path.",
     )
     # The searchable index is deliberately NOT under `root`: `root` is

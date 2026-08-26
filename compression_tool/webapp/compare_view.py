@@ -17,6 +17,20 @@ from .common import CATEGORICAL_LIGHT, connect_readonly, dot, short_tag
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
 
+# Streamlit's chart toolbar has no Python-side option to drop one of its own
+# buttons, so this hides "Copy Vega-Lite spec" with CSS instead: it copies
+# the spec as text, not an image, which reads as a broken copy button when
+# what someone actually wants is a picture of the chart. Scoped broadly
+# (not to a specific container key) because Compare is the only view in
+# this app that renders a Vega-Lite chart at all.
+_HIDE_SPEC_COPY_CSS = """
+<style>
+div[data-testid="stElementToolbarButton"]:has(button[aria-label="Copy Vega-Lite spec"]) {
+  display: none;
+}
+</style>
+"""
+
 
 def _default_group_count(n_materials: int) -> int:
     return max(2, min(n_materials, MAX_GROUPS))
@@ -26,7 +40,7 @@ def render(ws: Workspace) -> None:
     st.header("Compare")
     conn = connect_readonly(ws)
     if conn is None:
-        st.info("Nothing ingested into this workspace yet — use Ingest first.")
+        st.info("Nothing ingested into this workspace yet - use Ingest first.")
         return
 
     specimens = knowledge_base.list_specimens(conn)
@@ -45,20 +59,20 @@ def render(ws: Workspace) -> None:
     def option_label(sid: str) -> str:
         # Tag first, same reasoning as Results: it is what survives a
         # truncated dropdown entry when specimens share a long filename.
-        return f"{tag_by_id[sid]} · {material_by_id.get(sid, '—')} — {label_by_id.get(sid, sid)}"
+        return f"{tag_by_id[sid]} · {material_by_id.get(sid, '-')} - {label_by_id.get(sid, sid)}"
 
     n_groups = st.number_input(
         "Groups to compare", min_value=1, max_value=MAX_GROUPS,
         value=_default_group_count(len(materials)), step=1,
-        help="A group is any set of specimens you pick -- it does not have to "
+        help="A group is any set of specimens you pick - it does not have to "
         "be a whole material. Build 'Material A, good runs only' as one group "
         "and 'Material B, S4+S5' as another.",
     )
 
     st.caption(
         "Each group starts pre-filled with one material's specimens as a "
-        "shortcut. Add or remove specimens freely -- including from a "
-        "different material -- to build exactly the comparison you want."
+        "shortcut. Add or remove specimens freely, including from a "
+        "different material, to build exactly the comparison you want."
     )
 
     groups: list[dict] = []
@@ -81,7 +95,7 @@ def render(ws: Workspace) -> None:
                     "Name", value=default_material or f"Group {i + 1}",
                     key=f"cmp_name_{i}", label_visibility="collapsed",
                     help="Labels this group in the chart legend and the "
-                    "membership list below -- it has no effect on which "
+                    "membership list below. It has no effect on which "
                     "specimens are in the group, only how this group reads "
                     "once specimens are picked below.",
                 )
@@ -114,7 +128,7 @@ def render(ws: Workspace) -> None:
     if renamed:
         st.warning(
             "Two or more groups had the same name, which the chart cannot "
-            "tell apart -- renamed to keep them distinct: "
+            "tell apart, so they were renamed to keep them distinct: "
             + "; ".join(f"'{old}' -> '{new}'" for old, new in renamed)
         )
 
@@ -245,22 +259,21 @@ def render(ws: Workspace) -> None:
         .configure_axis(labelFontSize=12, titleFontSize=13)
         .configure_legend(labelFontSize=12, titleFontSize=13, symbolSize=110)
     )
+    st.markdown(_HIDE_SPEC_COPY_CSS, unsafe_allow_html=True)
     st.altair_chart(chart, use_container_width=False)
     st.caption(
         "Each bar is the mean across that group's chosen specimens, for that "
         "cycle; the whisker is ±1 standard deviation across them. A group of "
         "one specimen shows that specimen's own value and no whisker. Bars "
-        "carry a value label at 3 groups or fewer -- past that, a number on "
-        "every bar is too many labels for the space; hover a bar for its "
-        "exact value instead. The toolbar's copy icon copies the chart's "
-        "underlying spec as text, not an image -- use \"Download PNG\" for "
-        "an image file to paste elsewhere."
+        "carry a value label at 3 groups or fewer; past that, a number on "
+        "every bar is too many labels for the space, so hover a bar for its "
+        "exact value instead."
     )
 
     with st.expander("Group membership and underlying rows"):
         for i, g in enumerate(groups):
             st.markdown(
-                f"{dot(i)}**{g['name']}** — " + ", ".join(option_label(s) for s in g["ids"]),
+                f"{dot(i)}**{g['name']}**: " + ", ".join(option_label(s) for s in g["ids"]),
                 unsafe_allow_html=True,
             )
         st.dataframe(

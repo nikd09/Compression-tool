@@ -22,7 +22,7 @@ def render(ws: Workspace) -> None:
     st.header("Results")
     conn = connect_readonly(ws)
     if conn is None:
-        st.info("Nothing ingested into this workspace yet — use Ingest first.")
+        st.info("Nothing ingested into this workspace yet - use Ingest first.")
         return
 
     materials = knowledge_base.materials(conn)
@@ -46,10 +46,10 @@ def render(ws: Workspace) -> None:
     }
     default = list(label_by_id)[:COMFORTABLE_SPECIMENS]
     chosen = st.multiselect(
-        f"Specimens (1–{MAX_SPECIMENS})",
+        f"Specimens (1-{MAX_SPECIMENS})",
         options=list(label_by_id),
         default=default,
-        format_func=lambda sid: f"{tag_by_id[sid]} — {label_by_id[sid]}",
+        format_func=lambda sid: f"{tag_by_id[sid]} - {label_by_id[sid]}",
         max_selections=MAX_SPECIMENS,
         help="Every specimen selected here gets its own colour (S1, S2, …) plus "
         "a mean across them. Individual specimens can then be toggled on and "
@@ -62,7 +62,7 @@ def render(ws: Workspace) -> None:
         return
     if len(chosen) > COMFORTABLE_SPECIMENS:
         st.caption(
-            f"{len(chosen)} specimens selected — the panels widen and the grid "
+            f"{len(chosen)} specimens selected: the panels widen and the grid "
             "drops to fewer columns to keep the bars legible. Toggle specimens "
             "off inside the dashboard to compact it again."
         )
@@ -82,8 +82,8 @@ def render(ws: Workspace) -> None:
     if missing_curve:
         st.warning(
             "No curve cache found for: " + ", ".join(missing_curve) + ". "
-            "The stress-displacement panel will be empty for it — re-ingest "
-            "to generate one; every other chart is unaffected."
+            "The stress-displacement panel will be empty for it; re-ingest "
+            "to generate one. Every other chart is unaffected."
         )
 
     data = build_dashboard_data(payloads, curves)

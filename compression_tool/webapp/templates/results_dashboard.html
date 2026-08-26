@@ -379,7 +379,7 @@ const state = {
   avg: SPS.length > 1,          // show the per-cycle mean
 };
 
-const fmt = (v,d=2) => v==null||Number.isNaN(v) ? "—"
+const fmt = (v,d=2) => v==null||Number.isNaN(v) ? "-"
   : v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
 function el(t,a={},p=null){const e=document.createElementNS(NS,t);
   for(const k in a) e.setAttribute(k,a[k]); if(p) p.appendChild(e); return e;}
@@ -630,17 +630,17 @@ function loopChart(host, _spec, big=false, aspect=null){
 /* the panels, in the order they are read */
 const PANELS=[
   {k:"peakStress", t:"Peak stress", u:"MPa", f:v=>fmt(v,0), u2:"MPa",
-   why:"Highest stress reached in each cycle. It rises every stage by design — this is the "+
-       "programmed schedule, not a material response — and it is the reference every "+
+   why:"Highest stress reached in each cycle. It rises every stage by design (this is the "+
+       "programmed schedule, not a material response), and it is the reference every "+
        "per-cycle-relative metric is measured against."},
-  {k:"kCommon", t:"Common-band stiffness", u:"MPa/mm — identical window every cycle",
+  {k:"kCommon", t:"Common-band stiffness", u:"MPa/mm, identical window every cycle",
    f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
    q:{n:"kCommonN", r2:"kCommonR2"},
    why:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle "+
-       "(25–75% of the smallest cycle peak). This is the form that may be compared across "+
+       "(25-75% of the smallest cycle peak). This is the form that may be compared across "+
        "stages, specimens and materials. A rollover here is the material softening. A "+
        "hatched, dimmed bar means the fit behind it is thin (fewer than "+QUALITY_MIN_POINTS+
-       " points) or curved (R² below "+QUALITY_MIN_R2+") — read that cycle's slope as "+
+       " points) or curved (R² below "+QUALITY_MIN_R2+"): read that cycle's slope as "+
        "indicative only, never as a solid number to quote."},
   {k:"permCumPct", t:"Permanent deformation", u:"% of h₀, cumulative", f:v=>fmt(v,1), u2:"%",
    why:"Residual displacement read on the LOADING branch at a low common stress, referenced "+
@@ -653,26 +653,26 @@ const PANELS=[
    why:"Dissipated divided by input energy. The cross-test comparable form: absolute loss "+
        "scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on "+
        "the absolute number, but they can be compared on this ratio."},
-  {k:"holdDisp", t:"Hold displacement", u:"µm — a total, not a rate", f:v=>fmt(v,0), u2:"µm",
+  {k:"holdDisp", t:"Hold displacement", u:"µm, a total, not a rate", f:v=>fmt(v,0), u2:"µm",
    scale:1000,
-   why:"Displacement accumulated across the dwell at peak stress — a TOTAL, not a rate. Dwell "+
+   why:"Displacement accumulated across the dwell at peak stress: a TOTAL, not a rate. Dwell "+
        "length varies across the cycles of this test, so a longer dwell accumulates more at "+
        "identical material behaviour. Read it against the hold length in the values table."},
   {k:"maxDisp", t:"Maximum displacement", u:"mm", f:v=>fmt(v,3), u2:"mm",
    why:"Largest displacement reached in the cycle, and the point the energy integrals split "+
        "the loop at. It exceeds the displacement at peak stress by however much the specimen "+
        "crept while the load was held."},
-  {k:"eDiss", t:"Energy dissipated", u:"MPa·mm — per unit area", f:v=>fmt(v,1), u2:"MPa·mm",
+  {k:"eDiss", t:"Energy dissipated", u:"MPa·mm, per unit area", f:v=>fmt(v,1), u2:"MPa·mm",
    why:"The area enclosed by the loop: work that went into the specimen and did not come back "+
-       "out. Units are work per unit CROSS-SECTIONAL AREA, not per unit volume — divide by h₀ "+
+       "out. Units are work per unit CROSS-SECTIONAL AREA, not per unit volume: divide by h₀ "+
        "for work per unit volume in MPa."},
-  {k:"dispRefLoad", t:"Reference-stress displacement", u:"mm — loading branch", f:v=>fmt(v,3),
+  {k:"dispRefLoad", t:"Reference-stress displacement", u:"mm, loading branch", f:v=>fmt(v,3),
    u2:"mm",
    why:"Displacement at a common reference stress on the loading branch, reachable in every "+
        "cycle of a rising multi-stage test. Because the stress is the same every time, the "+
        "growth here is the specimen changing, not the schedule."},
   // Last, and full width: the raw signal the panels above are read out of.
-  {k:"__loop", t:"Stress–displacement curves", u:"Every cycle, every specimen shown",
+  {k:"__loop", t:"Stress-displacement curves", u:"Every cycle, every specimen shown",
    draw:loopChart, wide:true,
    why:"The raw shape every other number is derived from. Each closed loop is one cycle: "+
        "up the loading branch, across the dwell at peak, down the unloading branch. The area "+
@@ -756,7 +756,7 @@ function renderCharts(){
   const ser=series();
   if(!ser.length){
     host.style.removeProperty("--cell-min");
-    host.innerHTML=`<div class="empty">Every specimen is hidden — turn one back on above to see the charts.</div>`;
+    host.innerHTML=`<div class="empty">Every specimen is hidden. Turn one back on above to see the charts.</div>`;
     return;
   }
   host.style.setProperty("--cell-min", panelWidth(ser.length)+"px");
@@ -771,7 +771,7 @@ function renderCharts(){
          </div>
        </div>
        <div class="plot" id="c${i}" role="button" tabindex="0"
-            aria-label="${p.t} — expand"></div>
+            aria-label="${p.t}, expand"></div>
      </div>`).join("");
   PANELS.forEach((p,i)=>(p.draw||barChart)($("#c"+i),p,false));
 }
@@ -867,7 +867,7 @@ async function copyChart(svgEl,title,sub){
   catch(e){ toast("Could not render the chart"); return; }
   try{
     await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
-    toast("Chart copied — paste into Word, Teams or PowerPoint");
+    toast("Chart copied, paste into Word, Teams or PowerPoint");
   }catch(e){
     showImageFallback(blob,title,
       "This preview does not give the page clipboard access, so the chart is shown here "+
@@ -937,7 +937,7 @@ $("#charts").addEventListener("click",async ev=>{
     // Scoped to .plot: .cell also holds toolbar-icon <svg>s in .hd, rendered
     // before the chart, so an unscoped query grabs an icon instead of it.
     const s=cell.querySelector(".plot svg");
-    if(!s){ toast("Nothing to export — no specimen is shown"); return; }
+    if(!s){ toast("Nothing to export: no specimen is shown"); return; }
     if(b.dataset.act==="copy") await copyChart(s,p.t,p.u);
     else if(b.dataset.act==="png") await downloadChart(s,p.t,p.u);
     else expand(i);
@@ -995,15 +995,15 @@ function renderTable(){
 /* method tab: every word below is static text from the Python source */
 const DEFS=[
   ["Peak stress","MPa","Highest stress reached in this cycle. Rises every stage in a multi-stage test, which is why several metrics exist in both a per-cycle and a common-reference form."],
-  ["Stiffness, common band","MPa/mm","Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25–75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials."],
-  ["Stiffness, relative band","MPa/mm","Slope over 25–75% of THIS cycle's own peak. Describes the cycle faithfully but rises artificially as the stages climb, so it is NOT comparable across cycles. In the table only — it is not charted for exactly that reason."],
+  ["Stiffness, common band","MPa/mm","Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25-75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials."],
+  ["Stiffness, relative band","MPa/mm","Slope over 25-75% of THIS cycle's own peak. Describes the cycle faithfully but rises artificially as the stages climb, so it is NOT comparable across cycles. In the table only, it is not charted for exactly that reason."],
   ["Maximum displacement","mm","Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held."],
-  ["Stress at maximum displacement","MPa","Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED — a damage signature no other column carries."],
+  ["Stress at maximum displacement","MPa","Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED: a damage signature no other column carries."],
   ["Permanent deformation","mm / %","Residual displacement read on the LOADING branch at a low common stress, referenced to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. NOT compression set in the ASTM D395 / ISO 815 sense."],
-  ["Energy in / dissipated","MPa·mm","Work per unit CROSS-SECTIONAL AREA — the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress."],
-  ["Hysteresis loss","–","Dissipated divided by input energy. The cross-test comparable form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on the absolute number."],
-  ["Hold length","samples","Length of the detected dwell in SAMPLES, not seconds — the export carries no time channel. Meaningless on its own and mandatory alongside the hold displacement beside it."],
-  ["Hold displacement","mm","Displacement accumulated across the dwell — a TOTAL, not a rate. Only comparable between cycles whose hold lengths match, which is why the hold length is always reported next to it."],
+  ["Energy in / dissipated","MPa·mm","Work per unit CROSS-SECTIONAL AREA: the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress."],
+  ["Hysteresis loss","-","Dissipated divided by input energy. The cross-test comparable form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on the absolute number."],
+  ["Hold length","samples","Length of the detected dwell in SAMPLES, not seconds: the export carries no time channel. Meaningless on its own and mandatory alongside the hold displacement beside it."],
+  ["Hold displacement","mm","Displacement accumulated across the dwell: a TOTAL, not a rate. Only comparable between cycles whose hold lengths match, which is why the hold length is always reported next to it."],
   ["Hold displacement / 1000 samples","µm","Removes the distortion of unequal dwell lengths so cycles can be ranked. NOT a creep rate: converting samples to time needs a constant sampling interval, which the export does not record."],
 ];
 function renderMethod(){
@@ -1011,21 +1011,21 @@ function renderMethod(){
   if(!s || !cfg){ $("#method").innerHTML=""; return; }
   $("#method").innerHTML = `
   <h2>Settings behind the numbers</h2>
-  <p class="note">Relative to the test's own peak stress, never absolute — so a 2 MPa test and a
+  <p class="note">Relative to the test's own peak stress, never absolute, so a 2 MPa test and a
   450 MPa test run on identical defaults.</p>
   <div class="tw" style="max-height:none"><table class="dict"><tbody>
     <tr><td>Loaded threshold</td><td>${(cfg.unload_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${fmt(cfg.unload_frac*s.globalPeak,1)} MPa — below this the specimen counts as unloaded</td></tr>
+      <td>of global peak = ${fmt(cfg.unload_frac*s.globalPeak,1)} MPa, below this the specimen counts as unloaded</td></tr>
     <tr><td>Cycle discard threshold</td><td>${(cfg.major_cycle_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${fmt(cfg.major_cycle_frac*s.globalPeak,1)} MPa — runs peaking below this are noise, not stages</td></tr>
-    <tr><td>Stiffness window</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}–${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
-      <td>of the smallest cycle peak = ${s.stiffLo}–${s.stiffHi} MPa, identical in every cycle</td></tr>
+      <td>of global peak = ${fmt(cfg.major_cycle_frac*s.globalPeak,1)} MPa, runs peaking below this are noise, not stages</td></tr>
+    <tr><td>Stiffness window</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
+      <td>of the smallest cycle peak = ${s.stiffLo}-${s.stiffHi} MPa, identical in every cycle</td></tr>
     <tr><td>Reference stress</td><td>${(cfg.ref_stress_frac*100).toFixed(0)}%</td>
-      <td>of the smallest cycle peak = ${s.refStress} MPa — reachable in every cycle</td></tr>
+      <td>of the smallest cycle peak = ${s.refStress} MPa, reachable in every cycle</td></tr>
     <tr><td>Residual read stress</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${s.residStress} MPa — above the contact-loss baseline</td></tr>
+      <td>of global peak = ${s.residStress} MPa, above the contact-loss baseline</td></tr>
     <tr><td>Dwell tolerance</td><td>${(cfg.hold_tol_frac*100).toFixed(1)}%</td>
-      <td>of cycle peak — stress within this band counts as held</td></tr>
+      <td>of cycle peak, stress within this band counts as held</td></tr>
   </tbody></table></div>
 
   <h2>What each column means</h2>
@@ -1039,7 +1039,7 @@ function renderMethod(){
       It is the top step of the programmed schedule, and the specimen unloaded normally.
       A UCS figure needs loading to fracture.</li>
     <li><strong>There is no creep rate.</strong> The export carries no time channel, so the
-      dwell is measured in samples. A rate in mm/s needs a time channel enabled at export —
+      dwell is measured in samples. A rate in mm/s needs a time channel enabled at export,
       one setting on the machine.</li>
     <li><strong>Fit quality is not measurement accuracy.</strong> The n and R² columns describe
       how well a straight line fitted the points. They say nothing about calibration,
@@ -1066,7 +1066,7 @@ function renderHead(){
   if(!s){ $("#meta").innerHTML=""; return; }
   const meta=[["Specimens",SPS.length],["Cycles",NC],
     ["Peak",fmt(s.globalPeak,1)+" MPa"],["h₀",fmt(s.h0)+" mm"],["d₀",fmt(s.d0)+" mm"],
-    ["Channel",s.channel||"—"],["T",fmt(s.temp)+" °C"]];
+    ["Channel",s.channel||"-"],["T",fmt(s.temp)+" °C"]];
   $("#meta").innerHTML=meta.map(([k,v])=>`<span class="mchip"><b>${k}</b>${v}</span>`).join("");
   $("#dlnote").textContent =
     "Charts export to PNG from the toolbar on each one, or from the expanded view.";

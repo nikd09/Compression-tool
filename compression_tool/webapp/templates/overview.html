@@ -37,7 +37,7 @@ padding-top:1rem;}
   <p class="sub" id="sub"></p>
   <div id="content"></div>
   <footer>Rendered from the indexed records. Regenerated automatically on every
-    ingest -- if this looks stale, it will refresh itself the next time anyone
+    ingest, so if this looks stale, it will refresh itself the next time anyone
     commits a test. Open a material's own report for its full charts.</footer>
 </div>
 
@@ -46,7 +46,7 @@ const DATA = /*__DATA__*/;
 
 function esc(s){return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function fmtDate(iso){
-  if(!iso) return "—";
+  if(!iso) return "-";
   const d = new Date(iso);
   return isNaN(d) ? iso.slice(0,10) : d.toISOString().slice(0,10);
 }
@@ -68,8 +68,8 @@ if(!materials.length){
       <div class="stats">
         <div class="stat"><b>${m.specimens}</b><span>Specimens</span></div>
         <div class="stat"><b>${m.runs}</b><span>Runs</span></div>
-        <div class="stat"><b>${m.meanPeak != null ? m.meanPeak.toFixed(1) + " MPa" : "—"}</b><span>Peak stress</span></div>
-        <div class="stat"><b>${m.meanH0 != null ? m.meanH0.toFixed(3) + " mm" : "—"}</b><span>Thickness (h0)</span></div>
+        <div class="stat"><b>${m.meanPeak != null ? m.meanPeak.toFixed(1) + " MPa" : "-"}</b><span>Peak stress</span></div>
+        <div class="stat"><b>${m.meanH0 != null ? m.meanH0.toFixed(3) + " mm" : "-"}</b><span>Thickness (h0)</span></div>
       </div>
     </div>`).join("");
 

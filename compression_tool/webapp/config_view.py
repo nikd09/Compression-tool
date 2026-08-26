@@ -17,11 +17,11 @@ from .common import short_tag
 
 def render(ws: Workspace) -> None:
     st.header("Config")
-    st.caption("What a run was actually ingested with -- traced back per run, not the app's current form defaults.")
+    st.caption("What a run was actually ingested with, traced back per run, not the app's current form defaults.")
 
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
     if not manifests:
-        st.info("Nothing ingested into this workspace yet — use Ingest first.")
+        st.info("Nothing ingested into this workspace yet - use Ingest first.")
         return
 
     labels = {m: f"{m.parent.name}" for m in manifests}
@@ -29,7 +29,7 @@ def render(ws: Workspace) -> None:
     manifest = read_json(chosen)
 
     with st.container(border=True):
-        st.subheader(manifest.get("material", "—"))
+        st.subheader(manifest.get("material", "-"))
         c1, c2, c3 = st.columns(3)
         c1.metric("Specimens", len(manifest.get("specimens", [])))
         c2.metric("Sources", len(manifest.get("sources", [])))
@@ -38,7 +38,7 @@ def render(ws: Workspace) -> None:
         # allows -- even "date time" truncated to the minute still clips.
         # Date only in the tile; the exact time is one glance away, in the
         # column header via help text.
-        created = manifest.get("created_utc", "—")
+        created = manifest.get("created_utc", "-")
         c3.metric(
             "Ingested (UTC)", created[:10] if len(created) >= 10 else created,
             help=f"Full timestamp: {created}",
@@ -52,7 +52,7 @@ def render(ws: Workspace) -> None:
         st.markdown("##### Combined across every run of this material")
         st.caption(
             "One workbook and one standalone dashboard (open the .html file "
-            "directly in a browser -- no server needed) covering every "
+            "directly in a browser, no server needed) covering every "
             "specimen ever ingested for this material, not just this run. "
             "Regenerated automatically on every Commit; rebuild manually "
             "below if this predates that or looks stale."
@@ -72,11 +72,11 @@ def render(ws: Workspace) -> None:
     with st.container(border=True):
         st.markdown("##### Overview across every material")
         st.caption(
-            "One page listing every material in this workspace, with a "
-            "headline mean-peak-stress comparison and a link into each "
-            "material's own report -- open the .html file directly in a "
-            "browser, no server needed. Regenerated automatically on every "
-            "Commit, from any material."
+            "One page listing every material in this workspace, with its "
+            "specimen/run counts, peak stress and thickness, and a link "
+            "into each material's own report. Open the .html file directly "
+            "in a browser, no server needed. Regenerated automatically on "
+            "every Commit, from any material."
         )
         if overview_path.exists():
             st.code(str(overview_path), language=None)
@@ -94,20 +94,20 @@ def render(ws: Workspace) -> None:
         with st.container(border=True):
             st.markdown("##### Recent activity")
             st.caption(
-                "Who ingested what, and when -- one record per Commit, "
+                "Who ingested what, and when: one record per Commit, "
                 "across the whole workspace, not just this run. The 15 "
                 "most recent; every record ever written is a small JSON "
                 "file under audit/, or `compression_tool audit` on the CLI."
             )
             st.dataframe(
                 pd.DataFrame({
-                    "Time (UTC)": [e.get("timestamp_utc", "—") for e in entries],
-                    "User": [e.get("user", "—") for e in entries],
-                    "Host": [e.get("host", "—") for e in entries],
-                    "Material": [e.get("material", "—") for e in entries],
+                    "Time (UTC)": [e.get("timestamp_utc", "-") for e in entries],
+                    "User": [e.get("user", "-") for e in entries],
+                    "Host": [e.get("host", "-") for e in entries],
+                    "Material": [e.get("material", "-") for e in entries],
                     "Specimens": [len(e.get("specimens", [])) for e in entries],
                     "Skipped": [len(e.get("skipped", [])) for e in entries],
-                    "Run": [e.get("run_dir", "—") for e in entries],
+                    "Run": [e.get("run_dir", "-") for e in entries],
                 }),
                 use_container_width=True, hide_index=True,
             )
@@ -121,8 +121,8 @@ def render(ws: Workspace) -> None:
         st.dataframe(
             pd.DataFrame(
                 {
-                    "File": [s.get("source_file", "—") for s in sources],
-                    "sha256": [s.get("sha256", "—")[:12] + "…" for s in sources],
+                    "File": [s.get("source_file", "-") for s in sources],
+                    "sha256": [s.get("sha256", "-")[:12] + "…" for s in sources],
                 }
             ),
             use_container_width=True, hide_index=True,
@@ -133,14 +133,14 @@ def render(ws: Workspace) -> None:
     st.markdown("##### Specimens")
     specimens = manifest.get("specimens", [])
     if specimens:
-        labels_ = [s.get("label", "—") for s in specimens]
+        labels_ = [s.get("label", "-") for s in specimens]
         st.dataframe(
             pd.DataFrame(
                 {
                     "": [short_tag(lbl, i + 1) for i, lbl in enumerate(labels_)],
                     "Label": labels_,
-                    "Cycles": [s.get("n_cycles", "—") for s in specimens],
-                    "JSON": [s.get("json", "—") for s in specimens],
+                    "Cycles": [s.get("n_cycles", "-") for s in specimens],
+                    "JSON": [s.get("json", "-") for s in specimens],
                 }
             ),
             use_container_width=True, hide_index=True,
@@ -154,6 +154,6 @@ def render(ws: Workspace) -> None:
     st.divider()
     st.caption(
         "This is what the run was actually ingested with, not the app's current "
-        "form defaults — the two can differ once someone changes a threshold on "
+        "form defaults. The two can differ once someone changes a threshold on "
         "the Ingest tab for a later run."
     )

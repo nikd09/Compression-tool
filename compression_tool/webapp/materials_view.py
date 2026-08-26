@@ -60,11 +60,11 @@ def render(ws: Workspace) -> None:
         query = st.text_input(
             "Search", placeholder="Search materials…", label_visibility="collapsed",
         )
-    st.caption("Every material in this workspace, at a glance -- click one to open its full dashboard.")
+    st.caption("Every material in this workspace, at a glance. Click one to open its full dashboard.")
 
     rows = material_rows(ws)
     if not rows:
-        st.info("Nothing ingested into this workspace yet — use Ingest first.")
+        st.info("Nothing ingested into this workspace yet - use Ingest first.")
         return
 
     if query.strip():
@@ -96,11 +96,11 @@ def render(ws: Workspace) -> None:
                 c2.metric("Runs", row["runs"])
                 c3.metric(
                     "Peak stress",
-                    f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "—",
+                    f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "-",
                 )
                 c4.metric(
                     "Thickness (h0)",
-                    f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "—",
+                    f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
                 )
     if clicked_material:
         st.session_state[_SESSION_KEY] = clicked_material
@@ -121,7 +121,7 @@ def _render_material_dashboard(ws: Workspace, material: str) -> None:
         exported = export_material(ws, material)
         html_path = exported["html"]
     if not html_path or not html_path.exists():
-        st.warning(f"No dashboard could be built for {material!r} -- it may have no indexed specimens.")
+        st.warning(f"No dashboard could be built for {material!r}: it may have no indexed specimens.")
         return
 
     st.subheader(material)
