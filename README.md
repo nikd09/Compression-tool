@@ -697,6 +697,21 @@ deliberately well under the iframe's own 820px, so it stays fully on screen
 even though this page cannot see exactly where the outer Streamlit page has
 scrolled it to.
 
+### A quieter top-right menu
+
+`.streamlit/config.toml` sets `[client] toolbarMode = "viewer"`, which drops
+Deploy, Rerun, Clear cache, Settings and About from Streamlit's built-in
+top-right menu. None of them belong in front of someone using this as a
+finished tool: Deploy is a Streamlit Community Cloud action, meaningless (and
+possibly confusing) on a machine this app was just launched on; Rerun and
+Clear cache are developer affordances -- Clear cache in particular has
+nothing to clear, since nothing in this codebase uses
+`@st.cache_data`/`@st.cache_resource`; Settings and About are about
+Streamlit itself, not this tool. Print and Record screen stay: Streamlit
+classes those as ordinary, not developer-only, so `toolbarMode` cannot drop
+them individually, and they are harmless enough not to be worth a more
+fragile CSS-based removal.
+
 ### Why not `st.navigation`
 
 The sidebar is a manual `st.button` loop with icons, not `st.navigation` +

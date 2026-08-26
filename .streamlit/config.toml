@@ -55,3 +55,15 @@ maxUploadSize = 200
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# "viewer" drops Deploy, Rerun, Clear cache, Settings and About from the
+# top-right menu -- all of them either Streamlit-Cloud-specific (Deploy,
+# irrelevant and possibly confusing on a machine this app is just launched
+# on) or developer-facing (Rerun, Clear cache -- this app has no
+# @st.cache_data/@st.cache_resource anywhere, so Clear cache has nothing to
+# do here; Settings/About are about Streamlit itself, not this tool).
+# Print and Record screen are NOT developer options in Streamlit's own
+# classification, so "viewer" cannot drop them individually -- they stay,
+# and they're harmless.
+toolbarMode = "viewer"
