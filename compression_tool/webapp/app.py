@@ -15,6 +15,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from compression_tool.logging_config import configure_logging
+from compression_tool.persistence import default_index_root
 from compression_tool.webapp import (
     compare_view,
     config_view,
@@ -26,6 +28,10 @@ from compression_tool.webapp.auth import require_password
 from compression_tool.webapp.common import polish, workspace_picker
 
 st.set_page_config(page_title="CompressLab", page_icon="📊", layout="wide")
+
+# Same per-machine local folder default_index_root() already uses for
+# knowledge_base.db, for the same reason -- see logging_config.py.
+configure_logging(default_index_root() / "logs")
 
 _STATIC = Path(__file__).parent / "static"
 

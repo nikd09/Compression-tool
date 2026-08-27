@@ -19,6 +19,7 @@ from typing import Optional, Sequence
 
 from . import audit, diagnostics, knowledge_base
 from .core import Config
+from .logging_config import configure_logging
 from .material_export import export_material
 from .persistence import Workspace
 from .pipeline import ingest, preview, rebuild_index
@@ -118,6 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # stderr only here, not a file: nothing about how or where the CLI is
+    # invoked (a one-off terminal command, a scheduled task, someone else's
+    # script) is reliably a good place to grow a log file -- see
+    # logging_config.py. The webapp entry point (app.py) does pass a
+    # log_dir; this one deliberately does not.
+    configure_logging()
     args = build_parser().parse_args(argv)
     ws = Workspace.at(args.workspace)
 

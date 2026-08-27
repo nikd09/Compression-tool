@@ -20,6 +20,7 @@ gate is a UI concern, not a data-safety one.
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from .material_export import export_material
 from .material_registry import add_material, remove_material
 from .persistence import Workspace, read_json, slugify, specimen_id, write_json
 from .reports_overview import build_overview
+
+_log = logging.getLogger(__name__)
 
 
 def _material_run_dirs(ws: Workspace, material: str) -> list[Path]:
@@ -168,6 +171,10 @@ def rename_material(ws: Workspace, old: str, new: str) -> dict:
     export_material(ws, canonical)
     build_overview(ws)
 
+    _log.info(
+        "rename_material: %r -> %r, %d specimen(s), %d run dir(s) moved, %d failed",
+        old, canonical, renamed_specimens, len(moved_dirs), len(failed),
+    )
     return {
         "material": canonical,
         "renamed_specimens": renamed_specimens,
@@ -260,6 +267,10 @@ def delete_material(ws: Workspace, material: str, *, delete_raw: bool = False) -
 
     build_overview(ws)
 
+    _log.info(
+        "delete_material: %r -> %d run dir(s), %d specimen(s), %d raw file(s) removed",
+        material, len(run_dirs), removed_specimens, removed_raw,
+    )
     return {
         "removed_run_dirs": len(run_dirs),
         "removed_specimens": removed_specimens,

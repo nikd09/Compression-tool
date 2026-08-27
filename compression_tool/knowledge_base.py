@@ -16,6 +16,7 @@ Two tables:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -23,6 +24,8 @@ from typing import Any, Iterable, Optional
 import pandas as pd
 
 from .persistence import Workspace, iter_specimen_jsons, read_json
+
+_log = logging.getLogger(__name__)
 from .schema import (
     CYCLE_COLUMNS,
     HOLD_DISP_RATE,
@@ -105,6 +108,7 @@ def _check_schema_version(conn: sqlite3.Connection) -> None:
         return  # no meta table yet -- a brand-new database, nothing to check
     if row is None or row[0] == str(SCHEMA_VERSION):
         return
+    _log.warning("schema mismatch: index has %r, code expects %r", row[0], str(SCHEMA_VERSION))
     raise SchemaVersionMismatch(
         f"This index was built under schema {row[0]!r}; this version of the "
         f"tool expects schema {SCHEMA_VERSION!r}. Rebuild the index from "
@@ -254,6 +258,7 @@ def rebuild(ws: Workspace, *, db_path: Optional[Path] = None) -> int:
             )
             count += 1
         conn.commit()
+        _log.info("rebuild: %s -> %d record(s) indexed", target, count)
         return count
     finally:
         conn.close()

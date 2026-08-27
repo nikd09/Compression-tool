@@ -26,10 +26,12 @@ whoever is listed.
 from __future__ import annotations
 
 import getpass
+import logging
 
 from .persistence import Workspace, read_json, write_json
 
 _FILENAME = "admins.json"
+_log = logging.getLogger(__name__)
 
 
 def current_user() -> str:
@@ -82,6 +84,7 @@ def claim_admin(ws: Workspace) -> list[str]:
         raise ValueError("admins.json already exists; add yourself from the admin list instead")
     names = [current_user()]
     write_json({"admins": names}, ws.root / _FILENAME)
+    _log.info("claim_admin: %r claimed admin access in %s", names[0], ws.root)
     return names
 
 
@@ -93,10 +96,12 @@ def add_admin(ws: Workspace, name: str) -> list[str]:
     if name.casefold() not in {n.casefold() for n in names}:
         names = names + [name]
         write_json({"admins": names}, ws.root / _FILENAME)
+        _log.info("add_admin: %r added %r as admin in %s", current_user(), name, ws.root)
     return names
 
 
 def remove_admin(ws: Workspace, name: str) -> list[str]:
     names = [n for n in load_admins(ws) if n.casefold() != name.casefold()]
     write_json({"admins": names}, ws.root / _FILENAME)
+    _log.info("remove_admin: %r removed %r as admin in %s", current_user(), name, ws.root)
     return names

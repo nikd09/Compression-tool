@@ -14,6 +14,7 @@ actually written, so the index can never claim a result that is not on disk.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +37,8 @@ from .persistence import (
     write_json,
     write_manifest,
 )
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -325,6 +328,7 @@ def ingest(
             tests = load_tests(path_str, cfg)
         except Exception as exc:  # noqa: BLE001
             result.skipped.append((Path(path_str).name, f"{type(exc).__name__}: {exc}"))
+            _log.warning("ingest: %s failed to load: %s", Path(path_str).name, exc)
             continue
         if not tests:
             result.skipped.append((Path(path_str).name, "no usable specimen found"))
@@ -337,6 +341,7 @@ def ingest(
                 # not abort a batch mid-write: everything archived and written
                 # for earlier specimens in this call stays valid and indexed.
                 result.skipped.append((test.label, f"{type(exc).__name__}: {exc}"))
+                _log.warning("ingest: %s failed to analyse: %s", test.label, exc)
                 continue
             if df.empty:
                 result.skipped.append((test.label, "no cycles detected"))
@@ -433,6 +438,10 @@ def ingest(
         # needs to reflect.
         result.overview_html = build_overview(ws)
 
+    _log.info(
+        "ingest: %s -> %d specimen(s) indexed, %d skipped, run_dir=%s",
+        material, len(result.specimens), len(result.skipped), run_dir,
+    )
     return result
 
 
