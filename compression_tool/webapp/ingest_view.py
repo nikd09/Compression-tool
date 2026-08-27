@@ -18,7 +18,7 @@ from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview, preview_dashboard_data
-from .common import utm_press_html
+from .common import config_form, utm_press_html
 
 _NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
@@ -44,55 +44,6 @@ def _step(n: int, title: str, sub: str = "") -> None:
         f'<div class="ct-step-head"><span class="ct-step">{n}</span><h3>{title}</h3></div>'
         + (f'<p class="ct-step-sub">{sub}</p>' if sub else ""),
         unsafe_allow_html=True,
-    )
-
-
-def _config_from_form(detect_holds: bool) -> Config:
-    d = Config()
-    with st.expander("Advanced: segmentation and reference thresholds"):
-        st.caption(
-            "Every threshold is relative to the test's own peak stress, never "
-            "absolute: the same knobs `--unload-frac` etc. expose on the "
-            "command line. Defaults work unmodified for a Zwick Z100 export; "
-            "change one only if Preview below shows a stage being lost or a "
-            "cycle miscounted."
-        )
-        c1, c2 = st.columns(2)
-        with c1:
-            unload_frac = st.number_input(
-                "unload_frac", value=d.unload_frac, format="%.3f",
-                help="Stress below this fraction of peak counts as unloaded.")
-            major_cycle_frac = st.number_input(
-                "major_cycle_frac", value=d.major_cycle_frac, format="%.3f",
-                help="A run peaking below this fraction of the global peak is noise, not a stage.")
-            stiff_lo_frac = st.number_input("stiff_lo_frac", value=d.stiff_lo_frac, format="%.2f")
-            stiff_hi_frac = st.number_input("stiff_hi_frac", value=d.stiff_hi_frac, format="%.2f")
-        with c2:
-            ref_stress_frac = st.number_input(
-                "ref_stress_frac", value=d.ref_stress_frac, format="%.2f",
-                help="Reference stress for cross-cycle comparison, as a fraction of the smallest cycle peak.")
-            residual_stress_frac = st.number_input(
-                "residual_stress_frac", value=d.residual_stress_frac, format="%.2f")
-            hold_tol_frac = st.number_input("hold_tol_frac", value=d.hold_tol_frac, format="%.3f")
-            h0_text = st.text_input(
-                "h0_mm override", value="",
-                placeholder="blank = read from the export's metadata sheet")
-    h0_mm = None
-    if h0_text.strip():
-        try:
-            h0_mm = float(h0_text)
-        except ValueError:
-            st.error(f"h0_mm override must be a number, got {h0_text!r}")
-    return Config(
-        unload_frac=unload_frac,
-        major_cycle_frac=major_cycle_frac,
-        stiff_lo_frac=stiff_lo_frac,
-        stiff_hi_frac=stiff_hi_frac,
-        ref_stress_frac=ref_stress_frac,
-        residual_stress_frac=residual_stress_frac,
-        hold_tol_frac=hold_tol_frac,
-        h0_mm=h0_mm,
-        detect_holds=detect_holds,
     )
 
 
@@ -383,7 +334,7 @@ def render(ws: Workspace) -> None:
 
     st.divider()
     _step(2, "Thresholds", "Optional. Defaults work unmodified for a Zwick Z100 export.")
-    cfg = _config_from_form(detect_holds)
+    cfg = config_form(detect_holds)
 
     if not uploaded:
         # Nothing attached (including "no longer attached" -- the uploader

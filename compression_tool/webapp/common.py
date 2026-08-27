@@ -10,6 +10,7 @@ import re
 import streamlit as st
 
 from .. import knowledge_base
+from ..core import Config
 from ..persistence import Workspace, WorkspacePathNotAllowed, check_workspace_allowed, workspace_index_root
 from ..pipeline import rebuild_index
 
@@ -134,6 +135,63 @@ _POLISH = """
 def polish() -> None:
     """Apply the shared style layer. Called once, from app.py."""
     st.markdown(_POLISH, unsafe_allow_html=True)
+
+
+def config_form(detect_holds: bool) -> Config:
+    """The "Advanced: segmentation and reference thresholds" expander --
+    every threshold knob the CLI also exposes, defaulted from a fresh
+    Config() and rendered as one form. Shared between Ingest (where a
+    changed value is tried against a Preview before anything is committed)
+    and Config's "Re-analyse this run" (where it is applied straight to a
+    run's already-archived sources) so the two never drift into offering a
+    different set of knobs for the same underlying Config fields.
+    """
+    d = Config()
+    with st.expander("Advanced: segmentation and reference thresholds"):
+        st.caption(
+            "Every threshold is relative to the test's own peak stress, never "
+            "absolute: the same knobs `--unload-frac` etc. expose on the "
+            "command line. Defaults work unmodified for a Zwick Z100 export; "
+            "change one only if Preview below shows a stage being lost or a "
+            "cycle miscounted."
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            unload_frac = st.number_input(
+                "unload_frac", value=d.unload_frac, format="%.3f",
+                help="Stress below this fraction of peak counts as unloaded.")
+            major_cycle_frac = st.number_input(
+                "major_cycle_frac", value=d.major_cycle_frac, format="%.3f",
+                help="A run peaking below this fraction of the global peak is noise, not a stage.")
+            stiff_lo_frac = st.number_input("stiff_lo_frac", value=d.stiff_lo_frac, format="%.2f")
+            stiff_hi_frac = st.number_input("stiff_hi_frac", value=d.stiff_hi_frac, format="%.2f")
+        with c2:
+            ref_stress_frac = st.number_input(
+                "ref_stress_frac", value=d.ref_stress_frac, format="%.2f",
+                help="Reference stress for cross-cycle comparison, as a fraction of the smallest cycle peak.")
+            residual_stress_frac = st.number_input(
+                "residual_stress_frac", value=d.residual_stress_frac, format="%.2f")
+            hold_tol_frac = st.number_input("hold_tol_frac", value=d.hold_tol_frac, format="%.3f")
+            h0_text = st.text_input(
+                "h0_mm override", value="",
+                placeholder="blank = read from the export's metadata sheet")
+    h0_mm = None
+    if h0_text.strip():
+        try:
+            h0_mm = float(h0_text)
+        except ValueError:
+            st.error(f"h0_mm override must be a number, got {h0_text!r}")
+    return Config(
+        unload_frac=unload_frac,
+        major_cycle_frac=major_cycle_frac,
+        stiff_lo_frac=stiff_lo_frac,
+        stiff_hi_frac=stiff_hi_frac,
+        ref_stress_frac=ref_stress_frac,
+        residual_stress_frac=residual_stress_frac,
+        hold_tol_frac=hold_tol_frac,
+        h0_mm=h0_mm,
+        detect_holds=detect_holds,
+    )
 
 
 def dot(i: int) -> str:

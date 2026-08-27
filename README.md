@@ -724,10 +724,43 @@ material around the same time can no longer produce an interleaved, corrupt
 workbook or dashboard between them, and nobody can open a half-written file
 mid-write regardless of concurrency.
 
-A lock file was deliberately not added: at "a few ingesters", exclusive-
-create plus atomic writes closes every case that actually mattered, without
+A lock file was deliberately not added for run-folder allocation or for any
+of these per-run/per-material files: at "a few ingesters", exclusive-create
+plus atomic writes closes every case that actually mattered there, without
 the stale-lock failure mode a lock file brings (a crashed process leaving a
-lock nobody ever clears).
+lock nobody ever clears). See below for the one place that reasoning did
+not hold and a lock was added anyway.
+
+### materials.json and admins.json: a small, self-healing lock for a shared list
+
+`materials.json` and `admins.json` are a different shape of problem from
+everything above: not an append-mostly set of per-run files, but ONE shared,
+mutable list that "add a material" or "add an admin" reads in full,
+modifies, and writes back in full. Exclusive-create and atomic writes do not
+help here -- they make each individual WRITE safe, but not the
+read-modify-write around it. Two people adding different materials (or
+admins) around the same moment could each read the SAME list before either
+had written, each compute their own "existing + my one addition", and
+whichever wrote second would silently overwrite the first's addition
+instead of both surviving.
+
+`persistence.locked_update()` closes that gap with a small lock FILE
+(`<path>.lock`, next to the JSON file it protects), acquired by exclusive
+create -- the same underlying primitive `resolve_run_dir()` already relies
+on, applied to a shared file instead of a new directory each time.
+`material_registry.add_material()`/`remove_material()` and
+`permissions.claim_admin()`/`add_admin()`/`remove_admin()` all wrap their
+read-modify-write in it now. Unlike the "no lock file" reasoning above, this
+one lock is self-healing against the exact failure mode that reasoning was
+avoiding: a lock older than 30 seconds is assumed abandoned by a crashed
+holder and is stolen rather than left to wedge every future writer forever
+-- a network share has no process table to check a PID against, so age is
+the only signal available. A caller waiting on a live holder gives up after
+5 seconds and proceeds unlocked rather than hanging indefinitely; this buys
+correctness for the ordinary case of two people clicking around the same
+moment, not a hard guarantee under sustained contention, which is
+consistent with this codebase's existing best-effort stance on shared,
+hand-editable files (audit.py's own writes are the same trade-off).
 
 ### Stiffness-quality flagging in the common-band stiffness chart
 
@@ -770,6 +803,31 @@ downstream reads an audit record to reconstruct state, so a write that
 fails (a read-only share, a full disk) is swallowed rather than allowed to
 fail an ingest that already succeeded and was already written to disk in
 full.
+
+### Re-analysing a run with different thresholds, without re-uploading
+
+The Config tab's "Re-analyse this run" card, under the selected run's
+summary, re-runs that run's already-archived source file(s) through the
+engine with a changed threshold, hold-detection flag, h0 override or gauge
+length confirmation -- the same form Ingest uses, reused as-is so the two
+never drift into offering a different set of knobs for the same `Config`.
+
+It only needs the archived copy under `Raw exports/` that `ingest()` already
+wrote; nobody has to find and re-upload the original export. A run ingested
+with "Archive a copy of the uploaded file" unchecked has nothing to reuse and
+the card says so instead of offering a button that cannot work; a source
+whose archived copy was later deleted by hand is reported and skipped, the
+rest of the run's sources still re-analysed.
+
+Feeding the resolved sources back through `ingest()` with a changed `Config`
+gets its own new run folder (`resolve_run_dir`'s existing per-fingerprint
+rule) -- the run being compared against is never silently overwritten by a
+"what if" re-run. Re-analysing with the *same* settings on the same day is
+the existing idempotent case: it overwrites the run in place rather than
+piling up identical folders. `archive_raw()` is what makes feeding it an
+already-archived path safe either way -- it recognises a path already inside
+`Raw exports/` and returns it unchanged instead of copying it a second time
+under a doubled, prefix-on-prefix name.
 
 ### One design system across every view, not just Results
 
@@ -895,9 +953,6 @@ anywhere else in this codebase a similar pattern is tempting:
 Steps 3–5 of the handoff are now built: Ingest / Results / Compare / Config
 above. What is not built yet:
 
-- **No re-analysis from the UI.** Changing a threshold on Ingest only affects
-  new ingests; there is no "re-run this specimen with different settings"
-  button yet, though `Config` exposes every knob needed to build one.
 - **Brand colours are placeholders.** `--brand` in the dashboard template and
   `primaryColor` in `.streamlit/config.toml` carry the palette's own blue.
   Swapping in EQYO's accent is those two values; nothing else depends on them.

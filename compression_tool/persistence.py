@@ -51,10 +51,12 @@ import math
 import os
 import re
 import shutil
+import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 import numpy as np
 import pandas as pd
@@ -274,6 +276,17 @@ def archive_raw(source: str | os.PathLike, ws: Workspace) -> tuple[Path, str]:
     """
     src = Path(source).expanduser().resolve()
     digest = sha256_file(src)
+
+    # `source` may already BE the archived copy -- re-analysing an existing
+    # run feeds its own "Raw exports/<sha12>_<name>" path back in here.
+    # Without this check, slugify(src.name) on a name that is already
+    # content-addressed round-trips unchanged, so the naive target below
+    # would double the prefix ("<sha12>_<sha12>_<name>") and silently create
+    # a second, differently-named copy of the exact same bytes instead of
+    # recognising the one that is already there.
+    if src.parent == ws.raw.resolve() and src.name.startswith(f"{digest[:12]}_"):
+        return src, digest
+
     target = ws.raw / f"{digest[:12]}_{slugify(src.name)}"
 
     if target.exists():
@@ -432,6 +445,65 @@ def write_json(payload: dict, path: Path) -> Path:
 def read_json(path: str | os.PathLike) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+# How long a lock older than this is assumed abandoned by a crashed holder
+# and stolen rather than left to wedge every future writer forever -- a
+# network share has no process table to check a PID against, so age is the
+# only signal available. How long a caller waits for a live holder before
+# giving up and proceeding unlocked anyway: this buys correctness under the
+# ordinary case of two people clicking around the same moment, not a hard
+# guarantee under sustained contention -- consistent with this codebase's
+# existing best-effort stance on shared, hand-editable files (see audit.py).
+_LOCK_STALE_S = 30.0
+_LOCK_TIMEOUT_S = 5.0
+_LOCK_POLL_S = 0.05
+
+
+@contextmanager
+def locked_update(target: Path) -> Iterator[None]:
+    """Serialises a read-modify-write cycle against `target` across
+    processes (and threads) that might touch it at the same moment.
+
+    materials.json and admins.json are small, shared, hand-editable lists:
+    every "add a material" or "add an admin" call reads the whole file,
+    computes old-list-plus-one-change, and writes the whole file back.
+    write_json() alone makes each individual WRITE atomic, but not the
+    read-modify-write as a whole -- two such calls racing each read the
+    SAME stale list, each compute their own "plus one change" from it, and
+    whichever writes second silently overwrites the first's change instead
+    of both surviving. Wrapping the read, the modification and the write in
+    one `with locked_update(...):` block is what actually closes that gap.
+
+    A plain lock FILE, not a library: acquired by exclusive create
+    (`os.O_CREAT | os.O_EXCL`), atomic on every filesystem this app
+    targets, including SMB -- the same primitive `resolve_run_dir` already
+    relies on for run-folder allocation, applied here to a single shared
+    file instead of a new directory each time.
+    """
+    lock_path = target.with_name(target.name + ".lock")
+    deadline = time.monotonic() + _LOCK_TIMEOUT_S
+    acquired = False
+    while time.monotonic() < deadline:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            acquired = True
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+            except OSError:
+                continue  # the previous holder released it just now; retry the create
+            if age > _LOCK_STALE_S:
+                lock_path.unlink(missing_ok=True)
+                continue
+            time.sleep(_LOCK_POLL_S)
+    try:
+        yield
+    finally:
+        if acquired:
+            lock_path.unlink(missing_ok=True)
 
 
 def payload_frame(payload: dict) -> pd.DataFrame:

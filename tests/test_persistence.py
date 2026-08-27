@@ -9,8 +9,11 @@ silently overwrites a different result.
 
 from __future__ import annotations
 
+import json
 import math
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -21,6 +24,7 @@ from compression_tool import persistence
 from compression_tool.persistence import (
     archive_raw,
     jsonable,
+    locked_update,
     read_json,
     resolve_run_dir,
     run_dir_name,
@@ -156,6 +160,23 @@ def test_archived_copy_is_read_only(workspace, single_file):
     ws = Workspace.at(workspace).ensure()
     archived, _ = archive_raw(single_file, ws)
     assert not (archived.stat().st_mode & 0o222)
+
+
+def test_archiving_an_already_archived_path_does_not_duplicate_it(workspace, single_file):
+    """The bug this pins: feeding archive_raw() the path it just returned
+    (re-analysis does exactly this, see config_view._render_reanalyze) used
+    to compute a target name by slugifying a name that is ALREADY
+    content-addressed ("<sha12>_<original>"), which round-trips unchanged
+    and doubles the prefix into a second, differently-named copy of the
+    identical bytes instead of recognising the one already on disk."""
+    ws = Workspace.at(workspace).ensure()
+    first, first_digest = archive_raw(single_file, ws)
+
+    second, second_digest = archive_raw(first, ws)
+
+    assert second == first
+    assert second_digest == first_digest
+    assert len(list(ws.raw.iterdir())) == 1
 
 
 def test_different_exports_do_not_collide(workspace, single_file, series_file):
@@ -580,3 +601,92 @@ def test_a_sibling_directory_with_a_shared_prefix_is_not_allowed(tmp_path, monke
     monkeypatch.setenv("COMPRESSION_TOOL_ALLOWED_ROOTS", str(allowed))
     with pytest.raises(WorkspacePathNotAllowed):
         check_workspace_allowed(lookalike)
+
+
+# ----------------------------------------------------------------------------
+# locked_update -- serialising a read-modify-write cycle against a shared file
+# ----------------------------------------------------------------------------
+
+
+def test_locked_update_serialises_concurrent_read_modify_write(tmp_path):
+    """The exact race this exists to close: N threads each read a counter
+    file, add 1, and write it back. Without the lock, two racing on the
+    same stale read both compute old+1 and the loser's increment is lost.
+    Runs enough iterations that an unserialised version reliably loses at
+    least one -- confirmed by temporarily removing the `with locked_update`
+    line while writing this test."""
+    target = tmp_path / "counter.json"
+    target.write_text('{"n": 0}', encoding="utf-8")
+    n_threads, increments_each = 8, 15
+
+    def bump():
+        for _ in range(increments_each):
+            with locked_update(target):
+                data = read_json(target)
+                data["n"] += 1
+                target.write_text(json.dumps(data), encoding="utf-8")
+
+    with ThreadPoolExecutor(max_workers=n_threads) as pool:
+        list(pool.map(lambda _: bump(), range(n_threads)))
+
+    assert read_json(target)["n"] == n_threads * increments_each
+
+
+def test_locked_update_blocks_a_second_caller_until_the_first_releases(tmp_path):
+    target = tmp_path / "file.json"
+    order: list[str] = []
+
+    def holder():
+        with locked_update(target):
+            order.append("holder-acquired")
+            time.sleep(0.15)
+            order.append("holder-released")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut1 = pool.submit(holder)
+        time.sleep(0.03)  # let the holder acquire first
+
+        def waiter():
+            with locked_update(target):
+                order.append("waiter-acquired")
+
+        fut2 = pool.submit(waiter)
+        fut1.result()
+        fut2.result()
+
+    assert order == ["holder-acquired", "holder-released", "waiter-acquired"]
+
+
+def test_locked_update_steals_a_stale_lock_rather_than_wedging_forever(tmp_path, monkeypatch):
+    """A lock left behind by a crashed holder must not block every future
+    writer forever -- age past _LOCK_STALE_S is the only signal available
+    on a share with no process table to check a PID against."""
+    monkeypatch.setattr(persistence, "_LOCK_STALE_S", 0.05)
+    monkeypatch.setattr(persistence, "_LOCK_TIMEOUT_S", 2.0)
+    target = tmp_path / "file.json"
+    lock_path = target.with_name(target.name + ".lock")
+    lock_path.write_text("", encoding="utf-8")
+    stale_time = time.time() - 10
+    os.utime(lock_path, (stale_time, stale_time))
+
+    entered = False
+    with locked_update(target):
+        entered = True
+    assert entered
+
+
+def test_locked_update_removes_its_own_lock_file_on_exit(tmp_path):
+    target = tmp_path / "file.json"
+    lock_path = target.with_name(target.name + ".lock")
+    with locked_update(target):
+        assert lock_path.exists()
+    assert not lock_path.exists()
+
+
+def test_locked_update_removes_its_lock_even_if_the_body_raises(tmp_path):
+    target = tmp_path / "file.json"
+    lock_path = target.with_name(target.name + ".lock")
+    with pytest.raises(ValueError):
+        with locked_update(target):
+            raise ValueError("boom")
+    assert not lock_path.exists()

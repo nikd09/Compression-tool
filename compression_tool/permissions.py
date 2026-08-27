@@ -28,7 +28,7 @@ from __future__ import annotations
 import getpass
 import logging
 
-from .persistence import Workspace, read_json, write_json
+from .persistence import Workspace, locked_update, read_json, write_json
 
 _FILENAME = "admins.json"
 _log = logging.getLogger(__name__)
@@ -79,29 +79,44 @@ def claim_admin(ws: Workspace) -> list[str]:
     """Create admins.json with just the current user -- the one-time
     bootstrap action that turns access on. Refuses if the file already
     exists, so a second person clicking the same button cannot silently
-    reset the list back down to just themselves."""
-    if admins_configured(ws):
-        raise ValueError("admins.json already exists; add yourself from the admin list instead")
-    names = [current_user()]
-    write_json({"admins": names}, ws.root / _FILENAME)
-    _log.info("claim_admin: %r claimed admin access in %s", names[0], ws.root)
-    return names
+    reset the list back down to just themselves.
+
+    The exists-check and the write are inside one locked_update block, not
+    two separate steps: without that, two people clicking "Claim admin
+    access" at the same moment could both pass the check before either has
+    written, and the second write would silently overwrite the first
+    person's admins.json with a list containing only the second person --
+    exactly the "reset back down to just themselves" this refusal exists to
+    prevent, just via a race instead of a repeated click.
+    """
+    with locked_update(ws.root / _FILENAME):
+        if admins_configured(ws):
+            raise ValueError("admins.json already exists; add yourself from the admin list instead")
+        names = [current_user()]
+        write_json({"admins": names}, ws.root / _FILENAME)
+        _log.info("claim_admin: %r claimed admin access in %s", names[0], ws.root)
+        return names
 
 
 def add_admin(ws: Workspace, name: str) -> list[str]:
     name = name.strip()
     if not name:
         raise ValueError("username cannot be empty")
-    names = load_admins(ws)
-    if name.casefold() not in {n.casefold() for n in names}:
-        names = names + [name]
-        write_json({"admins": names}, ws.root / _FILENAME)
-        _log.info("add_admin: %r added %r as admin in %s", current_user(), name, ws.root)
-    return names
+    # See material_registry.add_material's matching comment: the read and
+    # the write both have to be inside the lock, or two additions racing on
+    # separate reads can silently lose one of them.
+    with locked_update(ws.root / _FILENAME):
+        names = load_admins(ws)
+        if name.casefold() not in {n.casefold() for n in names}:
+            names = names + [name]
+            write_json({"admins": names}, ws.root / _FILENAME)
+            _log.info("add_admin: %r added %r as admin in %s", current_user(), name, ws.root)
+        return names
 
 
 def remove_admin(ws: Workspace, name: str) -> list[str]:
-    names = [n for n in load_admins(ws) if n.casefold() != name.casefold()]
-    write_json({"admins": names}, ws.root / _FILENAME)
-    _log.info("remove_admin: %r removed %r as admin in %s", current_user(), name, ws.root)
-    return names
+    with locked_update(ws.root / _FILENAME):
+        names = [n for n in load_admins(ws) if n.casefold() != name.casefold()]
+        write_json({"admins": names}, ws.root / _FILENAME)
+        _log.info("remove_admin: %r removed %r as admin in %s", current_user(), name, ws.root)
+        return names

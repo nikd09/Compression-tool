@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from . import knowledge_base
-from .persistence import Workspace, read_json, write_json
+from .persistence import Workspace, locked_update, read_json, write_json
 
 _FILENAME = "materials.json"
 
@@ -78,14 +78,20 @@ def add_material(ws: Workspace, name: str) -> str:
     if not name:
         raise ValueError("material name cannot be empty")
 
-    existing = load_materials(ws)
-    key = _normalize(name)
-    for candidate in existing:
-        if _normalize(candidate) == key:
-            return candidate
+    # The whole read-modify-write, not just the write, has to be inside the
+    # lock: two calls racing on separate reads would each compute their own
+    # "existing + [name]" from the same stale list, and the loser's write
+    # would silently drop the winner's addition (or vice versa) instead of
+    # both surviving -- see persistence.locked_update's docstring.
+    with locked_update(ws.root / _FILENAME):
+        existing = load_materials(ws)
+        key = _normalize(name)
+        for candidate in existing:
+            if _normalize(candidate) == key:
+                return candidate
 
-    _save(ws, existing + [name])
-    return name
+        _save(ws, existing + [name])
+        return name
 
 
 def remove_material(ws: Workspace, name: str) -> None:
@@ -94,5 +100,6 @@ def remove_material(ws: Workspace, name: str) -> None:
     also removes an entry saved as "peek gf30". A no-op if it was not
     registered."""
     key = _normalize(name)
-    remaining = [n for n in load_materials(ws) if _normalize(n) != key]
-    _save(ws, remaining)
+    with locked_update(ws.root / _FILENAME):
+        remaining = [n for n in load_materials(ws) if _normalize(n) != key]
+        _save(ws, remaining)

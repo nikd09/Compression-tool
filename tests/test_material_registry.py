@@ -9,6 +9,8 @@ list never blocks ingest.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from compression_tool import Workspace, add_material, ingest, load_materials
@@ -98,3 +100,18 @@ def test_normalize_treats_case_and_separators_as_equivalent(a, b):
 
 def test_normalize_still_distinguishes_different_materials():
     assert _normalize("PEEK") != _normalize("PEEK-GF30")
+
+
+def test_concurrent_additions_of_different_materials_all_survive(workspace):
+    """The race persistence.locked_update exists to close: without it, N
+    threads each doing add_material's own read-modify-write on the SAME
+    materials.json can each read the list before any of the others have
+    written, and every write after the first silently overwrites the
+    previous one's addition instead of appending to it."""
+    ws = Workspace.at(workspace).ensure()
+    names = [f"Material-{i:02d}" for i in range(12)]
+
+    with ThreadPoolExecutor(max_workers=len(names)) as pool:
+        list(pool.map(lambda n: add_material(ws, n), names))
+
+    assert sorted(load_materials(ws), key=str.casefold) == sorted(names, key=str.casefold)

@@ -5,14 +5,17 @@ result can always be traced back to the exact numbers behind it, per run."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
 from .. import audit, knowledge_base, permissions
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
+from ..pipeline import ingest
 from ..reports_overview import build_overview
-from .common import short_tag
+from .common import config_form, short_tag
 
 
 def render(ws: Workspace) -> None:
@@ -61,6 +64,8 @@ def render(ws: Workspace) -> None:
             "Ingested (UTC)", created[:10] if len(created) >= 10 else created,
             help=f"Full timestamp: {created}",
         )
+
+    _render_reanalyze(ws, manifest)
 
     material = manifest.get("material", "")
     reports_dir = ws.root / "reports"
@@ -175,6 +180,94 @@ def render(ws: Workspace) -> None:
         "form defaults. The two can differ once someone changes a threshold on "
         "the Ingest tab for a later run."
     )
+
+
+def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[str]]:
+    """This run's sources whose archived raw file is still on disk, and the
+    source_file names of any that are not -- either archive_originals=False
+    was used at ingest time (raw_input_path was never recorded) or the
+    archived copy was later removed. Only the former can be fed back through
+    ingest() without re-uploading; the caller decides what to do about the
+    rest. Pure and disk-only, so it is tested directly without going through
+    Streamlit.
+    """
+    found: list[Path] = []
+    missing: list[str] = []
+    for source in manifest.get("sources", []):
+        rel = source.get("raw_input_path")
+        path = ws.root / rel if rel else None
+        if path is not None and path.exists():
+            found.append(path)
+        else:
+            missing.append(source.get("source_file", "-"))
+    return found, missing
+
+
+def _render_reanalyze(ws: Workspace, manifest: dict) -> None:
+    """Re-run this run's already-archived sources through the engine with
+    different thresholds, without asking anyone to find and re-upload the
+    original export. archive_originals=True below is deliberate even though
+    the file is already archived: it is what keeps the new specimen records'
+    raw_input_path pointing at that same archived copy (archive_raw() is
+    content-addressed and idempotent, so re-"archiving" it costs nothing and
+    copies nothing) rather than losing that link the way
+    archive_originals=False would.
+
+    Same sources under the same settings on the same day overwrite this run
+    in place (resolve_run_dir's existing behaviour, by fingerprint); a
+    changed setting gets its own new run folder, so the run being compared
+    against never silently changes under it.
+    """
+    material = manifest.get("material", "")
+    found, missing = _reanalyze_sources(ws, manifest)
+    total = len(found) + len(missing)
+
+    with st.container(border=True, key="card_reanalyze"):
+        st.markdown("##### Re-analyse this run")
+        st.caption(
+            "Re-run this run's archived source file(s) with different "
+            "thresholds, without re-uploading anything. Change a value below "
+            "only if this run's numbers look wrong and a different setting "
+            "would fix it -- most runs never need this."
+        )
+        if not found:
+            st.caption(
+                "Not available - none of this run's source files were "
+                "archived (ingested with 'Archive a copy of the uploaded "
+                "file' unchecked on the Ingest tab), so there is nothing on "
+                "disk to re-run this from."
+            )
+            return
+        if missing:
+            st.warning(
+                f"{len(missing)} of {total} source file(s) for this run are "
+                f"missing from the archive and will be skipped: "
+                f"{', '.join(missing)}"
+            )
+
+        detect_holds = st.checkbox(
+            "Test has a hold at peak", value=True, key="cfg_reanalyze_holds",
+        )
+        cfg = config_form(detect_holds)
+        gauge_confirmed = st.checkbox(
+            "Gauge length confirmed", key="cfg_reanalyze_gauge",
+            help="Check this only once someone has verified the displacement "
+            "channel spans exactly this specimen's h0. Left unchecked, strain "
+            "and modulus stay provisional in the re-analysed record.",
+        )
+        if st.button("Re-analyse now", icon=":material/refresh:", key="cfg_reanalyze_btn"):
+            result = ingest(
+                found, ws, material=material, cfg=cfg,
+                gauge_length_confirmed=gauge_confirmed,
+                archive_originals=True, write_reports=True,
+            )
+            st.success(
+                f"Re-analysed into {result.run_dir} - "
+                f"{len(result.specimens)} specimen(s)."
+            )
+            for name, why in result.skipped:
+                st.warning(f"Skipped {name}: {why}")
+            st.rerun()
 
 
 def _render_admin_access(ws: Workspace) -> None:
