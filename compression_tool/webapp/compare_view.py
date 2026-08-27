@@ -73,18 +73,18 @@ def render(ws: Workspace) -> None:
 
     st.caption(
         "Each group starts pre-filled with one material's specimens as a "
-        "shortcut. Add or remove specimens freely, including from a "
-        "different material, to build exactly the comparison you want."
+        "shortcut. The material filter below narrows the specimen list to "
+        "one material at a time - useful once a workspace has many; pick "
+        "'All materials' to combine specimens across materials in one group."
     )
+
+    _ALL_MATERIALS = "All materials"
+    material_options = [_ALL_MATERIALS] + materials
 
     groups: list[dict] = []
     cols = st.columns(min(int(n_groups), 3))
     for i in range(int(n_groups)):
         default_material = materials[i % len(materials)] if materials else None
-        default_ids = (
-            specimens.loc[specimens["material"] == default_material, "specimen_id"].tolist()
-            if default_material else []
-        )
         with cols[i % len(cols)]:
             with st.container(border=True, key=f"card_group_{i}"):
                 st.markdown(
@@ -101,9 +101,33 @@ def render(ws: Workspace) -> None:
                     "specimens are in the group, only how this group reads "
                     "once specimens are picked below.",
                 )
+                filter_choice = st.selectbox(
+                    "Material filter", material_options,
+                    index=material_options.index(default_material) if default_material else 0,
+                    key=f"cmp_material_filter_{i}", label_visibility="collapsed",
+                    help="Narrows the specimen list below to one material. "
+                    "Switching this clears this group's current pick, so a "
+                    "specimen from a material you filter away is never "
+                    "silently kept in the group.",
+                )
+                if filter_choice == _ALL_MATERIALS:
+                    filtered_ids, default_ids = all_ids, []
+                else:
+                    filtered_ids = specimens.loc[
+                        specimens["material"] == filter_choice, "specimen_id"
+                    ].tolist()
+                    default_ids = filtered_ids
+                # Keyed on the filter choice too, not just the group index:
+                # a widget's session_state value is not automatically pruned
+                # to a narrower `options` on rerun, and Streamlit raises
+                # rather than silently drop a now-out-of-range selection.
+                # Folding the filter into the key gives the multiselect a
+                # fresh widget identity (and its own clean default) the
+                # instant the filter changes, instead of carrying a stale
+                # selection into options it no longer belongs to.
                 chosen = st.multiselect(
-                    "Specimens", options=all_ids, default=default_ids,
-                    format_func=option_label, key=f"cmp_specimens_{i}",
+                    "Specimens", options=filtered_ids, default=default_ids,
+                    format_func=option_label, key=f"cmp_specimens_{i}_{filter_choice}",
                     label_visibility="collapsed",
                     placeholder="Pick specimens for this group",
                 )

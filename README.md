@@ -447,6 +447,19 @@ exactly the runs that matter. The same freedom exists one tab over: Results'
 specimen toggles (§ Specimens per test) already let a bad run be excluded from
 that view's own mean without leaving the page.
 
+Each group also carries a **Material filter** above its specimen picker,
+defaulted to that group's own starting material. Once a workspace holds many
+materials, the specimen dropdown listing every specimen in the whole
+workspace flat becomes the thing standing between someone and the two or
+three specimens they actually want; the filter narrows it to one material at
+a time instead. Picking "All materials" restores the full flat list for
+building a group that deliberately spans materials -- and starts that
+group's picker EMPTY rather than pre-selecting the whole workspace, since a
+filter meant to cut down a long list should never itself be the thing that
+dumps everything into a group. Switching the filter clears whatever was
+picked under the previous one, rather than silently keeping a specimen from
+a material just filtered away.
+
 Each group's **Name** field only labels that group -- the chart legend and the
 "Group membership" listing below the chart -- it has no effect on which
 specimens are in it. Two groups sharing a name is not just a display
