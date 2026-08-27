@@ -20,9 +20,12 @@ REM      new variable is picked up.
 REM
 REM NOT for exposing this app to the public internet (no ngrok, no tunnel,
 REM no port-forwarding through a home/public router) -- this proprietary
-REM test data must stay inside the corporate network. There is no login on
-REM this app yet: anyone who can reach the address below can read and write
-REM every workspace it can see, so only run this on a network you trust.
+REM test data must stay inside the corporate network. There is still no
+REM real login on this app (COMPRESSION_TOOL_PASSWORD, unset by default,
+REM can put one shared password in front of it -- see the README -- but
+REM that is a stopgap, not real per-person authentication): anyone who can
+REM reach the address below can read and write every workspace it can see
+REM unless that variable is set, so only run this on a network you trust.
 
 setlocal
 

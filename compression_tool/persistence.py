@@ -141,6 +141,43 @@ class Workspace:
             return str(Path(path).resolve())
 
 
+class WorkspacePathNotAllowed(ValueError):
+    """A workspace path was rejected by `check_workspace_allowed()`."""
+
+
+_ALLOWED_ROOTS_ENV = "COMPRESSION_TOOL_ALLOWED_ROOTS"
+
+
+def check_workspace_allowed(root: str | os.PathLike) -> None:
+    """Raise `WorkspacePathNotAllowed` if `root` falls outside the roots
+    named in `COMPRESSION_TOOL_ALLOWED_ROOTS` (entries joined by `os.pathsep`
+    -- ';' on Windows, ':' elsewhere, the same convention PATH itself uses).
+
+    A no-op, on purpose, when that variable is unset or empty: on a laptop
+    running the app for yourself, typing a workspace path grants nothing a
+    local Python process could not already do on its own -- there is no new
+    capability to restrict. The moment this is hosted somewhere for someone
+    ELSE to open in a browser, an unvalidated free-text path is arbitrary
+    read *and* write on the server's filesystem, not just this tool's own
+    data. Whoever stands up that deployment sets this variable once; callers
+    that never set it keep today's behaviour exactly, unchanged.
+    """
+    allowed = os.environ.get(_ALLOWED_ROOTS_ENV, "").strip()
+    if not allowed:
+        return
+    resolved = Path(root).expanduser().resolve()
+    roots = [Path(p).expanduser().resolve() for p in allowed.split(os.pathsep) if p.strip()]
+    for allowed_root in roots:
+        if resolved == allowed_root or allowed_root in resolved.parents:
+            return
+    raise WorkspacePathNotAllowed(
+        f"{resolved} is outside the workspace roots this deployment allows "
+        f"({', '.join(str(r) for r in roots)}). Ask whoever administers it "
+        f"to add this path to {_ALLOWED_ROOTS_ENV}, or point at one of the "
+        f"roots already listed there."
+    )
+
+
 def default_index_root() -> Path:
     """Where the local SQLite index lives when a caller wants `root` to stay
     a shared/synced folder untouched by it -- see `Workspace.index_root`.

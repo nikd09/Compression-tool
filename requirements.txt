@@ -1,6 +1,21 @@
-# Runtime dependencies. See pyproject.toml for the authoritative list.
+# Runtime dependencies -- everything the webapp needs to run, not just the
+# core library. pyproject.toml is still the authoritative list (this file
+# has to stay in sync with it by hand); it split these into a "webapp"
+# extra so a script-only install did not have to pull in Streamlit, but
+# that split also meant `pip install -r requirements.txt` alone was never
+# enough to actually run `streamlit run compression_tool/webapp/app.py` --
+# it would fail on the first `import streamlit` with nothing here to
+# explain why. This file is for deploying the webapp; it lists both.
+#
 # np.trapezoid, used by the energy integration, arrived in numpy 2.0.
 numpy>=2.0
 pandas>=2.0
 openpyxl>=3.1
 XlsxWriter>=3.1
+
+# The webapp itself. altair is imported directly by webapp/compare_view.py;
+# it was working only because Streamlit happens to pull it in transitively --
+# undeclared here, it would silently break the moment Streamlit's own
+# dependency set shifted.
+streamlit>=1.38
+altair>=5.0

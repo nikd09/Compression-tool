@@ -10,6 +10,8 @@ silently overwrites a different result.
 from __future__ import annotations
 
 import math
+import os
+
 import numpy as np
 import pytest
 
@@ -28,6 +30,8 @@ from compression_tool.persistence import (
     specimen_id,
     workspace_index_root,
     write_manifest,
+    WorkspacePathNotAllowed,
+    check_workspace_allowed,
 )
 
 
@@ -528,3 +532,51 @@ def test_preview_dashboard_data_truncates_past_max_specimens(workspace, series_f
     assert result["truncated"] is True
     assert len(result["payloads"]) == MAX_SPECIMENS
     assert len(result["curves"]) == MAX_SPECIMENS
+
+
+# ----------------------------------------------------------------------------
+# check_workspace_allowed
+# ----------------------------------------------------------------------------
+
+
+def test_unrestricted_when_no_allowlist_is_configured(tmp_path, monkeypatch):
+    """Unset (the default, e.g. every dev laptop) must not restrict
+    anything -- a workspace path grants no new capability there that a
+    local Python process did not already have."""
+    monkeypatch.delenv("COMPRESSION_TOOL_ALLOWED_ROOTS", raising=False)
+    check_workspace_allowed(tmp_path / "anywhere" / "at" / "all")  # does not raise
+
+
+def test_rejects_a_path_outside_the_allowed_roots(tmp_path, monkeypatch):
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "elsewhere"
+    monkeypatch.setenv("COMPRESSION_TOOL_ALLOWED_ROOTS", str(allowed))
+    with pytest.raises(WorkspacePathNotAllowed, match="elsewhere"):
+        check_workspace_allowed(outside)
+
+
+def test_accepts_the_allowed_root_itself_and_a_subdirectory(tmp_path, monkeypatch):
+    allowed = tmp_path / "allowed"
+    monkeypatch.setenv("COMPRESSION_TOOL_ALLOWED_ROOTS", str(allowed))
+    check_workspace_allowed(allowed)  # the root itself
+    check_workspace_allowed(allowed / "some" / "workspace")  # a subdirectory
+
+
+def test_accepts_any_one_of_several_pathsep_joined_roots(tmp_path, monkeypatch):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    monkeypatch.setenv(
+        "COMPRESSION_TOOL_ALLOWED_ROOTS", os.pathsep.join([str(first), str(second)])
+    )
+    check_workspace_allowed(second / "a-workspace")  # does not raise
+
+
+def test_a_sibling_directory_with_a_shared_prefix_is_not_allowed(tmp_path, monkeypatch):
+    """"/data/allowed-2" must not pass a check against "/data/allowed" just
+    because one string starts with the other -- Path.relative_to (used
+    internally) compares path SEGMENTS, not raw string prefixes."""
+    allowed = tmp_path / "allowed"
+    lookalike = tmp_path / "allowed-2"
+    monkeypatch.setenv("COMPRESSION_TOOL_ALLOWED_ROOTS", str(allowed))
+    with pytest.raises(WorkspacePathNotAllowed):
+        check_workspace_allowed(lookalike)

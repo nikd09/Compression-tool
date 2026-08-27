@@ -22,6 +22,7 @@ from compression_tool.webapp import (
     materials_view,
     results_view,
 )
+from compression_tool.webapp.auth import require_password
 from compression_tool.webapp.common import polish, workspace_picker
 
 st.set_page_config(page_title="CompressLab", page_icon="📊", layout="wide")
@@ -152,6 +153,9 @@ _NAV_CSS = """
 
 
 def main() -> None:
+    # First thing after set_page_config, before anything else renders --
+    # see auth.py. A no-op unless COMPRESSION_TOOL_PASSWORD is set.
+    require_password()
     st.logo(
         str(_STATIC / "logo.svg"), size="large",
         icon_image=str(_STATIC / "logo-icon.svg"),

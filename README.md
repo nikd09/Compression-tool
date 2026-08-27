@@ -284,17 +284,39 @@ instead of only `localhost`, so colleagues on the same corporate network/VPN
 can open `http://<this-PC's-name>:8501` in a browser -- no install, no VS
 Code, no Python on their end. Whichever PC runs it has to stay on and
 connected while people are using it; closing that window takes the app down
-for everyone. **There is no login yet** (see "Still to build"), so this is a
-trusted-network stopgap, not the final answer -- and never expose it via a
-public tunnel (ngrok or similar): this is proprietary test data, and a
-tunnel would put it on the open internet with zero authentication in front
-of it.
+for everyone. **There is still no real login** -- `webapp/auth.py` can put a
+single shared password in front of the whole app (see below), but that is a
+stopgap for the gap between "this is hosted" and "IT has SSO in front of
+it," not a substitute for it -- and never expose this via a public tunnel
+(ngrok or similar) regardless: this is proprietary test data, and a tunnel
+puts it on the open internet in front of, at best, one shared secret.
 
 The workspace path is read from the `COMPRESSION_TOOL_WORKSPACE` environment
 variable if it is set (see the comment at the top of `run_webapp.bat` for
 how to set it), falling back to `./data` for local development. It is never
 hardcoded in source -- moving the host to a different PC later is just
 setting the same variable there, no code change.
+
+Two more environment variables matter once this is hosted rather than run
+for yourself, both no-ops (today's exact behaviour) when unset:
+
+- **`COMPRESSION_TOOL_ALLOWED_ROOTS`** -- `persistence.check_workspace_allowed()`,
+  called from the Advanced "change workspace" box every time it is used.
+  Unset, that box accepts any path the way it always has -- fine on a laptop
+  running the app for yourself, since typing a path there grants no
+  capability a local Python process did not already have. Hosted, an
+  unvalidated free-text path is arbitrary read *and* write on the *server's*
+  filesystem for anyone who can reach the URL, not just this tool's own
+  data. Set this to one or more permitted roots (joined by `os.pathsep` --
+  `;` on Windows, `:` elsewhere) before hosting, and the box refuses
+  anything outside them with a clear message instead.
+- **`COMPRESSION_TOOL_PASSWORD`** -- `webapp/auth.py`'s `require_password()`,
+  the first thing `app.py`'s `main()` does. Unset, nobody sees a login
+  screen, exactly like today. Set, the whole app -- sidebar and all -- is
+  replaced by a single password prompt until the right one is entered for
+  that browser session. One shared secret, not per-person identity, and
+  nothing about who entered it is recorded anywhere -- swap it for the
+  reverse proxy / SSO the moment IT provides one.
 
 **The SQLite index is deliberately kept off whatever `COMPRESSION_TOOL_WORKSPACE`
 points at.** That path is expected to be a synced or shared folder (OneDrive,
@@ -664,9 +686,9 @@ exists. The first person to open Config's "Admin access" panel and click
 "Claim admin access for myself" seeds it with just their username; every
 visitor after that is restricted to whoever is listed, manageable from the
 same panel by an existing admin (or by hand-editing `admins.json` on the
-share). This app has no authentication (see "Still to build" and the
-deployment notes) -- nothing here proves who is actually at the keyboard,
-only what the OS happens to report. It exists to keep the many people who
+share). This still is not authentication (see the deployment notes above on
+`COMPRESSION_TOOL_PASSWORD`, and "Still to build") -- nothing here proves
+who is actually at the keyboard, only what the OS happens to report. It exists to keep the many people who
 only read from ever seeing the buttons, and to keep an accidental click from
 a casual visitor from renaming or deleting a shared material -- not to stop
 someone deliberately editing the file or running as another account. Real

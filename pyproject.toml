@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4"]
+dev = ["pytest>=7.4", "pyflakes>=3.0"]
 # altair is imported directly by webapp/compare_view.py; it was working only
 # because Streamlit happens to pull it in transitively -- undeclared here, it
 # would silently break the moment Streamlit's own dependency set shifted.

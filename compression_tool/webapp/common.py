@@ -10,7 +10,7 @@ import re
 import streamlit as st
 
 from .. import knowledge_base
-from ..persistence import Workspace, workspace_index_root
+from ..persistence import Workspace, WorkspacePathNotAllowed, check_workspace_allowed, workspace_index_root
 from ..pipeline import rebuild_index
 
 # Resolved once, at import time, from an environment variable set on the
@@ -293,21 +293,39 @@ def workspace_picker() -> Workspace:
     # was the remaining cause of the reset -- each re-enters the sidebar
     # container by a slightly different path, which is exactly the kind of
     # position-sensitivity a keyed widget's carried-over value turned out to
-    # be sensitive to.
-    root = st.text_input(
-        "Workspace",
-        key="workspace_root",
-        help="Where Raw exports/, Records/ and reports/ live: every "
-        "specimen's JSON, CSV, Excel workbook and HTML report land here on "
-        "every Commit, nowhere else. The same path every time this app is "
-        "opened shows the same tests; pointing it elsewhere switches "
-        "workspaces, it does not copy anything between them. A relative path "
-        "like the default is resolved against wherever `streamlit run` was "
-        "launched from; see the resolved path below if that's unclear. "
-        "Everything here stays local: no network calls, nothing uploaded. "
-        "The search index is kept separately, on this machine only; see "
-        "the note below the resolved path.",
-    )
+    # be sensitive to. Nesting it one level deeper inside an expander below
+    # does not reintroduce that: the widget is still instantiated on every
+    # run regardless of whether the expander is visually open (Streamlit
+    # still executes a collapsed expander's body), and nothing about ITS
+    # position relative to the nav loop above changed -- confirmed live,
+    # switching tabs repeatedly still carries the value forward.
+    #
+    # Collapsed by default and labelled "Advanced": most people editing this
+    # form should never need to touch it (COMPRESSION_TOOL_WORKSPACE already
+    # sets where it opens), and a text box inviting an arbitrary path is
+    # exactly the thing worth NOT presenting as the first thing in the
+    # sidebar. check_workspace_allowed() below is the actual enforcement --
+    # this is only making the deliberate override read as deliberate.
+    with st.expander("Advanced: change workspace", expanded=False):
+        root = st.text_input(
+            "Workspace",
+            key="workspace_root",
+            help="Where Raw exports/, Records/ and reports/ live: every "
+            "specimen's JSON, CSV, Excel workbook and HTML report land here on "
+            "every Commit, nowhere else. The same path every time this app is "
+            "opened shows the same tests; pointing it elsewhere switches "
+            "workspaces, it does not copy anything between them. A relative path "
+            "like the default is resolved against wherever `streamlit run` was "
+            "launched from; see the resolved path below if that's unclear. "
+            "Everything here stays local: no network calls, nothing uploaded. "
+            "The search index is kept separately, on this machine only; see "
+            "the note below the resolved path.",
+        )
+    try:
+        check_workspace_allowed(root)
+    except WorkspacePathNotAllowed as exc:
+        st.error(str(exc))
+        st.stop()
     # The searchable index is deliberately NOT under `root`: `root` is
     # expected to be a synced or shared folder (OneDrive, a network drive),
     # and syncing a SQLite file while it is being written is a well-known
