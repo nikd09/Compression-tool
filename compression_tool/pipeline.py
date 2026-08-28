@@ -152,6 +152,7 @@ def preview_dashboard_data(
     cfg: Optional[Config] = None,
     *,
     material: Optional[str] = None,
+    material_by_path: Optional[dict[str, str]] = None,
     gauge_length_confirmed: bool = False,
 ) -> dict:
     """Everything `dashboard_data.build_dashboard_data()` needs, for every
@@ -165,6 +166,13 @@ def preview_dashboard_data(
     Commit, so a re-check of an old export or a throwaway trial never has
     to become a permanent entry just to be looked at.
 
+    `material_by_path` -- {str(path): material} -- overrides `material` for
+    specific paths, for a batch that mixes more than one material: without
+    it, every path in the batch is labelled with the SAME `material`
+    (webapp/ingest_view.py's per-file material picker is what actually
+    builds this mapping when someone uses it; every other caller passes
+    nothing and keeps today's one-material-for-the-whole-batch behaviour).
+
     Reading the file's bytes to hash them is the only disk I/O -- the same
     cost `ingest()` already pays before archiving, just without the archive
     step after it.
@@ -177,11 +185,13 @@ def preview_dashboard_data(
     cfg = cfg or Config()
     paths = [Path(p).expanduser() for p in paths]
     resolved_material = material or _infer_material(paths)
+    material_by_path = material_by_path or {}
 
     payloads: list[dict] = []
     curves: list[dict] = []
     skipped: list[tuple[str, str]] = []
     for path in paths:
+        path_material = material_by_path.get(str(path), resolved_material)
         try:
             tests = load_tests(str(path), cfg)
         except Exception as exc:  # noqa: BLE001 - one bad file must not blank
@@ -201,7 +211,7 @@ def preview_dashboard_data(
                 continue
             payload = build_payload(
                 test, df, cfg,
-                material=resolved_material, raw_path=None, source_sha256=digest,
+                material=path_material, raw_path=None, source_sha256=digest,
                 gauge_length_confirmed=gauge_length_confirmed,
             )
             payloads.append(payload)

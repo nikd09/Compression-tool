@@ -436,6 +436,29 @@ wanted to see it. `preview()`'s summary cards remain the fast path for "does
 this look right"; the full dashboard is for "let me actually look at the
 curves" before deciding whether Commit is worth it at all.
 
+### One Material field, or several: per-file overrides for a mixed batch
+
+Ingest used to have exactly ONE Material field for the whole upload. Attach
+two exports meant for two different materials and both landed under
+whichever single name was typed -- no error, no warning, just every specimen
+from both files silently combined into one material. Splitting them apart
+again meant deleting and re-ingesting separately.
+
+Attaching more than one file now reveals a "Different materials in this
+batch?" expander (`ingest_view._per_file_materials()`) listing every file
+with its own picker, defaulted to `"(same as above)"` -- the common case
+(several files, one material) still needs zero extra clicks. Only a file
+someone explicitly overrides gets a different material; the rest fall
+through to the Material field above. `_resolve_material_groups()` then
+groups the uploaded paths by their resolved material and Commit calls
+`ingest()` once PER GROUP rather than once for the whole batch -- each group
+lands in its own run folder under its own material, exactly as if it had
+been uploaded separately. With no overrides this is one group and one call,
+identical to before. Preview's full dashboard (previous section) honours the
+same split via `preview_dashboard_data(material_by_path=...)`, so what
+Preview shows before Commit already reflects which specimens will land under
+which material, not a single combined guess.
+
 ### Comparing across specimens, not just across materials
 
 Compare builds groups from individual specimens, not whole materials. Each

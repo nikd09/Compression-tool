@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -47,7 +48,7 @@ def _step(n: int, title: str, sub: str = "") -> None:
     )
 
 
-def _material_picker(ws: Workspace) -> str:
+def _material_picker(ws: Workspace, *, key_suffix: str = "") -> str:
     """A picker, not a free-text box, once at least one material exists --
     "SteelMesh", "Steel Mesh" and "steel-mesh" typed on three different
     days become three materials that never compare against each other in
@@ -56,17 +57,23 @@ def _material_picker(ws: Workspace) -> str:
     hatch for a genuinely new one. ingest() itself also normalizes a
     near-duplicate typed here to the existing entry as a second line of
     defence, so this is a nudge toward the right habit, not the only guard.
+
+    `key_suffix` lets this be called more than once on the same rerun --
+    _per_file_materials() below reuses it per uploaded file, which needs a
+    distinct widget key per call or Streamlit would treat every call as the
+    SAME widget instance.
     """
     materials = load_materials(ws)
     if not materials:
         return st.text_input(
-            "Material",
+            "Material", key=f"ingest_material_text{key_suffix}",
             placeholder="e.g. PEEK-GF30, the first material in this workspace",
             help="Every material typed here becomes a pickable option next "
             "time, so it never has to be retyped or matched exactly again.",
         )
     choice = st.selectbox(
         "Material", materials + [_NEW_MATERIAL], index=None,
+        key=f"ingest_material_select{key_suffix}",
         placeholder="Pick a material, or add a new one",
         help="Picking from this list, rather than retyping the name, is "
         "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
@@ -74,10 +81,72 @@ def _material_picker(ws: Workspace) -> str:
     )
     if choice == _NEW_MATERIAL:
         return st.text_input(
-            "New material name", placeholder="e.g. PEEK-GF30",
+            "New material name", key=f"ingest_material_new{key_suffix}",
+            placeholder="e.g. PEEK-GF30",
             label_visibility="collapsed",
         )
     return choice or ""
+
+
+def _per_file_materials(ws: Workspace, uploaded, default_material: str) -> dict[int, str]:
+    """Optional per-file material override for a multi-file upload.
+
+    The bug this exists to fix: Ingest used to have exactly ONE Material
+    field for the whole batch, so uploading two exports meant for two
+    DIFFERENT materials together silently combined them into one material
+    with all specimens under a single name -- no warning, no way to split
+    them apart short of deleting and re-ingesting separately.
+
+    Only shown once more than one file is attached, and every file defaults
+    to "(same as above)" -- the common case (several files, one material)
+    still needs zero extra clicks. Returns {file index: material name} for
+    only the files someone actually overrode; a file left on the default is
+    simply absent from the dict, and the caller falls back to
+    `default_material` for it.
+    """
+    if len(uploaded) < 2:
+        return {}
+    _SAME = "(same as above)"
+    materials = load_materials(ws)
+    overrides: dict[int, str] = {}
+    with st.expander(
+        f"Different materials in this batch? ({len(uploaded)} files uploaded)"
+    ):
+        st.caption(
+            "Each file defaults to the Material picked above. Change a file "
+            "here only if IT specifically belongs to a different material -- "
+            "e.g. two exports for two different materials uploaded together, "
+            "which would otherwise be silently combined into one material."
+        )
+        for i, f in enumerate(uploaded):
+            key_base = f"ingest_pf_{i}_{f.name}_{f.size}"
+            options = [_SAME, _NEW_MATERIAL] + materials
+            choice = st.selectbox(f.name, options, index=0, key=f"{key_base}_sel")
+            if choice == _NEW_MATERIAL:
+                typed = st.text_input(
+                    "New material name", key=f"{key_base}_new",
+                    label_visibility="collapsed", placeholder="e.g. PEEK-GF30",
+                )
+                if typed.strip():
+                    overrides[i] = typed.strip()
+            elif choice != _SAME:
+                overrides[i] = choice
+    return overrides
+
+
+def _resolve_material_groups(
+    paths: list[Path], default_material: str, overrides: dict[int, str]
+) -> dict[str, list[Path]]:
+    """Groups `paths` by their resolved material -- an override for that
+    index if one was picked in _per_file_materials(), else
+    `default_material` -- preserving first-seen order. With no overrides
+    (the common case) this is just `{default_material: paths}`, identical
+    to the single ingest() call this replaced."""
+    groups: dict[str, list[Path]] = {}
+    for i, p in enumerate(paths):
+        mat = overrides.get(i, default_material).strip()
+        groups.setdefault(mat, []).append(p)
+    return groups
 
 
 def _looks_like_a_filename(material: str, uploaded) -> bool:
@@ -169,7 +238,8 @@ def _render_preview_errors(rows: list[dict]) -> None:
 
 
 def _build_dashboard_preview(
-    paths: list[Path], cfg: Config, material: str, gauge_confirmed: bool
+    paths: list[Path], cfg: Config, material: str, gauge_confirmed: bool,
+    material_by_path: Optional[dict[str, str]] = None,
 ) -> dict:
     """The same charted dashboard Results renders, for files that are not
     (and may never be) committed. Built entirely in memory via
@@ -187,6 +257,7 @@ def _build_dashboard_preview(
     result = preview_dashboard_data(
         paths, cfg,
         material=material.strip() if material and material.strip() else None,
+        material_by_path=material_by_path,
         gauge_length_confirmed=gauge_confirmed,
     )
     html = None
@@ -295,7 +366,7 @@ def render(ws: Workspace) -> None:
 
     _step(1, "Upload")
     uploaded = st.file_uploader(
-        "Zwick Z100 export(s)", type=["xlsx"], accept_multiple_files=True,
+        "Compression test export(s)", type=["xlsx"], accept_multiple_files=True,
         label_visibility="collapsed",
         help="One or more .xlsx exports of the same series. Nothing is written to the workspace until Commit.",
     )
@@ -332,8 +403,10 @@ def render(ws: Workspace) -> None:
             f"still be fixed after Commit, from the Materials tab."
         )
 
+    per_file_material = _per_file_materials(ws, uploaded, material) if uploaded else {}
+
     st.divider()
-    _step(2, "Thresholds", "Optional. Defaults work unmodified for a Zwick Z100 export.")
+    _step(2, "Thresholds", "Optional.")
     cfg = config_form(detect_holds)
 
     if not uploaded:
@@ -344,6 +417,7 @@ def render(ws: Workspace) -> None:
         st.info("Upload one or more exports above to preview them.")
         return
     paths = _save_uploads(uploaded)
+    material_groups = _resolve_material_groups(paths, material.strip(), per_file_material)
 
     st.divider()
     _step(
@@ -352,6 +426,18 @@ def render(ws: Workspace) -> None:
         "in a new tab, before anything is written.",
     )
     if st.button("Run preview", icon=":material/visibility:"):
+        # Invert material_groups (material -> its paths) back into path ->
+        # material, so a multi-material batch previews with each specimen
+        # correctly labelled instead of all of them under one material --
+        # the same split Commit below uses, just for the look-before-you-commit
+        # dashboard. None when there is only one group (the common case):
+        # _build_dashboard_preview then falls back to its old single-material
+        # behaviour exactly as before.
+        material_by_path = (
+            {str(p): mat for mat, group_paths in material_groups.items() for p in group_paths}
+            if len(material_groups) > 1 else None
+        )
+
         def _preview_and_build_dashboard() -> tuple[list[dict], dict]:
             # One click, one animation, both calls -- not a second button
             # that only appears (and still has to be clicked and waited on
@@ -359,7 +445,9 @@ def render(ws: Workspace) -> None:
             # popping in once this is done IS the "preview finished, look
             # at the results" signal, not a separate step to notice and act on.
             rows_ = preview(paths, cfg, gauge_length_confirmed=gauge_confirmed)
-            dashboard_ = _build_dashboard_preview(paths, cfg, material, gauge_confirmed)
+            dashboard_ = _build_dashboard_preview(
+                paths, cfg, material, gauge_confirmed, material_by_path=material_by_path,
+            )
             return rows_, dashboard_
 
         rows, dashboard_state = _with_utm_animation("Analysing…", _preview_and_build_dashboard)
@@ -397,28 +485,47 @@ def render(ws: Workspace) -> None:
             "are rebuilt from, are always written either way.",
         )
     if st.button("Commit to workspace", type="primary", icon=":material/save:"):
-        if not material or not material.strip():
+        if any(not mat for mat in material_groups):
             st.error("Pick or type a material name above before committing.")
         else:
-            result = _with_utm_animation(
+            # One ingest() call PER MATERIAL GROUP, not one call for the
+            # whole upload -- ingest() only ever accepts a single material
+            # for everything it is given, so a batch split across materials
+            # (via the "Different materials in this batch?" section above)
+            # would otherwise land every specimen under just one of them.
+            # With no split, material_groups is {material: paths} -- one
+            # group, one call, identical to before.
+            results = _with_utm_animation(
                 "Committing…",
-                lambda: ingest(
-                    paths, ws, material=material.strip(), cfg=cfg,
-                    gauge_length_confirmed=gauge_confirmed,
-                    archive_originals=archive_originals,
-                    write_reports=write_reports,
-                ),
+                lambda: [
+                    ingest(
+                        group_paths, ws, material=mat, cfg=cfg,
+                        gauge_length_confirmed=gauge_confirmed,
+                        archive_originals=archive_originals,
+                        write_reports=write_reports,
+                    )
+                    for mat, group_paths in material_groups.items()
+                ],
             )
             # The uploaded copy has done its job -- ingest() has already
             # archived (or hashed) and read every file -- so there is
             # nothing left for it to do on disk.
             _cleanup_upload_dir()
-            if result.material != material.strip():
-                st.info(
-                    f"Matched to the existing material '{result.material}' "
-                    f"instead of creating a near-duplicate of '{material.strip()}'."
+            # zip() relies on `results` having been built in the exact same
+            # order as material_groups.items() just above -- true because
+            # dicts preserve insertion order and the list comprehension
+            # iterates that same mapping once, in order.
+            for mat, result in zip(material_groups.keys(), results):
+                if result.material != mat:
+                    st.info(
+                        f"'{mat}' matched to the existing material "
+                        f"'{result.material}' instead of creating a "
+                        f"near-duplicate."
+                    )
+                st.success(
+                    f"Ingested {len(result.specimens)} specimen(s) of "
+                    f"'{result.material}' into {result.run_dir}"
                 )
-            st.success(f"Ingested {len(result.specimens)} specimen(s) into {result.run_dir}")
-            st.code(result.summary())
-            for name, why in result.skipped:
-                st.warning(f"Skipped {name}: {why}")
+                st.code(result.summary())
+                for name, why in result.skipped:
+                    st.warning(f"Skipped {name}: {why}")

@@ -151,9 +151,9 @@ def config_form(detect_holds: bool) -> Config:
         st.caption(
             "Every threshold is relative to the test's own peak stress, never "
             "absolute: the same knobs `--unload-frac` etc. expose on the "
-            "command line. Defaults work unmodified for a Zwick Z100 export; "
-            "change one only if Preview below shows a stage being lost or a "
-            "cycle miscounted."
+            "command line. Defaults work unmodified for most exports; change "
+            "one only if Preview below shows a stage being lost or a cycle "
+            "miscounted."
         )
         c1, c2 = st.columns(2)
         with c1:
