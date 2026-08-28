@@ -18,7 +18,7 @@ from compression_tool.core import TestData, analyse_test
 from compression_tool.diagnostics import collect, strain_basis
 from compression_tool.persistence import read_json
 
-from conftest import H0_MM, STAGES, multistage_signal
+from conftest import H0_MM, STAGES
 
 
 def _test_data(stress, disp, h0=H0_MM, channel="Sonder LAA") -> TestData:
@@ -86,62 +86,92 @@ def test_strain_basis_records_what_was_divided_by(signal):
 # ----------------------------------------------------------------------------
 
 
-def test_first_cycle_near_discard_threshold_is_flagged(signal):
-    """The synthetic test rises 50 -> 450, so the first stage sits at 11.1% of
-    the global peak against a 10% discard line -- the same thin margin the real
-    export has."""
-    stress, disp = signal
+def _two_stage_signal(valley: float) -> tuple[np.ndarray, np.ndarray]:
+    """Two stages (peaks 50, 100 MPa), with the valley between them held at
+    a chosen level instead of returning to baseline -- lets a test dial in
+    exactly how close to the discard margin the first stage sits."""
+    n = 200
+    stress = np.concatenate([
+        np.linspace(0.0, 50.0, n),
+        np.linspace(50.0, valley, n),
+        np.linspace(valley, 100.0, n),
+        np.linspace(100.0, 0.0, n),
+    ])
+    disp = np.linspace(0.0, 1.0, len(stress))
+    return stress, disp
+
+
+def test_first_cycle_near_discard_threshold_is_flagged():
+    """Default unload_frac is 0.5: the valley must give back at least half of
+    a candidate's own peak. A valley at 22.5 MPa against a 50 MPa first stage
+    gives a ratio of 0.55 -- accepted by the real config, but below the 0.667
+    ratio _first_cycle_at_risk probes for (0.5 / FIRST_CYCLE_MARGIN), so the
+    warning must fire even though segmentation itself found both stages."""
+    stress, disp = _two_stage_signal(valley=22.5)
     test = _test_data(stress, disp)
     df = analyse_test(test, Config())
+    assert len(df) == 2
 
     warnings = collect(test, df, Config())
     assert "first_cycle_near_discard_threshold" in _codes(warnings)
     msg = [w for w in warnings if w["code"] == "first_cycle_near_discard_threshold"][0]
-    # It must say where the cliff is, not merely that one exists.
-    assert "0.111" in msg["message"]
-    assert "rebases" in msg["message"]
+    assert msg["severity"] == "critical"
+    assert "50.00 MPa" in msg["message"]
 
 
 def test_no_warning_when_the_margin_is_comfortable():
-    """Constant-amplitude cycles all peak at the global peak, ten times clear
-    of the discard line."""
-    stress, disp = multistage_signal(stages=(300.0, 300.0, 300.0))
+    """A valley near zero gives a ratio close to 1.0 -- comfortably clear of
+    the probe margin."""
+    stress, disp = _two_stage_signal(valley=0.5)
     test = _test_data(stress, disp)
     df = analyse_test(test, Config())
+    assert len(df) == 2
 
     assert "first_cycle_near_discard_threshold" not in _codes(collect(test, df, Config()))
 
 
-def test_warning_escalates_to_critical_as_the_margin_closes(signal):
-    stress, disp = signal
+def test_no_false_positive_for_a_genuinely_isolated_single_cycle():
+    """A signal with exactly one real local maximum has nothing to be
+    fragile RELATIVE TO: by construction its own peak equals the global
+    peak (always clears major_cycle_frac) and there is no neighbouring
+    valley for the unload_frac ratio test to fail. The old formula was a
+    FIXED, uninformative constant at n=1 (identical regardless of the
+    signal -- smallest-peak-vs-global-peak are the same value there,
+    always) rather than reflecting real segmentation risk; the rewrite must
+    not manufacture a false warning to compensate, only report risk where
+    a real competing candidate actually exists (see the near-miss-merge
+    tests above, which DO fire at whatever cycle count they land on)."""
+    n = 200
+    stress = np.concatenate([
+        np.linspace(0.0, 50.0, n),
+        np.linspace(50.0, 0.5, n),  # single clean cycle, no competing peak
+    ])
+    disp = np.linspace(0.0, 1.0, len(stress))
     test = _test_data(stress, disp)
-    # 0.11 is within 1% of the 0.1111 cliff.
-    cfg = Config(major_cycle_frac=0.11)
-    df = analyse_test(test, cfg)
+    df = analyse_test(test, Config())
+    assert len(df) == 1
 
-    warnings = [w for w in collect(test, df, cfg)
-                if w["code"] == "first_cycle_near_discard_threshold"]
-    assert warnings and warnings[0]["severity"] == "critical"
+    assert "first_cycle_near_discard_threshold" not in _codes(collect(test, df, Config()))
 
 
-def test_first_cycle_residual_unreachable_is_flagged(signal):
+def test_residual_unreadable_cycles_are_flagged(signal):
     """residual_stress is a fraction of the GLOBAL peak (450 MPa here); at
-    0.15 that is 67.5 MPa -- above cycle 1's own 50 MPa peak, so cycle 1's
-    loading branch never reaches it and PermDef_cumulative_mm silently
-    rebases onto cycle 2 (peak 100 MPa) instead of cycle 1."""
+    0.15 that is 67.5 MPa -- above cycle 1's own 50 MPa peak, so cycle 1
+    cannot read the residual reference stress on either branch."""
     stress, disp = signal
     test = _test_data(stress, disp)
     cfg = Config(residual_stress_frac=0.15)
     df = analyse_test(test, cfg)
 
     assert pd.isna(df["ResidualDisp_mm"].iloc[0])
+    assert pd.isna(df["ResidualDisp_unload_mm"].iloc[0])
     assert df["ResidualDisp_mm"].notna().any()
 
     warnings = collect(test, df, cfg)
-    assert "first_cycle_residual_unreachable" in _codes(warnings)
-    msg = [w for w in warnings if w["code"] == "first_cycle_residual_unreachable"][0]
+    assert "residual_unreadable_cycles" in _codes(warnings)
+    msg = [w for w in warnings if w["code"] == "residual_unreadable_cycles"][0]
     assert msg["severity"] == "critical"
-    assert "cycle 2" in msg["message"]
+    assert "Cycle(s) 1" in msg["message"]
 
 
 def test_no_residual_warning_when_cycle_1_is_reachable(signal):
@@ -152,7 +182,7 @@ def test_no_residual_warning_when_cycle_1_is_reachable(signal):
     df = analyse_test(test, Config())
 
     assert pd.notna(df["ResidualDisp_mm"].iloc[0])
-    assert "first_cycle_residual_unreachable" not in _codes(collect(test, df, Config()))
+    assert "residual_unreadable_cycles" not in _codes(collect(test, df, Config()))
 
 
 def test_discarded_runs_are_reported_with_their_peaks(signal):

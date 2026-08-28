@@ -26,7 +26,7 @@ from conftest import (
     H0_MM,
     STAGES,
     TEMPERATURE_C,
-    expected_permanent_set,
+    expected_permanent_set_incremental,
     multistage_signal,
     write_series_workbook,
     write_single_workbook,
@@ -263,29 +263,34 @@ def test_stiffness_reports_its_own_fit_quality(signal):
 
 def test_permanent_deformation_accumulates_to_the_expected_value(signal):
     """Pinned against the closed form of the synthetic signal, so a change in
-    how the residual is read shows up as a number rather than a vibe."""
+    how the residual is read shows up as a number rather than a vibe.
+
+    PermDef_incremental_mm is now WITHIN-cycle (ResidualDisp_unload_mm minus
+    ResidualDisp_mm, both read in the SAME cycle) rather than referenced to
+    cycle 1 -- see core.analyse_test. Cycle 1 therefore has a real,
+    well-defined incremental value of its own instead of being undefined by
+    construction; PermDef_cumulative_mm is the running total of those."""
     stress, disp = signal
     df = analyse_test(_as_test(stress, disp))
 
     cumulative = df["PermDef_cumulative_mm"]
-    assert cumulative.iloc[0] == pytest.approx(0.0, abs=1e-12)
+    incremental = df["PermDef_incremental_mm"]
     assert cumulative.is_monotonic_increasing
+    assert (incremental > 0).all()  # every stage gains SOME permanent set
 
     residual_stress = df.attrs["residual_stress_mpa"]
-    assert cumulative.iloc[-1] == pytest.approx(
-        expected_permanent_set(STAGES, residual_stress), rel=2e-3
-    )
-    # Incremental is the difference between neighbours, undefined for cycle 1.
-    assert np.isnan(df["PermDef_incremental_mm"].iloc[0])
-    assert (df["PermDef_incremental_mm"].iloc[1:] > 0).all()
+    expected_incremental = expected_permanent_set_incremental(STAGES, residual_stress)
+    np.testing.assert_allclose(incremental.to_numpy(), expected_incremental, rtol=2e-3)
+    assert cumulative.iloc[-1] == pytest.approx(expected_incremental.sum(), rel=2e-3)
 
 
 def test_residual_is_read_above_the_contact_loss_baseline(signal):
     """Reading permanent set at zero stress would return the unloaded baseline
-    of a few micrometres and mean nothing."""
+    of a few micrometres and mean nothing. True on both branches."""
     stress, disp = signal
     df = analyse_test(_as_test(stress, disp))
     assert (df["ResidualDisp_mm"] > BASELINE_MM).all()
+    assert (df["ResidualDisp_unload_mm"] > BASELINE_MM).all()
 
 
 def test_reference_stress_is_reachable_in_the_smallest_cycle(signal):
@@ -299,6 +304,60 @@ def test_reference_stress_is_reachable_in_the_smallest_cycle(signal):
     assert df["DispAtRef_unload_mm"].notna().all()
     # The loop is open at the reference stress: unloading sits to the right.
     assert (df["DispAtRef_unload_mm"] > df["DispAtRef_load_mm"]).all()
+
+
+def test_single_cycle_test_reports_real_permanent_deformation():
+    """The OLD formula referenced PermDef_cumulative_mm to cycle 1's own
+    loading-branch reading -- for a single-cycle test that is the cycle
+    comparing itself to itself, always exactly 0.0 regardless of how much
+    permanent set actually occurred. The within-cycle redefinition
+    (ResidualDisp_unload_mm minus ResidualDisp_mm, both read in this one
+    cycle) reports the real, non-zero value the OLD formula could never
+    see -- this is the scientific-validity gap the redesign exists to
+    close for a genuinely single-cycle compression test."""
+    from conftest import BASELINE_MM, cycle_arrays
+
+    stress, disp = cycle_arrays(
+        peak=300.0, x_perm=BASELINE_MM, amplitude=0.05, creep=0.004, set_inc=0.0015
+    )
+    df = analyse_test(_as_test(stress, disp))
+
+    assert len(df) == 1
+    incremental = df["PermDef_incremental_mm"].iloc[0]
+    assert incremental == pytest.approx(0.0015, rel=0.2)  # the set_inc gained
+    assert df["PermDef_cumulative_mm"].iloc[0] == pytest.approx(incremental)
+
+
+def test_a_valley_that_only_partially_relaxes_still_separates_cycles():
+    """Reproduces (synthetically) the first real failure this redesign was
+    built to fix: MeshG_3mpa_10cyc_4.xlsx's cycle 1/cycle 2 boundary only
+    relaxed to ~0.85 MPa, not near zero, and the OLD absolute unload_frac
+    floor (0.02 x global peak) never saw a gap there -- silently merging
+    both stages into one. Built here from BASELINE_MM/cycle_arrays directly
+    (not the real, gitignored file) so this specific failure mode has
+    synthetic, always-available coverage independent of whether the real
+    export happens to be present."""
+    from conftest import BASELINE_MM, cycle_arrays
+
+    n = 300
+    s1, x1 = cycle_arrays(peak=10.0, x_perm=BASELINE_MM, amplitude=0.02, creep=0.0,
+                           set_inc=0.0005, n_ramp=n, n_hold=0, n_unload=n, n_rest=0, hold=False)
+    # Stop the first cycle's unload partway (a valley at ~40% of peak, well
+    # above the old fixed 2%-of-global-peak floor) instead of running it to
+    # conftest's own near-zero rest baseline -- this IS the failure being
+    # reproduced.
+    partial = n // 2
+    s1, x1 = s1[: n + partial], x1[: n + partial]
+    x_perm2 = BASELINE_MM + 0.0005
+    s2, x2 = cycle_arrays(peak=20.0, x_perm=x_perm2, amplitude=0.02, creep=0.0,
+                           set_inc=0.0005, n_ramp=n, n_hold=0, n_unload=n, n_rest=50, hold=False)
+
+    stress = np.concatenate([s1, s2])
+
+    cycles = segment_cycles(stress, Config())
+    assert len(cycles) == 2, "the partially-relaxed valley must still separate the two stages"
+    peaks = [float(stress[a : b + 1].max()) for a, b in cycles]
+    assert peaks == pytest.approx([10.0, 20.0], rel=1e-3)
 
 
 def test_multi_stage_is_flagged(signal):

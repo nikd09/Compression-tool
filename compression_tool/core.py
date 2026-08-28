@@ -27,6 +27,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from scipy.signal import find_peaks
 
 # ----------------------------------------------------------------------------
 # Config
@@ -38,8 +39,43 @@ class Config:
     """All tuning knobs. Defaults are relative and should work unmodified."""
 
     # --- segmentation -------------------------------------------------------
-    unload_frac: float = 0.02      # stress below this * peak => specimen unloaded
-    major_cycle_frac: float = 0.10  # cycle peak below this * global peak => noise
+    # Cycle boundaries are found by scipy.signal.find_peaks on stress
+    # (see segment_cycles). Two independent, complementary checks decide
+    # whether a candidate local peak is a genuine cycle, neither of them a
+    # single fixed fraction of the whole test's global peak:
+    #
+    #   major_cycle_frac -- an absolute SAFETY FLOOR only, on the candidate's
+    #   own peak height as a fraction of the global peak. It exists only to
+    #   reject genuinely spurious near-zero blips (e.g. the machine finding
+    #   contact at the start of a record), not to gate real stages -- a real
+    #   stage is judged by the two checks below, not by how its height
+    #   compares to some OTHER stage's height. Kept low by default so it
+    #   stays out of the way of the smallest real stage in a multi-stage
+    #   test, which by construction sits near 1/N of the global peak for an
+    #   N-stage test and was a coin flip against the old default (0.10, which
+    #   used to be the primary gate) for any 10-ish-stage test.
+    #
+    #   unload_frac -- RELATIVE PROMINENCE RATIO: the minimum fraction of a
+    #   candidate's OWN peak height (above the true baseline) that its
+    #   surrounding valley must give back for it to count as a distinct
+    #   load-unload cycle, rather than a shoulder on the ramp toward a taller
+    #   neighbouring peak. This is the standard fix, in topographic and
+    #   general peak-detection practice, for exactly this ambiguity: a
+    #   "prominence ratio" (prominence / height, sometimes called a peak's
+    #   "key col ratio") well below 1 identifies a subsidiary bump that never
+    #   really separated from its neighbour, regardless of how large that
+    #   bump is in absolute terms. On the real, low-peak multi-stage files
+    #   this was validated against, every genuine stage's ratio was >= 0.72
+    #   (most >= 0.9, since the specimen normally unloads almost fully
+    #   between stages) while a real transient ramp-overshoot artefact
+    #   measured 0.135 -- a wide, unambiguous margin either side of 0.5.
+    #
+    # The candidate's actual local significance against ITS OWN neighbouring
+    # noise (not a fixed fraction of anything) is a THIRD, separate check
+    # inside segment_cycles -- these two fields are floors on top of it, not
+    # a replacement for it.
+    unload_frac: float = 0.5        # min prominence / candidate's own peak
+    major_cycle_frac: float = 0.01  # candidate's own peak floor, * global peak
     min_cycle_points: int = 50
 
     # --- hold detection -----------------------------------------------------
@@ -53,8 +89,13 @@ class Config:
     detect_holds: bool = True
 
     # --- stiffness ----------------------------------------------------------
-    stiff_lo_frac: float = 0.25    # lower bound of regression window
-    stiff_hi_frac: float = 0.75    # upper bound of regression window
+    # FALLBACK window only: the real window is auto-located from the data on
+    # every cycle (see _auto_stiffness_window / ASTM E111 toe compensation).
+    # These two are used only on the rare cycle where no candidate window
+    # clears the minimum span -- not a manual override of auto-detection,
+    # which always runs first.
+    stiff_lo_frac: float = 0.25    # fallback lower bound of regression window
+    stiff_hi_frac: float = 0.75    # fallback upper bound of regression window
 
     # --- reference stress for cross-cycle comparison ------------------------
     # None => auto: use the SMALLEST cycle peak in the test, so the reference
@@ -350,58 +391,164 @@ def _stem(path: str) -> str:
 # ----------------------------------------------------------------------------
 
 
-def segment_cycles(stress: np.ndarray, cfg: Config) -> list[tuple[int, int]]:
-    """Split into load-unload cycles using RELATIVE thresholds.
+# Robust noise-scale estimator: for approximately-Gaussian noise, 1.4826 *
+# MAD is the standard consistent estimator of the standard deviation --
+# used everywhere below instead of a raw std so a handful of true outliers
+# (a real cycle's own rise) do not inflate the very "how noisy is this"
+# number that is supposed to describe everything BUT those outliers.
+_MAD_TO_SIGMA = 1.4826
 
-    A cycle is a contiguous run where the specimen is loaded, bounded by runs
-    where stress falls back to the unloaded floor. Works unchanged whether the
-    test peaks at 2 MPa or 450 MPa, and whether peaks are constant or rising.
+# Multiplier for the real accept/reject decision: a "several sigma above the
+# local noise floor" significance rule, the standard shape of an adaptive
+# peak-detection threshold. Set above the more common 3-sigma rule of thumb
+# because dwell ripple is itself locally periodic and a lower multiplier
+# over-segmented a held plateau into several spurious small cycles when
+# checked against this codebase's own synthetic and real test signals.
+_ACCEPT_PROMINENCE_SIGMA = 5.0
+
+
+def _robust_sigma(values: np.ndarray) -> float:
+    """1.4826 * median absolute deviation -- an outlier-resistant proxy for a
+    noisy signal's own standard deviation. Returns 0.0 for an empty or
+    perfectly flat input; callers fall back to a coarser estimate in that
+    case rather than treating 0.0 as "no noise, so anything is a peak"."""
+    if values.size == 0:
+        return 0.0
+    med = float(np.median(values))
+    return float(_MAD_TO_SIGMA * np.median(np.abs(values - med)))
+
+
+def segment_cycles(stress: np.ndarray, cfg: Config) -> list[tuple[int, int]]:
+    """Split into load-unload cycles by adaptive, locally-relative peak detection.
+
+    A single global fraction of the test's peak stress cannot serve both a
+    small early stage (which, in an evenly-staged test, sits near any such
+    fraction by construction) and a deep dwell ripple later in the SAME
+    signal -- one number is either too loose for the ripple or too tight for
+    the early stage. `scipy.signal.find_peaks` is used instead, with each
+    candidate peak accepted or rejected against a threshold derived from ITS
+    OWN local neighbourhood's noise, not one global number. This is what lets
+    the same defaults segment a 1-cycle and a 20-cycle test, a 3 MPa and a
+    450 MPa test, without retuning.
+
+    `find_peaks` finds every local maximum at least `min_cycle_points` apart
+    -- nothing else, deliberately: on a signal with a dwell, that includes
+    every ripple wiggle sitting on top of a single hold as its own candidate,
+    alongside the genuine per-stage peaks. `scipy.signal.peak_prominences` is
+    NOT used to tell them apart. Its base search looks outward for the
+    nearest point that is strictly HIGHER than the candidate; when several
+    same-height ripple wiggles sit next to each other, none of them is higher
+    than any other, so the search walks straight through all of them and
+    only stops at the true valley at the FAR ends of the whole dwell --
+    reporting every individual ripple wiggle's prominence as the height of
+    the ENTIRE stage, not the tiny wiggle it actually is (confirmed directly:
+    a synthetic 3-ripple dwell produced three "cycles" at identical full
+    stage height before this was caught). Bounding that search window
+    (`wlen`) does not fix it either: the window has to be smaller than the
+    ripple spacing to avoid the same problem, which makes it too small to
+    reach a genuine cycle's own true boundary valley, which is typically far
+    larger.
+
+    Instead, adjacent raw candidates are merged PAIRWISE, nearest first: the
+    valley between them is compared against an adaptive local-noise floor
+    AND against `unload_frac` of the shorter candidate's own height (see
+    `Config`'s docstring for both). If the valley does not clear both, it is
+    not a genuine load-unload separation -- the shorter candidate is dropped
+    and its taller neighbour absorbs it -- and the pair is re-tested against
+    whatever is now adjacent, since dropping one candidate can expose a new
+    pair that also needs judging. This directly answers "is this a real
+    cycle boundary" using only each candidate's own immediate neighbourhood,
+    which is exactly what a bounded `wlen` was trying (and failing) to give
+    scipy's own algorithm. What survives this reduction is then checked
+    against `major_cycle_frac`, an absolute floor on its own height (rejects
+    near-zero contact-finding blips that have no real neighbour to be
+    compared against).
+
+    Boundaries are found the way this function has always found them: the
+    nearest true local stress minimum on either side of each accepted peak
+    -- the exact same argmin-based expansion used before this redesign, now
+    seeded from the surviving peak indices instead of a boolean "loaded"
+    run's start/end. A valley that only partially relaxes between two stages
+    (instead of returning near zero) is still a real local minimum either
+    way, so this expansion needs no change to handle it correctly.
     """
-    if len(stress) == 0:
-        # np.nanmax raises on a zero-size array rather than returning NaN --
-        # this is the one shape an all-NaN array (handled below, via the
-        # "no cycle cleared the floor" path) does not cover. A malformed or
-        # completely unparseable column reaches here as a zero-length array,
-        # and "no cycles" is exactly the correct answer for it too.
+    n = len(stress)
+    if n == 0:
+        # A malformed or completely unparseable column reaches here as a
+        # zero-length array; "no cycles" is the correct answer for it too.
         return []
-    peak = float(np.nanmax(stress))
+    finite = np.isfinite(stress)
+    if not finite.any():
+        return []
+    peak = float(np.max(stress[finite]))
     if peak <= 0:
         return []
 
-    loaded = stress > cfg.unload_frac * peak
-    cycles: list[tuple[int, int]] = []
-    start = None
-    for i, on in enumerate(loaded):
-        if on and start is None:
-            start = i
-        elif not on and start is not None:
-            cycles.append((start, i - 1))
-            start = None
-    if start is not None:
-        cycles.append((start, len(stress) - 1))
+    # A NaN/dropped sample is exactly as "unloaded" as a genuine near-zero
+    # reading for segmentation purposes. It collapses to a floor value BELOW
+    # every real sample rather than being imputed to any real stress.
+    s = np.where(finite, stress, float(np.min(stress[finite])) - 1.0)
 
-    kept = []
-    for s_i, e_i in cycles:
-        if e_i - s_i + 1 < cfg.min_cycle_points:
+    safety_peak_floor = cfg.major_cycle_frac * peak
+    min_dist = max(int(cfg.min_cycle_points), 1)
+    # Radius of the window each valley's local noise is measured over. Fixed
+    # to min_cycle_points rather than derived from inter-peak spacing: sensor
+    # jitter and dwell ripple are both high-frequency, local phenomena,
+    # visible in a handful of samples around any point, and confirmed (on
+    # real data) to be mistaken for genuine signal slope -- inflating the
+    # very threshold meant to reject only noise -- when the window is instead
+    # sized off how far apart CYCLES happen to be.
+    half = max(min_dist, 10)
+
+    global_sigma = _robust_sigma(np.diff(s)) or float(np.std(np.diff(s))) or 1e-9
+
+    candidates, _ = find_peaks(s, distance=min_dist)
+    if candidates.size == 0:
+        return []
+    survivors = [int(c) for c in candidates]
+
+    # Pairwise ripple/noise reduction -- see docstring.
+    i = 0
+    while i < len(survivors) - 1:
+        a, b = survivors[i], survivors[i + 1]
+        valley = float(np.min(s[a : b + 1]))
+        shorter = min(float(s[a]), float(s[b]))
+        lo_ctx, hi_ctx = max(0, a - half), min(n, b + half + 1)
+        local_sigma = _robust_sigma(np.diff(s[lo_ctx:hi_ctx])) or global_sigma
+        depth = shorter - valley
+        is_real_separation = depth >= local_sigma * _ACCEPT_PROMINENCE_SIGMA and (
+            shorter <= 0 or depth >= cfg.unload_frac * shorter
+        )
+        if is_real_separation:
+            i += 1
             continue
-        if float(np.nanmax(stress[s_i : e_i + 1])) < cfg.major_cycle_frac * peak:
-            continue
-        kept.append((s_i, e_i))
-    if not kept:
+        # Not a real separation between a and b -- drop the shorter of the
+        # two and re-test from the same position, since the pair now
+        # adjacent may also need merging.
+        del survivors[i + (1 if s[a] >= s[b] else 0)]
+
+    accepted = [p for p in survivors if float(s[p]) >= safety_peak_floor]
+    if not accepted:
         return []
 
-    # Expand each run outward into the adjacent unloaded valleys, down to the
-    # local stress minimum. Without this the cycle would begin ABOVE the
-    # detection threshold, so the loading branch could never be interpolated
-    # at any reference stress below that threshold.
+    # Expand each accepted peak outward to the nearest true local minimum on
+    # either side -- unchanged arithmetic from before this redesign. Without
+    # this the cycle would begin AT its peak's detection point, so the
+    # loading branch could never be interpolated at any reference stress
+    # below whatever level the peak was first distinguished at.
     out = []
-    for k, (s_i, e_i) in enumerate(kept):
-        prev_end = kept[k - 1][1] if k > 0 else 0
-        next_start = kept[k + 1][0] if k + 1 < len(kept) else len(stress) - 1
-        lo = prev_end + int(np.argmin(stress[prev_end : s_i + 1])) if s_i > prev_end else s_i
-        hi = e_i + int(np.argmin(stress[e_i : next_start + 1])) if next_start > e_i else e_i
+    for k, p in enumerate(accepted):
+        prev_end = accepted[k - 1] if k > 0 else 0
+        next_start = accepted[k + 1] if k + 1 < len(accepted) else n - 1
+        lo = prev_end + int(np.argmin(s[prev_end : p + 1])) if p > prev_end else p
+        hi = p + int(np.argmin(s[p : next_start + 1])) if next_start > p else p
         out.append((lo, hi))
-    return out
+
+    # min_cycle_points is enforced on this EXPANDED boundary, not the bare
+    # peak-to-peak gap find_peaks' `distance` used -- a real cycle's rise +
+    # hold + fall is what has to clear this length, not just the spacing
+    # between two detected peaks.
+    return [(lo, hi) for lo, hi in out if hi - lo + 1 >= cfg.min_cycle_points]
 
 
 def detect_hold(stress: np.ndarray, cfg: Config) -> Optional[tuple[int, int]]:
@@ -436,10 +583,27 @@ def detect_hold(stress: np.ndarray, cfg: Config) -> Optional[tuple[int, int]]:
 # ----------------------------------------------------------------------------
 
 
+# How many samples after a candidate crossing must stay on the far side of
+# `target` before it is accepted -- see _interp_on_branch. A single-sample
+# non-monotonic ripple (stick-slip release, elastic snap-back as the
+# specimen separates from the platen) is physically plausible near a low
+# reference stress, more so on the unloading branch than the machine-driven
+# loading branch, and would otherwise be mistaken for the genuine crossing.
+_CROSSING_CONFIRM_SAMPLES = 3
+
+
 def _interp_on_branch(
     stress: np.ndarray, disp: np.ndarray, target: float, branch: str
 ) -> Optional[float]:
-    """Displacement where the branch crosses `target` stress (linear interp)."""
+    """Displacement where the branch crosses `target` stress (linear interp).
+
+    The first candidate crossing is not accepted on sight: the next few
+    samples must stay on the far side of `target` too (see
+    `_CROSSING_CONFIRM_SAMPLES`), so a single noisy sample does not get
+    mistaken for the real crossing while the branch has not actually reached
+    `target` yet -- the search simply continues past a false one to the next
+    candidate.
+    """
     n = len(stress)
     if n < 2:
         return None
@@ -457,11 +621,16 @@ def _interp_on_branch(
     for i in range(1, len(seg_s)):
         a, b = seg_s[i - 1], seg_s[i]
         hit = (a < target <= b) if rising else (a > target >= b)
-        if hit:
-            if b == a:
-                return float(seg_x[i])
-            t = (target - a) / (b - a)
-            return float(seg_x[i - 1] + t * (seg_x[i] - seg_x[i - 1]))
+        if not hit:
+            continue
+        look = seg_s[i : i + _CROSSING_CONFIRM_SAMPLES]
+        stays = bool(np.all(look >= target)) if rising else bool(np.all(look <= target))
+        if not stays:
+            continue
+        if b == a:
+            return float(seg_x[i])
+        t = (target - a) / (b - a)
+        return float(seg_x[i - 1] + t * (seg_x[i] - seg_x[i - 1]))
     return None
 
 
@@ -470,16 +639,16 @@ def _interp_on_branch(
 # ----------------------------------------------------------------------------
 
 
-def _stiffness(stress, disp, lo_mpa, hi_mpa) -> tuple[Optional[float], int, Optional[float]]:
-    """Slope d(stress)/d(disp) on the loading branch, MPa/mm.
-
-    Returns (slope, n_points, r_squared). The last two are quality flags: a
-    slope fitted to a handful of points on a fast machine ramp is not
-    trustworthy, and the UI must be able to say so rather than plot it as if
-    it were solid.
+def _fit_window(
+    s_load: np.ndarray, x_load: np.ndarray, lo_mpa: float, hi_mpa: float
+) -> tuple[Optional[float], int, Optional[float]]:
+    """Regress stress on displacement over [lo_mpa, hi_mpa] of an ALREADY
+    loading-branch-only pair of arrays. Returns (slope, n_points, r_squared)
+    -- see `_stiffness`'s docstring for why the last two matter as much as
+    the slope itself. Split out of `_stiffness` so `_auto_stiffness_window`'s
+    grid search can slice the loading branch once and re-fit many candidate
+    windows against it, instead of re-finding the peak index on every trial.
     """
-    peak_idx = int(np.argmax(stress))
-    s_load, x_load = stress[: peak_idx + 1], disp[: peak_idx + 1]
     mask = (s_load >= lo_mpa) & (s_load <= hi_mpa)
     n = int(np.sum(mask))
     if n < 3:
@@ -492,6 +661,87 @@ def _stiffness(stress, disp, lo_mpa, hi_mpa) -> tuple[Optional[float], int, Opti
     ss_tot = float(np.sum((s_sel - s_sel.mean()) ** 2))
     r2 = float(1 - np.sum(resid**2) / ss_tot) if ss_tot > 0 else None
     return float(slope), n, r2
+
+
+def _stiffness(stress, disp, lo_mpa, hi_mpa) -> tuple[Optional[float], int, Optional[float]]:
+    """Slope d(stress)/d(disp) on the loading branch, MPa/mm, over a caller-
+    supplied fixed window. Returns (slope, n_points, r_squared) -- see
+    `_fit_window`. A one-window convenience wrapper kept for callers (and
+    tests) that want a specific, pre-decided window rather than the
+    auto-located one `_auto_stiffness_window` searches for.
+    """
+    peak_idx = int(np.argmax(stress))
+    return _fit_window(stress[: peak_idx + 1], disp[: peak_idx + 1], lo_mpa, hi_mpa)
+
+
+# --- stiffness: auto-located linear region (toe-compensated chord modulus) --
+# ASTM E111 (Young's/Tangent/Chord Modulus) fits a chord modulus over a
+# region of the curve, but does not prescribe a fixed percentage window for
+# it -- the low-stress "toe" from seating/slack/alignment is nonlinear and
+# its extent varies test to test, so the standard's own remedy (toe
+# compensation) is to LOCATE the region of maximum, most-linear slope from
+# the data itself. This grid search is that "locate" step.
+_STIFF_MIN_SPAN_FRAC = 0.40  # candidate window must span >= 40% of the
+# branch's own stress range -- a concrete number, not "some minimum", so a
+# narrow window cannot quietly win the search by overfitting a handful of
+# points.
+_STIFF_MIN_POINTS = 10
+_STIFF_R2_EPSILON = 0.001  # candidates within this much R2 of the best found
+# are treated as tied; among ties, the WIDEST window wins (see
+# _auto_stiffness_window) rather than raw argmax(R2), which is gameable by a
+# window sitting right at the minimum-span edge beating a more representative
+# wider one by noise alone.
+_STIFF_GRID_STEPS = 21  # candidate lo/hi fractions of the branch's own
+# stress range: 0.00, 0.05, ..., 1.00.
+
+
+def _auto_stiffness_window(
+    s_load: np.ndarray, x_load: np.ndarray, cfg: Config
+) -> tuple[Optional[float], int, Optional[float], Optional[float], Optional[float]]:
+    """Search the (already loading-branch-only) stress/displacement pair for
+    its own best-fit linear region.
+
+    Returns (slope, n, r2, lo_mpa, hi_mpa) -- the window bounds travel with
+    the fit so the automatic choice is auditable, not a black box (every
+    consumer that stores this reports the bounds alongside the number).
+
+    Falls back to the FIXED `stiff_lo_frac`/`stiff_hi_frac` window -- exactly
+    what this codebase used before this redesign -- when no candidate clears
+    the minimum span/point bar (a real possibility on a short or noisy
+    cycle). A visible "no stiffness reported" regression for that one cycle
+    would be worse than reusing the old default.
+    """
+    if s_load.size == 0:
+        return None, 0, None, None, None
+    branch_peak = float(np.max(s_load))
+    branch_min = float(np.min(s_load))
+    span = branch_peak - branch_min
+    if span <= 0:
+        return None, 0, None, None, None
+
+    fracs = np.linspace(0.0, 1.0, _STIFF_GRID_STEPS)
+    candidates = []  # (r2, width, slope, n, lo_mpa, hi_mpa)
+    for lo_f in fracs:
+        for hi_f in fracs:
+            if hi_f - lo_f < _STIFF_MIN_SPAN_FRAC:
+                continue
+            lo_mpa = branch_min + lo_f * span
+            hi_mpa = branch_min + hi_f * span
+            slope, n, r2 = _fit_window(s_load, x_load, lo_mpa, hi_mpa)
+            if slope is None or r2 is None or n < _STIFF_MIN_POINTS:
+                continue
+            candidates.append((r2, hi_mpa - lo_mpa, slope, n, lo_mpa, hi_mpa))
+
+    if not candidates:
+        lo_mpa = cfg.stiff_lo_frac * branch_peak
+        hi_mpa = cfg.stiff_hi_frac * branch_peak
+        slope, n, r2 = _fit_window(s_load, x_load, lo_mpa, hi_mpa)
+        return slope, n, r2, lo_mpa, hi_mpa
+
+    best_r2 = max(c[0] for c in candidates)
+    near_best = [c for c in candidates if c[0] >= best_r2 - _STIFF_R2_EPSILON]
+    r2, _width, slope, n, lo_mpa, hi_mpa = max(near_best, key=lambda c: c[1])
+    return slope, n, r2, lo_mpa, hi_mpa
 
 
 def _energies(stress, disp) -> tuple[Optional[float], Optional[float], Optional[float]]:
@@ -530,10 +780,42 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
     # Reference stress must be reachable in EVERY cycle, so it is tied to the
     # smallest cycle peak. In a multi-stage test (50 -> 450 MPa) a reference
     # based on the global peak would be unreachable in the early cycles.
-    ref_peak = min(peaks)
+    #
+    # Among cycles that pass segmentation, prefer one with a detected dwell
+    # as the reference: a short, fast, hold-free excursion at the very start
+    # of a record is a plausible preload/seating ramp (the machine settling
+    # full contact before the programmed sequence proper), and adaptive
+    # segmentation can legitimately surface one as its own cycle now that it
+    # is no longer silently merged into whatever follows it (see
+    # segment_cycles) -- exactly the kind of previously-hidden real signal
+    # this redesign exists to stop discarding. But anchoring ref_stress and
+    # the common-band window to something smaller and unlike every real
+    # stage narrows both for every OTHER cycle too, for no comparability
+    # benefit. Falls back to the plain smallest peak if no cycle has a
+    # detected hold -- a genuinely fast-cycling test (or one with
+    # detect_holds off) is not making a false claim either way.
+    held_peaks = [
+        peak for peak, (a, b) in zip(peaks, cycles)
+        if detect_hold(s[a : b + 1], cfg) is not None
+    ]
+    ref_peak = min(held_peaks) if held_peaks else min(peaks)
     ref_stress = cfg.ref_stress_mpa or cfg.ref_stress_frac * ref_peak
-    stiff_lo, stiff_hi = cfg.stiff_lo_frac * ref_peak, cfg.stiff_hi_frac * ref_peak
     residual_stress = cfg.residual_stress_mpa or cfg.residual_stress_frac * global_peak
+
+    # Common-band stiffness window: auto-located ONCE, on the reference
+    # (smallest-peak) cycle's own loading branch, then reused as identical
+    # ABSOLUTE stress bounds on every cycle -- preserving the "same window
+    # every cycle, so cycles are comparable" property the common band exists
+    # for, with the window itself found from data instead of a fixed guess
+    # (see _auto_stiffness_window's docstring / ASTM E111 toe compensation).
+    a_ref, b_ref = cycles[peaks.index(ref_peak)]
+    s_ref, x_ref = s[a_ref : b_ref + 1], x[a_ref : b_ref + 1]
+    ref_peak_idx = int(np.argmax(s_ref))
+    _, _, _, common_lo, common_hi = _auto_stiffness_window(
+        s_ref[: ref_peak_idx + 1], x_ref[: ref_peak_idx + 1], cfg
+    )
+    if common_lo is None:
+        common_lo, common_hi = cfg.stiff_lo_frac * ref_peak, cfg.stiff_hi_frac * ref_peak
 
     rows = []
     for n, (a, b) in enumerate(cycles, start=1):
@@ -550,10 +832,9 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
             creep, hold_pts = None, 0
 
         w_in, w_out, w_diss = _energies(cs, cx)
-        k_common, k_common_n, k_common_r2 = _stiffness(cs, cx, stiff_lo, stiff_hi)
-        k_rel, k_rel_n, k_rel_r2 = _stiffness(
-            cs, cx, cfg.stiff_lo_frac * peak, cfg.stiff_hi_frac * peak
-        )
+        cs_load, cx_load = cs[: peak_idx + 1], cx[: peak_idx + 1]
+        k_common, k_common_n, k_common_r2 = _fit_window(cs_load, cx_load, common_lo, common_hi)
+        k_rel, k_rel_n, k_rel_r2, rel_lo, rel_hi = _auto_stiffness_window(cs_load, cx_load, cfg)
 
         rows.append(
             {
@@ -582,17 +863,32 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
                 # displacement signal returns to its unloaded baseline, which
                 # makes a zero-referenced permanent set meaningless here.
                 "ResidualDisp_mm": _interp_on_branch(cs, cx, residual_stress, "loading"),
+                # The SAME reference stress, read on the UNLOADING branch of
+                # THIS cycle. The gap between this and ResidualDisp_mm above,
+                # within one cycle, is the permanent set gained in that one
+                # cycle -- see PermDef_incremental_mm below. Needs no earlier
+                # or later cycle to exist, so it is defined identically for a
+                # single-cycle test and cycle 7 of a 20-cycle test.
+                "ResidualDisp_unload_mm": _interp_on_branch(cs, cx, residual_stress, "unloading"),
                 # --- comparable stiffness -----------------------------------
                 # Common band: identical stress window in every cycle and every
-                # test => valid to compare across stages and materials.
+                # test => valid to compare across stages and materials. The
+                # window itself is auto-located once, on the reference cycle's
+                # own loading branch -- see analyse_test -- and reported here
+                # so the automatic choice stays auditable.
                 "Stiffness_common_MPa_per_mm": k_common,
                 "Stiffness_common_n": k_common_n,
                 "Stiffness_common_r2": k_common_r2,
-                # Relative band: 25-75% of THIS cycle's own peak. Describes the
-                # cycle faithfully but is NOT comparable across rising stages.
+                "Stiffness_common_lo_MPa": common_lo,
+                "Stiffness_common_hi_MPa": common_hi,
+                # Relative band: auto-located on THIS cycle's own loading
+                # branch. Describes the cycle faithfully but is NOT comparable
+                # across rising stages of a multi-stage test.
                 "Stiffness_relative_MPa_per_mm": k_rel,
                 "Stiffness_relative_n": k_rel_n,
                 "Stiffness_relative_r2": k_rel_r2,
+                "Stiffness_relative_lo_MPa": rel_lo,
+                "Stiffness_relative_hi_MPa": rel_hi,
                 # --- displacement at reference stress, both branches ---------
                 "DispAtRef_load_mm": _interp_on_branch(cs, cx, ref_stress, "loading"),
                 "DispAtRef_unload_mm": _interp_on_branch(cs, cx, ref_stress, "unloading"),
@@ -614,12 +910,31 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
-    # Permanent deformation, referenced to cycle 1 (cumulative) and to the
-    # preceding cycle (incremental).
-    res = pd.to_numeric(df["ResidualDisp_mm"], errors="coerce")
-    df["ResidualDisp_mm"] = res
-    df["PermDef_cumulative_mm"] = (res - res.dropna().iloc[0]) if res.notna().any() else np.nan
-    df["PermDef_incremental_mm"] = res.diff()
+    # Permanent deformation -- WITHIN-CYCLE before/after, not referenced to
+    # any other cycle. This is what makes it well-defined at every cycle
+    # count, including exactly 1: PermDef_incremental_mm is simply how much
+    # residual displacement THIS cycle gained between being read on the way
+    # up (ResidualDisp_mm) and read again on the way back down
+    # (ResidualDisp_unload_mm), at the identical reference stress both
+    # times. The OLD formula compared cycle N's loading-branch reading
+    # against CYCLE 1's loading-branch reading -- structurally meaningless
+    # for a single-cycle test (it compares cycle 1 to itself, always 0,
+    # regardless of how much permanent set actually occurred) and silent
+    # about which cycle it landed on if cycle 1's own reading was NaN.
+    res_load = pd.to_numeric(df["ResidualDisp_mm"], errors="coerce")
+    res_unload = pd.to_numeric(df["ResidualDisp_unload_mm"], errors="coerce")
+    df["ResidualDisp_mm"] = res_load
+    df["ResidualDisp_unload_mm"] = res_unload
+    df["PermDef_incremental_mm"] = res_unload - res_load
+    # Cumulative is a running total of the (redefined) incremental values --
+    # still the drift signal for a multi-cycle test, but built bottom-up from
+    # N independently-meaningful measurements instead of one long-baseline
+    # comparison that goes vacuous at N=1. pandas' cumsum skips NaN by
+    # default: a cycle whose own incremental figure is unreadable reports NaN
+    # for ITS OWN cumulative total too (nothing else to report), but every
+    # cycle after it resumes from the last valid running total rather than
+    # going permanently NaN from that point on.
+    df["PermDef_cumulative_mm"] = df["PermDef_incremental_mm"].cumsum()
 
     if test.h0_mm:
         for src, dst in [
@@ -635,6 +950,11 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
     df.attrs["ref_stress_mpa"] = ref_stress
     df.attrs["residual_stress_mpa"] = residual_stress
     df.attrs["global_peak_mpa"] = global_peak
+    # The auto-located common-band window is ONE pair of bounds for the whole
+    # test (found once, on the reference cycle -- see above), not a per-cycle
+    # value, so it travels as a test-level attribute rather than a column.
+    df.attrs["stiffness_common_lo_mpa"] = common_lo
+    df.attrs["stiffness_common_hi_mpa"] = common_hi
     df.attrs["multi_stage"] = bool(np.ptp(peaks) > 0.05 * global_peak)
     df.attrs["h0_mm"] = test.h0_mm
     df.attrs["notes"] = list(test.notes)

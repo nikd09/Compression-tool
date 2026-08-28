@@ -44,6 +44,8 @@ def _cycle_row(c: dict, points: list[list[float]]) -> dict:
         "kCommonN": c.get("Stiffness_common_n"),
         "kCommonR2": c.get("Stiffness_common_r2"),
         "kRel": c.get("Stiffness_relative_MPa_per_mm"),
+        "kRelN": c.get("Stiffness_relative_n"),
+        "kRelR2": c.get("Stiffness_relative_r2"),
         "eIn": c.get("Energy_in_MPa_mm"),
         "eDiss": c.get("Energy_dissipated_MPa_mm"),
         "loss": c.get("HysteresisLoss_rel"),
@@ -53,6 +55,7 @@ def _cycle_row(c: dict, points: list[list[float]]) -> dict:
         "maxStrainPct": c.get("MaxStrain_pct"),
         "dispRefLoad": c.get("DispAtRef_load_mm"),
         "dispRefUnload": c.get("DispAtRef_unload_mm"),
+        "residDispUnload": c.get("ResidualDisp_unload_mm"),
     }
 
 
@@ -60,10 +63,18 @@ def _specimen_block(payload: dict, curve: Optional[dict], short: str) -> dict:
     spec, analysis, cfg = payload["specimen"], payload["analysis"], payload["config"]
     cycles = payload.get("cycles", [])
 
-    peaks = [c["PeakStress_MPa"] for c in cycles if c.get("PeakStress_MPa") is not None]
-    ref_peak = min(peaks) if peaks else None
-    stiff_lo = round(cfg["stiff_lo_frac"] * ref_peak, 2) if ref_peak is not None else None
-    stiff_hi = round(cfg["stiff_hi_frac"] * ref_peak, 2) if ref_peak is not None else None
+    # The common-band window is auto-located (core.py) and travels with the
+    # record as an analysis-level pair of bounds. A record written before
+    # this redesign has no such key -- fall back to the old fixed-fraction
+    # computation so an already-ingested older run still renders something,
+    # rather than showing no window at all.
+    stiff_lo = analysis.get("stiffness_common_lo_mpa")
+    stiff_hi = analysis.get("stiffness_common_hi_mpa")
+    if stiff_lo is None or stiff_hi is None:
+        peaks = [c["PeakStress_MPa"] for c in cycles if c.get("PeakStress_MPa") is not None]
+        ref_peak = min(peaks) if peaks else None
+        stiff_lo = round(cfg["stiff_lo_frac"] * ref_peak, 2) if ref_peak is not None else None
+        stiff_hi = round(cfg["stiff_hi_frac"] * ref_peak, 2) if ref_peak is not None else None
 
     points_by_cycle = {c["cycle"]: c["points"] for c in (curve or {}).get("cycles", [])}
 

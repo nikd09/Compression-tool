@@ -414,7 +414,7 @@ def test_run_fingerprint_reacts_to_sources_and_config():
     base = run_fingerprint(["a", "b"], Config())
     assert run_fingerprint(["b", "a"], Config()) == base       # order-insensitive
     assert run_fingerprint(["a"], Config()) != base
-    assert run_fingerprint(["a", "b"], Config(unload_frac=0.5)) != base
+    assert run_fingerprint(["a", "b"], Config(unload_frac=0.3)) != base
 
 
 def test_manifest_lists_sources_and_specimens(workspace, series_file):

@@ -32,10 +32,12 @@ from compression_tool.schema import (
 # The per-cycle keys a record carries. Strain keys appear only when h0 is known.
 CONTRACT_CYCLE_ALWAYS = (
     "Cycle", "PeakStress_MPa", "PeakDisp_mm", "MaxDisp_mm",
-    "StressAtMaxDisp_MPa", "ResidualDisp_mm",
+    "StressAtMaxDisp_MPa", "ResidualDisp_mm", "ResidualDisp_unload_mm",
     "PermDef_cumulative_mm", "PermDef_incremental_mm",
     "Stiffness_common_MPa_per_mm", "Stiffness_common_n", "Stiffness_common_r2",
+    "Stiffness_common_lo_MPa", "Stiffness_common_hi_MPa",
     "Stiffness_relative_MPa_per_mm", "Stiffness_relative_n", "Stiffness_relative_r2",
+    "Stiffness_relative_lo_MPa", "Stiffness_relative_hi_MPa",
     "DispAtRef_load_mm", "DispAtRef_unload_mm",
     "Energy_in_MPa_mm", "Energy_dissipated_MPa_mm", "HysteresisLoss_rel",
     "HoldDetected", "HoldPoints", "Creep_during_hold_mm",

@@ -136,11 +136,34 @@ def test_specimen_metadata_matches_the_record(one_payload):
     assert sp["refStress"] == payload["analysis"]["ref_stress_mpa"]
 
 
-def test_stiffness_window_is_derived_from_the_smallest_cycle_peak(one_payload):
+def test_stiffness_window_is_read_from_the_auto_located_bounds(one_payload):
+    """The common-band window is auto-located once (core.py) and travels
+    with the record as analysis.stiffness_common_lo_mpa / _hi_mpa --
+    dashboard_data must read those, not recompute a fixed fraction of the
+    smallest cycle peak (the old, pre-redesign behaviour)."""
     payload, curve = one_payload
     sp = build_dashboard_data([payload], [curve])["specimens"][0]
+    analysis = payload["analysis"]
+    assert sp["stiffLo"] == pytest.approx(analysis["stiffness_common_lo_mpa"])
+    assert sp["stiffHi"] == pytest.approx(analysis["stiffness_common_hi_mpa"])
+    min_peak = min(c["PeakStress_MPa"] for c in payload["cycles"])
+    assert 0 <= sp["stiffLo"] < sp["stiffHi"] <= min_peak
+
+
+def test_stiffness_window_falls_back_for_a_record_without_it(one_payload):
+    """A record written before this redesign has no stiffness_common_lo_mpa
+    key -- dashboard_data must still render something rather than crash or
+    show no window at all."""
+    payload, curve = one_payload
+    payload = dict(payload)
+    payload["analysis"] = {
+        k: v for k, v in payload["analysis"].items()
+        if k not in ("stiffness_common_lo_mpa", "stiffness_common_hi_mpa")
+    }
     cfg = payload["config"]
     min_peak = min(c["PeakStress_MPa"] for c in payload["cycles"])
+
+    sp = build_dashboard_data([payload], [curve])["specimens"][0]
     assert sp["stiffLo"] == pytest.approx(cfg["stiff_lo_frac"] * min_peak, abs=0.01)
     assert sp["stiffHi"] == pytest.approx(cfg["stiff_hi_frac"] * min_peak, abs=0.01)
 
@@ -160,7 +183,7 @@ def test_every_template_key_the_charts_read_is_present(one_payload):
     required = {
         "n", "pts", "peakStress", "kCommon", "permCumPct", "maxStrainPct",
         "loss", "holdDisp", "maxDisp", "eDiss", "dispRefLoad",
-        "stressAtMaxDisp", "unloadYield", "residDisp", "kRel",
+        "stressAtMaxDisp", "unloadYield", "residDisp", "kRel", "kRelN", "kRelR2",
     }
     for c in sp["cycles"]:
         assert required <= c.keys()

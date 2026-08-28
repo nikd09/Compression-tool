@@ -46,6 +46,11 @@ CONTRACT_ANALYSIS: tuple[str, ...] = (
     "n_cycles", "global_peak_mpa", "multi_stage", "ref_stress_mpa",
     "residual_stress_mpa", "h0_mm", "has_strain", "notes",
     "strain_basis", "warnings",
+    # Common-band stiffness window, auto-located once on the reference
+    # cycle and reused as absolute MPa bounds on every cycle (core.py) --
+    # a test-wide pair of bounds, not a per-cycle value, so it lives here
+    # rather than as a cycle column.
+    "stiffness_common_lo_mpa", "stiffness_common_hi_mpa",
 )
 
 CONTRACT_STRAIN_BASIS: tuple[str, ...] = (
@@ -62,7 +67,15 @@ CONTRACT_WARNING_CODES: tuple[str, ...] = (
     "first_cycle_near_discard_threshold",
     "cycles_discarded_by_peak_filter",
     "variable_dwell_length",
+    # Retired: the within-cycle permanent-deformation redesign (core.py)
+    # removed the failure class this covered (a cross-cycle rebase onto
+    # whichever cycle happened to reach the residual reference stress).
+    # diagnostics.py no longer emits it; the code is kept here only so an
+    # older stored record's warning list still validates against this
+    # contract.
     "first_cycle_residual_unreachable",
+    "residual_unreadable_cycles",
+    "residual_reference_not_low",
 )
 
 
@@ -139,7 +152,7 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         fmt="0.00",
     ),
     Column(
-        "ResidualDisp_mm", "REAL", "Residual displacement", "mm",
+        "ResidualDisp_mm", "REAL", "Residual displacement (loading)", "mm",
         "Displacement on the LOADING branch at the low common reference "
         "stress. Deliberately not read at zero stress: at zero the specimen "
         "loses contact and the signal falls back to an unloaded baseline of a "
@@ -147,21 +160,34 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "meaningless.",
     ),
     Column(
+        "ResidualDisp_unload_mm", "REAL", "Residual displacement (unloading)", "mm",
+        "The SAME reference stress as ResidualDisp_mm, read on the UNLOADING "
+        "branch of this cycle instead. The gap between the two, within one "
+        "cycle, is the permanent set gained in that cycle -- see "
+        "PermDef_incremental_mm.",
+    ),
+    Column(
         "PermDef_cumulative_mm", "REAL", "Permanent deformation, cumulative", "mm",
-        "Residual displacement referenced to cycle 1. NOT compression set in "
-        "the ASTM D395 / ISO 815 sense -- those are long-duration static "
-        "tests. Do not label this 'compression set' in reports.",
+        "Running total of PermDef_incremental_mm. NOT compression set in the "
+        "ASTM D395 / ISO 815 sense -- those are long-duration static tests. "
+        "Do not label this 'compression set' in reports.",
     ),
     Column(
         "PermDef_incremental_mm", "REAL", "Permanent deformation, incremental", "mm",
-        "Residual displacement gained relative to the preceding cycle. Blank "
-        "for cycle 1, which has no predecessor.",
+        "ResidualDisp_unload_mm minus ResidualDisp_mm: how much residual "
+        "displacement THIS cycle gained between being read on the way up and "
+        "read again on the way down, at the identical reference stress both "
+        "times. Well-defined for a single-cycle test -- it needs no other "
+        "cycle to compare against.",
     ),
     Column(
         "Stiffness_common_MPa_per_mm", "REAL", "Stiffness (common band)", "MPa/mm",
         "Slope of the loading branch fitted over an IDENTICAL stress window in "
-        "every cycle (25-75% of the smallest cycle peak in the test). This is "
-        "the form that may be compared across stages, specimens and materials.",
+        "every cycle -- auto-located once, on the reference (smallest-peak) "
+        "cycle's own loading branch (see Stiffness_common_lo_MPa / _hi_MPa), "
+        "then reused as the same absolute MPa bounds on every other cycle. "
+        "This is the form that may be compared across stages, specimens and "
+        "materials.",
         fmt="0.0",
     ),
     Column(
@@ -179,10 +205,27 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         fmt="0.000",
     ),
     Column(
+        "Stiffness_common_lo_MPa", "REAL", "Stiffness (common band), window low", "MPa",
+        "Lower bound of the auto-located common-band window, in absolute MPa "
+        "-- identical on every cycle of this specimen. Reported so the "
+        "automatic choice stays auditable rather than a black box.",
+        fmt="0.00", internal=True,
+    ),
+    Column(
+        "Stiffness_common_hi_MPa", "REAL", "Stiffness (common band), window high", "MPa",
+        "Upper bound of the auto-located common-band window, in absolute MPa "
+        "-- identical on every cycle of this specimen.",
+        fmt="0.00", internal=True,
+    ),
+    Column(
         "Stiffness_relative_MPa_per_mm", "REAL", "Stiffness (relative band)", "MPa/mm",
-        "Slope fitted over 25-75% of THIS cycle's own peak. Describes the "
-        "cycle faithfully but rises artificially as the stages climb, so it is "
-        "NOT comparable across cycles of a multi-stage test.",
+        "Slope fitted over a window auto-located on THIS cycle's own loading "
+        "branch (see Stiffness_relative_lo_MPa / _hi_MPa) -- the region of "
+        "maximum, most-linear slope, found from the data rather than a fixed "
+        "percentage (ASTM E111 toe compensation / chord modulus). Describes "
+        "the cycle faithfully but is NOT comparable across cycles of a "
+        "multi-stage test, since the window itself moves with each cycle's "
+        "own peak.",
         fmt="0.0",
     ),
     Column(
@@ -194,6 +237,18 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "Stiffness_relative_r2", "REAL", "Stiffness (relative band), R2", "",
         "Coefficient of determination of the relative-band fit.",
         fmt="0.000",
+    ),
+    Column(
+        "Stiffness_relative_lo_MPa", "REAL", "Stiffness (relative band), window low", "MPa",
+        "Lower bound of the auto-located relative-band window for THIS cycle, "
+        "in absolute MPa -- moves cycle to cycle, unlike the common band's.",
+        fmt="0.00", internal=True,
+    ),
+    Column(
+        "Stiffness_relative_hi_MPa", "REAL", "Stiffness (relative band), window high", "MPa",
+        "Upper bound of the auto-located relative-band window for THIS cycle, "
+        "in absolute MPa.",
+        fmt="0.00", internal=True,
     ),
     Column(
         "DispAtRef_load_mm", "REAL", "Displacement at reference stress, loading", "mm",

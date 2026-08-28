@@ -406,6 +406,10 @@ def build_payload(
             "multi_stage": bool(attrs.get("multi_stage", False)),
             "ref_stress_mpa": jsonable(attrs.get("ref_stress_mpa")),
             "residual_stress_mpa": jsonable(attrs.get("residual_stress_mpa")),
+            # Auto-located common-band stiffness window (core.py) -- a
+            # test-wide pair of bounds, found once from the reference cycle.
+            "stiffness_common_lo_mpa": jsonable(attrs.get("stiffness_common_lo_mpa")),
+            "stiffness_common_hi_mpa": jsonable(attrs.get("stiffness_common_hi_mpa")),
             "h0_mm": jsonable(attrs.get("h0_mm")),
             "has_strain": bool(attrs.get("h0_mm")),
             "notes": list(attrs.get("notes", [])),

@@ -151,20 +151,35 @@ def config_form(detect_holds: bool) -> Config:
         st.caption(
             "Every threshold is relative to the test's own peak stress, never "
             "absolute: the same knobs `--unload-frac` etc. expose on the "
-            "command line. Defaults work unmodified for most exports; change "
-            "one only if Preview below shows a stage being lost or a cycle "
-            "miscounted."
+            "command line. Cycle boundaries are found by locally-adaptive peak "
+            "detection, not by these numbers directly -- unload_frac and "
+            "major_cycle_frac are SAFETY FLOORS on that, and the stiffness "
+            "window is auto-located from the data, with stiff_lo_frac / "
+            "stiff_hi_frac used only as a fallback. Defaults work unmodified for "
+            "most exports; change one only if Preview below shows a stage being "
+            "lost or a cycle miscounted."
         )
         c1, c2 = st.columns(2)
         with c1:
             unload_frac = st.number_input(
                 "unload_frac", value=d.unload_frac, format="%.3f",
-                help="Stress below this fraction of peak counts as unloaded.")
+                help="A candidate cycle's bounding valley must give back at least this "
+                     "fraction of the candidate's OWN peak stress to count as a real "
+                     "load-unload separation, rather than a shoulder on the ramp toward "
+                     "a taller neighbouring peak.")
             major_cycle_frac = st.number_input(
                 "major_cycle_frac", value=d.major_cycle_frac, format="%.3f",
-                help="A run peaking below this fraction of the global peak is noise, not a stage.")
-            stiff_lo_frac = st.number_input("stiff_lo_frac", value=d.stiff_lo_frac, format="%.2f")
-            stiff_hi_frac = st.number_input("stiff_hi_frac", value=d.stiff_hi_frac, format="%.2f")
+                help="A candidate peaking below this fraction of the GLOBAL peak is "
+                     "rejected outright, regardless of its neighbours -- catches "
+                     "near-zero contact-finding blips. Kept low: real stages are judged "
+                     "by unload_frac and local noise, not by this.")
+            stiff_lo_frac = st.number_input(
+                "stiff_lo_frac", value=d.stiff_lo_frac, format="%.2f",
+                help="Fallback stiffness window (fraction of that cycle's own peak), "
+                     "used only when no auto-located window clears the minimum span.")
+            stiff_hi_frac = st.number_input(
+                "stiff_hi_frac", value=d.stiff_hi_frac, format="%.2f",
+                help="Fallback stiffness window upper bound -- see stiff_lo_frac.")
         with c2:
             ref_stress_frac = st.number_input(
                 "ref_stress_frac", value=d.ref_stress_frac, format="%.2f",

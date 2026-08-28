@@ -636,16 +636,29 @@ const PANELS=[
   {k:"kCommon", t:"Common-band stiffness", u:"MPa/mm, identical window every cycle",
    f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
    q:{n:"kCommonN", r2:"kCommonR2"},
-   why:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle "+
-       "(25-75% of the smallest cycle peak). This is the form that may be compared across "+
-       "stages, specimens and materials. A rollover here is the material softening. A "+
-       "hatched, dimmed bar means the fit behind it is thin (fewer than "+QUALITY_MIN_POINTS+
-       " points) or curved (R² below "+QUALITY_MIN_R2+"): read that cycle's slope as "+
-       "indicative only, never as a solid number to quote."},
+   why:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle -- "+
+       "auto-located once, on the reference (smallest-peak) cycle's own most-linear region, "+
+       "then reused as the same absolute-stress window on every other cycle. This is the "+
+       "form that may be compared across stages, specimens and materials. A rollover here is "+
+       "the material softening. A hatched, dimmed bar means the fit behind it is thin (fewer "+
+       "than "+QUALITY_MIN_POINTS+" points) or curved (R² below "+QUALITY_MIN_R2+"): read "+
+       "that cycle's slope as indicative only, never as a solid number to quote."},
+  {k:"kRel", t:"Relative-band stiffness", u:"MPa/mm, window auto-located per cycle",
+   f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
+   q:{n:"kRelN", r2:"kRelR2"},
+   why:"Slope fitted over a window auto-located on THIS cycle's OWN loading branch -- the "+
+       "region of maximum, most-linear slope, found from the data rather than a fixed "+
+       "percentage (ASTM E111 toe compensation / chord modulus). Describes each cycle "+
+       "faithfully and typically fits tighter than the common band, but is NOT comparable "+
+       "across cycles of a multi-stage test, since the window itself moves with each cycle's "+
+       "own peak. A hatched, dimmed bar means the fit behind it is thin or curved -- same "+
+       "rule as the common band."},
   {k:"permCumPct", t:"Permanent deformation", u:"% of h₀, cumulative", f:v=>fmt(v,1), u2:"%",
-   why:"Residual displacement read on the LOADING branch at a low common stress, referenced "+
-       "to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal "+
-       "falls back to a few-micrometre baseline. NOT compression set in the ASTM D395 sense."},
+   why:"Running total of the permanent set gained EACH cycle, read WITHIN that cycle: the gap "+
+       "between the residual displacement on the way up and on the way back down, at the same "+
+       "low reference stress both times. Not read at zero stress: at zero the specimen loses "+
+       "contact and the signal falls back to a few-micrometre baseline. Well-defined at every "+
+       "cycle count, including a single-cycle test. NOT compression set in the ASTM D395 sense."},
   {k:"maxStrainPct", t:"Maximum strain", u:"% of h₀", f:v=>fmt(v,1), u2:"%",
    why:"Maximum displacement divided by the specimen's own measured thickness h₀. Valid only "+
        "as far as h₀ is the length the displacement channel actually spans."},
@@ -961,13 +974,16 @@ const COLS=[
   ["Stress at max disp (MPa)", c=>c.stressAtMaxDisp, 1],
   ["… ÷ peak", c=>c.unloadYield, 3],
   ["Max strain (%)", c=>c.maxStrainPct, 2],
-  ["Residual disp (mm)", c=>c.residDisp, 4],
+  ["Residual disp, loading (mm)", c=>c.residDisp, 4],
+  ["Residual disp, unloading (mm)", c=>c.residDispUnload, 4],
   ["Permanent def (mm)", c=>c.permCum, 4],
   ["Permanent def (%)", c=>c.permCumPct, 3],
   ["Stiffness common (MPa/mm)", c=>c.kCommon, 0],
   ["n", c=>c.kCommonN, 0],
   ["R²", c=>c.kCommonR2, 3],
   ["Stiffness relative (MPa/mm)", c=>c.kRel, 0],
+  ["n", c=>c.kRelN, 0],
+  ["R²", c=>c.kRelR2, 3],
   ["Energy in (MPa·mm)", c=>c.eIn, 3],
   ["Energy dissipated (MPa·mm)", c=>c.eDiss, 3],
   ["Hysteresis loss", c=>c.loss, 3],
@@ -996,10 +1012,10 @@ function renderTable(){
 const DEFS=[
   ["Peak stress","MPa","Highest stress reached in this cycle. Rises every stage in a multi-stage test, which is why several metrics exist in both a per-cycle and a common-reference form."],
   ["Stiffness, common band","MPa/mm","Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25-75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials."],
-  ["Stiffness, relative band","MPa/mm","Slope over 25-75% of THIS cycle's own peak. Describes the cycle faithfully but rises artificially as the stages climb, so it is NOT comparable across cycles. In the table only, it is not charted for exactly that reason."],
+  ["Stiffness, relative band","MPa/mm","Slope over a window auto-located on THIS cycle's own loading branch (ASTM E111 toe compensation / chord modulus). Describes the cycle faithfully but is NOT comparable across cycles, since the window itself moves with each cycle's own peak."],
   ["Maximum displacement","mm","Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held."],
   ["Stress at maximum displacement","MPa","Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED: a damage signature no other column carries."],
-  ["Permanent deformation","mm / %","Residual displacement read on the LOADING branch at a low common stress, referenced to cycle 1. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. NOT compression set in the ASTM D395 / ISO 815 sense."],
+  ["Permanent deformation","mm / %","Running total of the permanent set gained EACH cycle, read WITHIN that cycle: residual displacement on the loading branch versus the unloading branch, at the same low reference stress. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. Well-defined at every cycle count. NOT compression set in the ASTM D395 / ISO 815 sense."],
   ["Energy in / dissipated","MPa·mm","Work per unit CROSS-SECTIONAL AREA: the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress."],
   ["Hysteresis loss","-","Dissipated divided by input energy. The cross-test comparable form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on the absolute number."],
   ["Hold length","samples","Length of the detected dwell in SAMPLES, not seconds: the export carries no time channel. Meaningless on its own and mandatory alongside the hold displacement beside it."],
@@ -1011,15 +1027,19 @@ function renderMethod(){
   if(!s || !cfg){ $("#method").innerHTML=""; return; }
   $("#method").innerHTML = `
   <h2>Settings behind the numbers</h2>
-  <p class="note">Relative to the test's own peak stress, never absolute, so a 2 MPa test and a
-  450 MPa test run on identical defaults.</p>
+  <p class="note">Cycle boundaries are found by locally-adaptive peak detection, not one fixed
+  threshold -- the two segmentation rows below are SAFETY FLOORS on that, not the primary
+  gate. The stiffness window is auto-located from the data (ASTM E111 toe compensation);
+  the percentages below are the fallback used only if no window clears the minimum span.</p>
   <div class="tw" style="max-height:none"><table class="dict"><tbody>
-    <tr><td>Loaded threshold</td><td>${(cfg.unload_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${fmt(cfg.unload_frac*s.globalPeak,1)} MPa, below this the specimen counts as unloaded</td></tr>
-    <tr><td>Cycle discard threshold</td><td>${(cfg.major_cycle_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${fmt(cfg.major_cycle_frac*s.globalPeak,1)} MPa, runs peaking below this are noise, not stages</td></tr>
-    <tr><td>Stiffness window</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
-      <td>of the smallest cycle peak = ${s.stiffLo}-${s.stiffHi} MPa, identical in every cycle</td></tr>
+    <tr><td>Valley depth floor</td><td>${(cfg.unload_frac*100).toFixed(0)}%</td>
+      <td>of a candidate's OWN peak stress: its bounding valley must give back at least this much to count as a real load-unload separation, not a shoulder on the ramp toward a taller neighbour</td></tr>
+    <tr><td>Cycle peak floor</td><td>${(cfg.major_cycle_frac*100).toFixed(0)}%</td>
+      <td>of global peak = ${fmt(cfg.major_cycle_frac*s.globalPeak,1)} MPa, a candidate below this is rejected outright regardless of its neighbours (catches near-zero contact-finding blips)</td></tr>
+    <tr><td>Stiffness window (common band)</td><td>${fmt(s.stiffLo,1)}-${fmt(s.stiffHi,1)} MPa</td>
+      <td>auto-located once on the reference (smallest-peak) cycle's own most-linear region, reused as this same absolute window on every cycle</td></tr>
+    <tr><td>Stiffness window fallback</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
+      <td>of that cycle's own peak -- used only when no auto-located window clears the minimum span</td></tr>
     <tr><td>Reference stress</td><td>${(cfg.ref_stress_frac*100).toFixed(0)}%</td>
       <td>of the smallest cycle peak = ${s.refStress} MPa, reachable in every cycle</td></tr>
     <tr><td>Residual read stress</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>

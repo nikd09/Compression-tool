@@ -15,7 +15,7 @@ instructions wherever it goes.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Iterable, Optional
 
 import numpy as np
@@ -29,14 +29,24 @@ from .core import Config, TestData, segment_cycles
 #   info     -- worth knowing, no action
 SEVERITIES = ("critical", "caution", "info")
 
-# Warn when the smallest cycle peak sits within this fraction of the discard
-# threshold. At 0.75 a test whose first stage clears the threshold by less than
-# a third of its own height gets flagged.
+# _first_cycle_at_risk tightens unload_frac by this factor when probing
+# whether the reference cycle survives on a slightly stricter setting. At
+# 0.75, unload_frac has to clear its own margin by at least 25% (in
+# candidate/valley-depth ratio terms -- see core.segment_cycles) to be
+# judged comfortable rather than fragile.
 FIRST_CYCLE_MARGIN = 0.75
 
 # Hold lengths differing by more than this ratio make hold displacement
 # non-comparable across cycles without normalising.
 DWELL_RATIO_TOLERANCE = 1.10
+
+# residual_stress is documented (core.py, ResidualDisp_mm) as a LOW
+# reference stress. A cycle whose own peak is small enough that the
+# (test-wide) residual reference stress reaches this fraction of it is
+# exactly the case where "low relative to this cycle" stops being true --
+# most exposed on a small or single-cycle test, which is what this
+# diagnostic exists to catch.
+RESIDUAL_HIGH_FRAC = 0.5
 
 
 @dataclass(frozen=True)
@@ -52,105 +62,166 @@ class Warning_:
 def _first_cycle_at_risk(
     stress: np.ndarray, df: pd.DataFrame, cfg: Config
 ) -> Optional[Warning_]:
-    """The first cycle is the reference for every cumulative figure.
+    """The reference cycle (smallest peak -- used for ref_stress and the
+    common-band stiffness window) is close to disappearing.
 
-    `major_cycle_frac` discards any cycle whose own peak falls below that
-    fraction of the global peak. In a rising multi-stage test the FIRST stage
-    is by definition the smallest, so it is always the one closest to being
-    discarded -- and losing it silently rebases every cumulative permanent
-    deformation in the table onto what used to be cycle 2.
+    Segmentation no longer accepts a cycle by comparing its peak to one fixed
+    fraction of the global peak -- it accepts a candidate when its bounding
+    valley clears an adaptive local-noise floor AND gives back at least
+    `unload_frac` of the candidate's own height (see `core.segment_cycles`).
+    There is no longer a single number to compare the reference cycle's peak
+    against directly, so "close to being discarded" is measured the way the
+    engine itself would answer it: by re-running segmentation with
+    `unload_frac` tightened by a safety margin and checking whether the SAME
+    cycle still comes out the other side.
+
+    This also fixes a real blind spot in the old version: built around a
+    smallest-peak-vs-global-peak ratio, it was a FIXED, uninformative
+    constant at exactly one cycle (smallest and global peak are the same
+    value there, always) rather than reflecting the actual signal -- so it
+    could never fire for a single-cycle test regardless of how fragile
+    segmentation actually was. The rewrite reflects real risk at any cycle
+    count, including 1, whenever a genuine competing candidate is nearby (a
+    near-miss merge can leave a test at 1 cycle just as easily as at 2). A
+    signal with only one true local maximum and no competing candidate at
+    all has nothing to be fragile RELATIVE TO -- its own peak trivially
+    equals the global peak and there is no neighbouring valley to fail the
+    ratio test against -- so it correctly stays quiet rather than
+    manufacturing a warning to compensate for the old blind spot.
     """
     if df.empty:
         return None
     peaks = pd.to_numeric(df["PeakStress_MPa"], errors="coerce").dropna()
     if peaks.empty:
         return None
+    ref_peak = float(peaks.min())
 
-    global_peak = float(np.nanmax(stress))
-    smallest = float(peaks.min())
-    if global_peak <= 0:
-        return None
-
-    # The fraction at which the smallest cycle would start being discarded.
-    critical_frac = smallest / global_peak
-    if critical_frac <= 0:
-        return None
-    proximity = cfg.major_cycle_frac / critical_frac
-    if proximity < FIRST_CYCLE_MARGIN:
-        return None
+    tighter = replace(cfg, unload_frac=min(cfg.unload_frac / FIRST_CYCLE_MARGIN, 0.999))
+    probe = segment_cycles(stress, tighter)
+    probe_peaks = [float(np.nanmax(stress[a : b + 1])) for a, b in probe]
+    if any(np.isclose(p, ref_peak, rtol=1e-6) for p in probe_peaks):
+        return None  # survives a margin-tightened floor -- comfortable
 
     return Warning_(
         code="first_cycle_near_discard_threshold",
-        severity="critical" if proximity >= 0.95 else "caution",
+        severity="critical",
         message=(
-            f"The smallest cycle peaks at {smallest:.1f} MPa against a discard "
-            f"threshold of {cfg.major_cycle_frac * global_peak:.1f} MPa "
-            f"(major_cycle_frac = {cfg.major_cycle_frac:g}), clearing it by only "
-            f"{(critical_frac / cfg.major_cycle_frac - 1) * 100:.0f}%. Any "
-            f"major_cycle_frac above {critical_frac:.3f} discards that cycle. "
-            "Because cycle 1 is the reference for every cumulative permanent "
-            "deformation, losing it rebases the whole column without any other "
-            "visible change."
+            f"The reference cycle (smallest peak, {ref_peak:.2f} MPa -- used for "
+            "the cross-cycle reference stress and the common-band stiffness "
+            f"window) is no longer found when unload_frac is tightened by "
+            f"{(1 - FIRST_CYCLE_MARGIN) * 100:.0f}% ({cfg.unload_frac:g} -> "
+            f"{tighter.unload_frac:g}). It is close to the margin segmentation "
+            "actually accepted it by; a small change in the raw signal or the "
+            "config could merge or drop it."
         ),
     )
 
 
-def _first_cycle_residual_unreachable(df: pd.DataFrame) -> Optional[Warning_]:
-    """PermDef_cumulative_mm is referenced to the first cycle whose residual
-    displacement could actually be READ on the loading branch -- which is not
-    necessarily cycle 1. The residual reference stress is a fraction of the
-    GLOBAL peak (core.py), so in a rising multi-stage test cycle 1's own,
-    much smaller peak can sit below it entirely; `_interp_on_branch` then
-    returns None for cycle 1 and the "- res.dropna().iloc[0]" rebase silently
-    anchors onto whichever cycle DOES reach it instead. Distinct from
-    `_first_cycle_at_risk`, which covers cycle 1 being discarded outright --
-    this covers cycle 1 surviving segmentation but still not producing a
-    residual reading.
+def _residual_unreadable_cycles(df: pd.DataFrame) -> Optional[Warning_]:
+    """Within-cycle permanent deformation (PermDef_incremental_mm) needs BOTH
+    ResidualDisp_mm (loading branch) and ResidualDisp_unload_mm (unloading
+    branch) to be readable for that specific cycle.
+
+    Unlike the old cross-cycle formula, an unreadable cycle no longer
+    silently rebases every OTHER cycle onto a different baseline -- it
+    reports NaN for itself alone, at every cycle count including 1. This
+    names which cycle(s) that happened to, rather than leaving a bare NaN
+    with no explanation in the table.
     """
     if df.empty or "ResidualDisp_mm" not in df.columns:
         return None
-    res = pd.to_numeric(df["ResidualDisp_mm"], errors="coerce")
-    if res.empty or pd.notna(res.iloc[0]) or not res.notna().any():
+    load = pd.to_numeric(df["ResidualDisp_mm"], errors="coerce")
+    unload = pd.to_numeric(df.get("ResidualDisp_unload_mm"), errors="coerce")
+    missing = df.loc[load.isna() | unload.isna(), "Cycle"].tolist()
+    if not missing:
         return None
 
-    first_valid_idx = res.notna().idxmax()
-    rebase_cycle = df.loc[first_valid_idx, "Cycle"] if "Cycle" in df.columns else "a later cycle"
+    which = ", ".join(str(c) for c in missing)
     return Warning_(
-        code="first_cycle_residual_unreachable",
+        code="residual_unreadable_cycles",
         severity="critical",
         message=(
-            "Cycle 1's loading branch never reached the residual reference "
-            "stress, so PermDef_cumulative_mm is silently referenced to "
-            f"cycle {rebase_cycle} instead of cycle 1 -- every value in that "
-            "column is relative to the wrong baseline. Raise "
-            "residual_stress_frac's reach by lowering it, or note that this "
-            "material's early stage(s) cannot report a permanent-set figure."
+            f"Cycle(s) {which} could not read the residual reference stress on "
+            "the loading and/or unloading branch, so PermDef_incremental_mm (and "
+            "PermDef_cumulative_mm from that point on) is NaN for that cycle. "
+            "Usually means the cycle's own peak is too close to the residual "
+            "reference stress -- lower residual_stress_frac, or note that this "
+            "cycle cannot report a permanent-set figure."
         ),
     )
 
 
-def _cycles_discarded(stress: np.ndarray, cfg: Config) -> Optional[Warning_]:
-    """Which long-enough runs the peak filter actually threw away.
-
-    Identified by re-applying the filter's own criterion rather than by diffing
-    against the kept cycles: dropping a cycle changes how its neighbours expand
-    into the surrounding valleys, so start indices do not line up between the
-    two segmentations and matching on them mis-attributes the discard.
-
-    Usually the casualty is the machine's contact-finding approach at the start
-    of a record, which SHOULD go. Reporting the peaks lets that be confirmed at
-    a glance rather than taken on faith.
+def _residual_reference_not_low(
+    df: pd.DataFrame, residual_stress: Optional[float]
+) -> Optional[Warning_]:
+    """ResidualDisp_mm is documented as read at a LOW reference stress -- the
+    permanent-set reading depends on that being true. On a cycle whose own
+    peak is small enough that the (test-wide) residual reference stress
+    reaches RESIDUAL_HIGH_FRAC of it, "low" no longer describes that cycle:
+    the reading sits close enough to the top of what that cycle ever
+    reached that treating it as a near-baseline reference is questionable.
+    Most exposed on a small or single-cycle test, which is exactly the case
+    this whole engine redesign is meant to still get right.
     """
+    if df.empty or not residual_stress:
+        return None
+    peaks = pd.to_numeric(df["PeakStress_MPa"], errors="coerce")
+    at_risk = df.loc[
+        (peaks > 0) & (residual_stress >= RESIDUAL_HIGH_FRAC * peaks), "Cycle"
+    ].tolist()
+    if not at_risk:
+        return None
+
+    which = ", ".join(str(c) for c in at_risk)
+    return Warning_(
+        code="residual_reference_not_low",
+        severity="caution",
+        message=(
+            f"Cycle(s) {which}: the residual reference stress "
+            f"({residual_stress:.2f} MPa) reaches {RESIDUAL_HIGH_FRAC:g}x or more "
+            "of that cycle's own peak stress, so it is no longer a LOW reference "
+            "for that cycle specifically -- the assumption ResidualDisp_mm's "
+            "reading depends on. Treat that cycle's permanent-deformation figures "
+            "as less certain than the others."
+        ),
+    )
+
+
+def _cycles_discarded(test: TestData, cfg: Config) -> Optional[Warning_]:
+    """Which candidate load runs major_cycle_frac's absolute floor actually
+    threw away, on top of what the local-noise and unload_frac ratio checks
+    alone would have kept.
+
+    Identified by re-running segmentation with ONLY major_cycle_frac zeroed
+    -- unload_frac stays at its real, configured value, since it answers a
+    different question ("did this candidate genuinely separate from its own
+    neighbour") that stays relevant even at a permissive peak-height floor;
+    zeroing it too let single-sample-scale artefacts at the test's true
+    unloaded baseline (near enough to 0 MPa that they clear almost any ratio
+    trivially) flood this warning with noise that was never a real
+    candidate stage. Any resulting cycle whose peak does not appear among
+    the real, fully-floored result is reported -- rather than diffing index
+    ranges, which shift between the two runs as neighbours expand
+    differently once a run is dropped.
+
+    Usually the casualty is the machine's contact-finding approach at the
+    start of a record, which SHOULD go. Reporting the peaks lets that be
+    confirmed at a glance rather than taken on faith.
+    """
+    stress = test.stress_mpa
+    if len(stress) == 0:
+        return None
     global_peak = float(np.nanmax(stress))
     if global_peak <= 0:
         return None
 
-    permissive = segment_cycles(stress, Config(**{**vars(cfg), "major_cycle_frac": 0.0}))
-    cutoff = cfg.major_cycle_frac * global_peak
+    real = segment_cycles(stress, cfg)
+    real_peaks = [float(np.nanmax(stress[a : b + 1])) for a, b in real]
+    permissive = segment_cycles(stress, replace(cfg, major_cycle_frac=0.0))
     dropped = [
         (a, float(np.nanmax(stress[a : b + 1])))
         for a, b in permissive
-        if float(np.nanmax(stress[a : b + 1])) < cutoff
+        if not any(np.isclose(float(np.nanmax(stress[a : b + 1])), rp, rtol=1e-6) for rp in real_peaks)
     ]
     if not dropped:
         return None
@@ -163,8 +234,10 @@ def _cycles_discarded(stress: np.ndarray, cfg: Config) -> Optional[Warning_]:
         code="cycles_discarded_by_peak_filter",
         severity="caution",
         message=(
-            f"{len(dropped)} load run(s) long enough to be a cycle were discarded "
-            f"for peaking below {cfg.major_cycle_frac:g} x the global peak: {detail}. "
+            f"{len(dropped)} load run(s) that separated cleanly from their own "
+            f"neighbours were discarded by major_cycle_frac ({cfg.major_cycle_frac:g} "
+            "x the global peak), now a safety floor rather than the primary "
+            f"segmentation gate -- see Config: {detail}. "
             "A low-stress run at the start of the record is normally the machine "
             "finding contact and is correctly excluded; anything else may be a "
             "stage you are losing."
@@ -243,11 +316,13 @@ def collect(
     stress = test.stress_mpa
     has_strain = bool(test.h0_mm)
 
+    residual_stress = df.attrs.get("residual_stress_mpa") if not df.empty else None
     found = [
         _gauge_length(test, has_strain, gauge_length_confirmed),
         _first_cycle_at_risk(stress, df, cfg),
-        _first_cycle_residual_unreachable(df),
-        _cycles_discarded(stress, cfg),
+        _residual_unreadable_cycles(df),
+        _residual_reference_not_low(df, residual_stress),
+        _cycles_discarded(test, cfg),
         _variable_dwell(df),
     ]
     order = {name: i for i, name in enumerate(SEVERITIES)}

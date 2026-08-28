@@ -121,21 +121,38 @@ def multistage_signal(
     return np.concatenate(stress_parts), np.concatenate(disp_parts)
 
 
-def expected_permanent_set(
-    stages: tuple[float, ...] = STAGES, residual_stress_mpa: float | None = None
-) -> float:
-    """Permanent set accumulated between the first and last cycle, in mm.
+def expected_permanent_set_incremental(
+    stages: tuple[float, ...], residual_stress_mpa: float
+) -> np.ndarray:
+    """PermDef_incremental_mm for every stage, in closed form.
 
-    Available in closed form because the elastic contribution cancels: the
-    amplitude scales with the stage peak exactly as the reference-stress
-    fraction shrinks, so the part read at the residual reference stress is
-    identical in every stage and only the accumulated set survives.
+    core.py's within-cycle formula reads the SAME residual reference stress
+    on both branches of one cycle: ResidualDisp_unload_mm - ResidualDisp_mm.
+    Substituting this signal generator's own loading/unloading expressions
+    (cycle_arrays, above) and simplifying -- the elastic "amplitude" term on
+    the loading branch cancels against part of the unloading branch's own
+    amplitude term, for the same reason the OLD cross-cycle closed form's
+    elastic contribution cancelled -- collapses to:
+
+        incremental_i = set_inc_i * (C - ratio_i**0.85) + creep_i * ratio_i**0.85
+
+    where C = contact(residual_stress) (the loading-branch contact-recovery
+    fraction at the reference stress, identical every stage) and
+    ratio_i = residual_stress / peak_i. Matches the engine's actual output
+    to ~2e-7 mm (the one approximation made: contact(peak_i) is taken as
+    exactly 1, true to 1e-9 for any stage this generator uses, since peak_i
+    is always many multiples of CONTACT_SCALE_MPA).
     """
     top = max(stages)
-    total = sum(0.0015 * (p / top) for p in stages[:-1])
-    if residual_stress_mpa is None:
-        return total
-    return total * float(1.0 - np.exp(-residual_stress_mpa / CONTACT_SCALE_MPA))
+    c = float(1.0 - np.exp(-residual_stress_mpa / CONTACT_SCALE_MPA))
+    out = []
+    for peak in stages:
+        amplitude_frac = peak / top
+        set_inc = 0.0015 * amplitude_frac
+        creep = 0.004 * amplitude_frac
+        ratio = residual_stress_mpa / peak
+        out.append(set_inc * (c - ratio**0.85) + creep * ratio**0.85)
+    return np.array(out)
 
 
 # ----------------------------------------------------------------------------
