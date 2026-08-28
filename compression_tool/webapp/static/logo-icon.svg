@@ -1,6 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-  <rect x="0" y="0" width="40" height="40" rx="9" fill="#2a78d6"/>
-  <rect x="9" y="9.5" width="22" height="4.5" rx="1.8" fill="#ffffff"/>
+  <defs>
+    <linearGradient id="ctIconGradSm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4a93ea"/>
+      <stop offset="100%" stop-color="#2a78d6"/>
+    </linearGradient>
+    <style>
+      /* Same rig and the same keyframe names as logo.svg -- this is the
+         collapsed-sidebar / favicon-adjacent variant of the identical
+         icon at a bigger scale, not a separate mark, so it plays the same
+         motion, just proportioned for a 40x40 box instead of a 32x32 one. */
+      @keyframes ctLogoPress {
+        0%, 100% { transform: translateY(0); }
+        40% { transform: translateY(3px); }
+        55% { transform: translateY(3.2px); }
+        70% { transform: translateY(3px); }
+      }
+      @keyframes ctLogoSquash {
+        0%, 100% { transform: scaleY(1); }
+        40% { transform: scaleY(.8); }
+        55% { transform: scaleY(.76); }
+        70% { transform: scaleY(.8); }
+      }
+      @keyframes ctLogoGlow {
+        0%, 100% { opacity: .16; }
+        55% { opacity: .55; }
+      }
+      .ct-logo-head { animation: ctLogoPress 2.6s cubic-bezier(.45,0,.45,1) infinite;
+        transform-box: fill-box; transform-origin: 50% 0%; }
+      .ct-logo-specimen { animation: ctLogoSquash 2.6s cubic-bezier(.45,0,.45,1) infinite;
+        transform-box: fill-box; transform-origin: 50% 100%; }
+      .ct-logo-glow { animation: ctLogoGlow 2.6s cubic-bezier(.45,0,.45,1) infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .ct-logo-head, .ct-logo-specimen, .ct-logo-glow { animation: none; }
+      }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="40" height="40" rx="9" fill="url(#ctIconGradSm)"/>
+  <ellipse class="ct-logo-glow" cx="20" cy="34" rx="10" ry="2.8" fill="#ffffff"/>
+  <rect class="ct-logo-head" x="9" y="9.5" width="22" height="4.5" rx="1.8" fill="#ffffff"/>
+  <ellipse class="ct-logo-specimen" cx="20" cy="20" rx="7.5" ry="4.6" fill="#ffffff"/>
   <rect x="9" y="26" width="22" height="4.5" rx="1.8" fill="#ffffff"/>
-  <ellipse cx="20" cy="20" rx="7.5" ry="4.6" fill="#ffffff"/>
 </svg>

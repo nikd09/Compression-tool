@@ -69,39 +69,42 @@ NAV_ITEMS = [
 
 _NAV_CSS = """
 <style>
-  /* The sidebar header (the logo + the collapse chevron): a soft gradient
-     band and a corner glow behind it, instead of flat background -- and
-     the logo image pinned to a fixed size instead of the max-width:100%
-     Streamlit gives it by default. That last part is not cosmetic: the
-     sidebar itself is user-resizable by dragging its edge, and max-width:
-     100% means the logo -- icon AND the "CompressLab" wordmark text baked
-     into the same image -- visibly shrinks and gets harder to read as the
-     sidebar narrows (confirmed live: dragging the sidebar from 300px to
-     200px shrank the rendered logo from 176px to 100px wide). Pinning the
-     size means it clips instead of shrinking illegibly if the sidebar is
-     dragged narrower than the logo itself -- the same trade-off most
-     sidebars with a fixed brand mark make.
+  /* The sidebar header (the logo + the collapse chevron): flat, not the
+     diagonal gradient band + corner glow this used to have -- the logo
+     mark itself now carries its own colour and motion (see logo.svg), so
+     the header around it stays quiet instead of adding a second, competing
+     visual effect. A plain bottom border is still what separates it from
+     the nav list below.
+
+     The logo image is pinned to a fixed size instead of the max-width:100%
+     Streamlit gives it by default -- not cosmetic: the sidebar itself is
+     user-resizable by dragging its edge, and max-width:100% means the logo
+     -- icon AND the "CompressLab" wordmark text baked into the same image
+     -- visibly shrinks and gets harder to read as the sidebar narrows
+     (confirmed live: dragging the sidebar from 300px to 200px shrank the
+     rendered logo from 176px to 100px wide). Pinning the size means it
+     clips instead of shrinking illegibly if the sidebar is dragged
+     narrower than the logo itself -- the same trade-off most sidebars with
+     a fixed brand mark make.
+
+     A small negative margin on the header (not on stSidebarContent, which
+     would also pull every nav button and the workspace box left with it)
+     is what closes the left-edge gap Streamlit's own 20px sidebar padding
+     otherwise leaves specifically in front of the logo -- confirmed live
+     via computed styles that stSidebarContent's padding-left is the entire
+     source of that gap, not something this header applies itself.
   */
   [data-testid="stSidebarHeader"]{
     position:relative; overflow:hidden;
-    background:linear-gradient(135deg, rgba(42,120,214,.12), transparent 65%);
+    margin-left:-12px;
     border-bottom:1px solid var(--border-color, #e1e0d9);
-  }
-  [data-testid="stSidebarHeader"]::before{
-    content:""; position:absolute; top:-22px; left:-22px; width:100px; height:100px;
-    background:radial-gradient(circle, rgba(42,120,214,.22), transparent 70%);
-    pointer-events:none;
   }
   [data-testid="stSidebarLogo"]{
     max-width:none!important; width:176px!important; height:32px!important;
   }
   @media (prefers-color-scheme: dark){
     [data-testid="stSidebarHeader"]{
-      background:linear-gradient(135deg, rgba(57,135,229,.16), transparent 65%);
       border-bottom-color:#2c2c2a;
-    }
-    [data-testid="stSidebarHeader"]::before{
-      background:radial-gradient(circle, rgba(57,135,229,.28), transparent 70%);
     }
   }
 

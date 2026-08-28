@@ -935,6 +935,42 @@ two entries end up reading as identical. Putting the short tag first survives
 that truncation; the Results and Compare specimen pickers, and Config's
 specimen table, all use it.
 
+### The sidebar logo: a live animation, not a static image
+
+`static/logo.svg` and `static/logo-icon.svg` (the collapsed-sidebar variant)
+replaced a flat single-colour icon and a diagonal CSS gradient band behind
+the whole sidebar header. The icon now carries its own subtle two-tone fill
+(a `linearGradient` def) and plays the exact same load-hold-unload press
+motion as the Ingest/Commit loading overlay (`common.py`'s
+`utm_press_html()`) at icon scale, continuously, via `@keyframes` declared
+inside the SVG's own `<style>` block — confirmed live that CSS keyframes
+declared *inside* an SVG still animate when that SVG is loaded as an `<img>`
+source (which is how `st.logo()` renders it, as a `data:image/svg+xml`
+`<img>`), where an external stylesheet could never reach in and animate it.
+`@media (prefers-reduced-motion: reduce)` turns it off; the wordmark itself
+now reads "Compress" in the body ink colour and "Lab" in the brand blue,
+rather than one flat colour for the whole word.
+
+The diagonal gradient band + corner glow behind the header (`app.py`'s
+`_NAV_CSS`) is gone outright rather than replaced — the icon carrying its
+own colour and motion made a second, competing background effect behind it
+redundant. What is left is a small negative `margin-left` on the header
+alone (not on the sidebar content, which would also drag every nav button
+and the workspace box left with it): confirmed via `getComputedStyle` that
+Streamlit's own sidebar padding (20px, unrelated to anything this app sets)
+was the entire source of the visible gap in front of the logo, not something
+declared here.
+
+**A real XML trap, hit and fixed while writing this:** a `data:image/svg+xml`
+source is parsed as *strict* XML, not HTML-style "forgiving" parsing — a
+literal `<style>` or `<img>` written out in plain English inside a CSS
+*comment* inside the SVG's own `<style>` block reads to that parser as a
+real, unmatched element tag, not as English text, and breaks the whole image
+silently (Streamlit renders nothing, no error surfaced in the browser).
+Confirmed by parsing the file directly with Python's `xml.dom.minidom` — the
+fix is simply never writing a literal angle bracket inside an SVG comment,
+even in prose describing what a tag does.
+
 ### The expanded-chart dialog: a fixed, scrolling frame, not a content-fit one
 
 `components.html` embeds the dashboard in an iframe with a height Streamlit
