@@ -142,3 +142,18 @@ def test_no_download_button_before_the_dashboard_is_built(monkeypatch, workspace
     download_keys = {b.key for b in at.download_button if b.key}
     assert not any(k.startswith("download_material_") for k in download_keys)
     assert any("not built yet" in c.value for c in at.caption)
+
+
+def test_opening_a_material_card_sets_the_shared_active_material(monkeypatch, workspace, single_file):
+    """Results' Material picker is bound to this same key -- clicking a card
+    here is meant to carry the choice over there, not just open this tab's
+    own dashboard view. See results_view.py."""
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="TALCO50")
+
+    at = _run(monkeypatch, workspace)
+    open_btn = next(b for b in at.button if b.key and b.key.startswith("open_material_"))
+    at = open_btn.click().run()
+
+    assert not at.exception
+    assert at.session_state["active_material"] == "TALCO50"

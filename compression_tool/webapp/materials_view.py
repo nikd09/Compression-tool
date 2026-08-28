@@ -219,6 +219,12 @@ def render(ws: Workspace) -> None:
                     )
     if clicked_material:
         st.session_state[_SESSION_KEY] = clicked_material
+        # Plain state, not a widget key -- results_view.py's Material
+        # selectbox is the only place this is ever bound to a widget, so
+        # writing it here just carries the choice forward, the same
+        # cross-page default clicking a card already gives you within this
+        # tab (see _SESSION_KEY above).
+        st.session_state["active_material"] = clicked_material
         st.rerun()
 
 

@@ -29,7 +29,16 @@ def render(ws: Workspace) -> None:
     if not materials:
         st.info("No specimens indexed yet.")
         return
-    material = st.selectbox("Material", materials)
+    # Bound to the same "active_material" key Materials writes when a card
+    # is clicked, so opening a material there and then switching to Results
+    # lands on it directly instead of re-asking. Guarded rather than passed
+    # straight to `key=`: a value carried over from a workspace that no
+    # longer has this material (switched workspace, or the material was
+    # renamed/deleted) would otherwise be rejected outright by selectbox as
+    # not among `options`.
+    if st.session_state.get("active_material") not in materials:
+        st.session_state["active_material"] = materials[0]
+    material = st.selectbox("Material", materials, key="active_material")
 
     specimens = knowledge_base.list_specimens(conn, material)
     if specimens.empty:

@@ -48,3 +48,36 @@ def test_a_specimen_deleted_outside_the_app_shows_a_reindex_error_not_a_crash(
     assert not at.exception
     assert at.error
     assert "Reindex from disk" in at.error[0].value
+
+
+def test_material_picker_honours_a_previously_active_material(monkeypatch, workspace, single_file):
+    """Bound to the same "active_material" session key materials_view.py
+    writes when a card is clicked -- opening a material there and switching
+    to Results should land on it, not the alphabetically-first material."""
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="ALPHA")
+    ingest([single_file], ws, material="BETA")
+
+    monkeypatch.setenv("_CT_TEST_WORKSPACE_ROOT", str(workspace))
+    at = AppTest.from_function(_app)
+    at.session_state["active_material"] = "BETA"
+    at.run()
+
+    assert not at.exception
+    assert at.selectbox[0].value == "BETA"
+
+
+def test_a_stale_active_material_falls_back_to_the_first_option(monkeypatch, workspace, single_file):
+    """A material name carried over from a different workspace, or one that
+    was since renamed/deleted, must not make the picker reject every
+    option outright -- see the guard in results_view.py before `key=`."""
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="ALPHA")
+
+    monkeypatch.setenv("_CT_TEST_WORKSPACE_ROOT", str(workspace))
+    at = AppTest.from_function(_app)
+    at.session_state["active_material"] = "Some material that no longer exists"
+    at.run()
+
+    assert not at.exception
+    assert at.selectbox[0].value == "ALPHA"
