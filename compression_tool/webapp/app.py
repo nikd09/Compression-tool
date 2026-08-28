@@ -22,6 +22,7 @@ from compression_tool.webapp import (
     config_view,
     ingest_view,
     materials_view,
+    overview_view,
     results_view,
 )
 from compression_tool.webapp.auth import require_password
@@ -59,13 +60,31 @@ _STATIC = Path(__file__).parent / "static"
 # rendered ONCE, here, and the resolved Workspace is passed into every view as
 # a plain argument, rather than each view re-declaring its own copy of the
 # widget -- see common.workspace_picker's docstring.
-NAV_ITEMS = [
-    ("Ingest", ":material/upload_file:", ingest_view.render),
-    ("Results", ":material/bar_chart:", results_view.render),
-    ("Compare", ":material/compare_arrows:", compare_view.render),
-    ("Materials", ":material/inventory_2:", materials_view.render),
-    ("Config", ":material/tune:", config_view.render),
+# Grouped into sections, not one flat list: the five-then-six original
+# items read as "the six Python files", not as the underlying tasks a
+# materials engineer actually performs. Workflow is the pipeline for one
+# test (get oriented, bring in data, understand a result, compare results);
+# Library is the catalogue that pipeline builds up over time; System is
+# workspace-level administration that most visits never touch. The section
+# label is cosmetic (a small caption, not a real grouping construct
+# Streamlit has) but the grouping itself is what the nav is missing, not
+# just a visual label -- see NAV_ITEMS below, still the one flat lookup
+# every button click and view dispatch actually uses.
+NAV_SECTIONS = [
+    ("Workflow", [
+        ("Overview", ":material/space_dashboard:", overview_view.render),
+        ("Ingest", ":material/upload_file:", ingest_view.render),
+        ("Results", ":material/bar_chart:", results_view.render),
+        ("Compare", ":material/compare_arrows:", compare_view.render),
+    ]),
+    ("Library", [
+        ("Materials", ":material/inventory_2:", materials_view.render),
+    ]),
+    ("System", [
+        ("Config", ":material/tune:", config_view.render),
+    ]),
 ]
+NAV_ITEMS = [item for _, items in NAV_SECTIONS for item in items]
 
 _NAV_CSS = """
 <style>
@@ -147,6 +166,15 @@ _NAV_CSS = """
   section[data-testid="stSidebar"] div.stButton > button:hover p{
     transform:translateX(1px);
   }
+  /* Section captions above each nav group -- Workflow / Library / System --
+     quiet enough not to compete with the buttons themselves, just enough
+     of a label that the five items read as three grouped tasks rather than
+     one flat list of source files. */
+  .ct-nav-section{
+    font-size:.68rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    opacity:.5; margin:.9rem 0 .15rem .7rem;
+  }
+  .ct-nav-section:first-child{ margin-top:.15rem; }
   /* [theme.dark]'s own brighter blue step, same pair as everywhere else
      in this file that reads var(--primary-color) -- see common.py. */
   @media (prefers-color-scheme: dark){
@@ -175,22 +203,25 @@ def main() -> None:
     nav_before_this_run = st.session_state["nav_view"]
 
     with st.sidebar:
-        for name, icon, _ in NAV_ITEMS:
-            # active is read BEFORE this button's own click is known, so the
-            # button just clicked always paints with its OLD state on this
-            # exact run -- a real, confirmed one-click highlight lag, not a
-            # hover artifact (reproduced with the mouse moved off the sidebar
-            # entirely). Content is correct immediately either way, since
-            # `view(ws)` below reads the already-updated session_state; only
-            # the sidebar's own paint of ITSELF lags. Fixed below.
-            active = st.session_state["nav_view"] == name
-            if st.button(
-                f"{name}", icon=icon, key=f"nav_{name}",
-                use_container_width=True,
-                type="primary" if active else "tertiary",
-            ):
-                # No st.rerun() here -- see the note above.
-                st.session_state["nav_view"] = name
+        for section_name, items in NAV_SECTIONS:
+            st.markdown(f'<div class="ct-nav-section">{section_name}</div>', unsafe_allow_html=True)
+            for name, icon, _ in items:
+                # active is read BEFORE this button's own click is known, so
+                # the button just clicked always paints with its OLD state on
+                # this exact run -- a real, confirmed one-click highlight lag,
+                # not a hover artifact (reproduced with the mouse moved off
+                # the sidebar entirely). Content is correct immediately
+                # either way, since `view(ws)` below reads the
+                # already-updated session_state; only the sidebar's own paint
+                # of ITSELF lags. Fixed below.
+                active = st.session_state["nav_view"] == name
+                if st.button(
+                    f"{name}", icon=icon, key=f"nav_{name}",
+                    use_container_width=True,
+                    type="primary" if active else "tertiary",
+                ):
+                    # No st.rerun() here -- see the note above.
+                    st.session_state["nav_view"] = name
         st.divider()
         # The one and only call site for this widget -- see the note above.
         ws = workspace_picker()

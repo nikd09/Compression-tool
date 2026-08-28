@@ -147,7 +147,7 @@ def test_config_page_renders_as_tabs_with_the_run_picker_shared_above_them(
 
 
 def test_administration_tab_works_even_with_nothing_ingested(monkeypatch, workspace):
-    ws = Workspace.at(workspace).ensure()
+    Workspace.at(workspace).ensure()
 
     at = _run(monkeypatch, workspace)
 
