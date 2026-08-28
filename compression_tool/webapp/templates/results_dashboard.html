@@ -91,6 +91,34 @@ h1{font-size:1.4rem;margin:0;letter-spacing:-.022em;font-weight:670;line-height:
 .mchip b{color:var(--muted);font-weight:600;font-size:.66rem;
   text-transform:uppercase;letter-spacing:.05em;}
 
+/* warnings -- same severity vocabulary (critical/caution/info) as the
+   static multi-material report (html_report.py), independent CSS since the
+   two templates share no stylesheet. */
+:root{
+  --warn-bg:#fff4d6; --warn-fg:#7a5c00;
+  --bad-bg:#fde4e4; --bad-fg:#9c0006;
+  --info-bg:#e8eefa; --info-fg:#1f3864;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --warn-bg:#3d3312; --warn-fg:#f0d68a;
+  --bad-bg:#3d1f1f; --bad-fg:#f2a3a3;
+  --info-bg:#1c2a3d; --info-fg:#8fb0e8;
+}}
+:root[data-theme="dark"]{
+  --warn-bg:#3d3312; --warn-fg:#f0d68a;
+  --bad-bg:#3d1f1f; --bad-fg:#f2a3a3;
+  --info-bg:#1c2a3d; --info-fg:#8fb0e8;
+}
+.warnbar{display:flex;flex-direction:column;gap:.5rem;margin:0 0 1.1rem;}
+.warncard{display:flex;gap:.6rem;align-items:flex-start;padding:.6rem .8rem;
+  border-radius:var(--r-md);font-size:.82rem;line-height:1.5;}
+.warncard .pill{flex:none;font-size:.63rem;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;padding:.12rem .45rem;border-radius:999px;
+  background:rgba(0,0,0,.12);}
+.warncard.critical{background:var(--bad-bg);color:var(--bad-fg);}
+.warncard.caution{background:var(--warn-bg);color:var(--warn-fg);}
+.warncard.info{background:var(--info-bg);color:var(--info-fg);}
+
 /* theme toggle */
 .seg{display:inline-flex;background:var(--sunk);border:1px solid var(--ring);
   border-radius:var(--r-sm);padding:2px;gap:2px;}
@@ -311,6 +339,8 @@ footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--grid);
       <div class="seg" role="group" aria-label="Colour theme" id="theme"></div>
     </div>
   </header>
+
+  <div class="warnbar" id="warnbar"></div>
 
   <div class="tabs" role="tablist">
     <button role="tab" id="t-res" aria-controls="p-res" aria-selected="true">Results</button>
@@ -1095,9 +1125,20 @@ function renderHead(){
     "every number is computed on the full signal.";
 }
 
+function renderWarnings(){
+  const el = $("#warnbar");
+  const warnings = DATA.warnings || [];
+  if(!warnings.length){ el.innerHTML=""; return; }
+  const PILL = {critical:"Critical", caution:"Caution", info:"Info"};
+  el.innerHTML = warnings.map(w => {
+    const sev = ["critical","caution","info"].includes(w.severity) ? w.severity : "info";
+    return `<div class="warncard ${sev}"><span class="pill">${PILL[sev]}</span><span>${w.message}</span></div>`;
+  }).join("");
+}
+
 function renderAll(){
   renderCtrls(); renderCharts(); renderTable();
   if(openIndex!=null) drawExpanded();
 }
-renderTheme(); renderHead(); renderAll(); renderMethod();
+renderTheme(); renderHead(); renderWarnings(); renderAll(); renderMethod();
 </script>

@@ -234,6 +234,76 @@ def test_unequal_dwells_are_flagged():
 
 
 # ----------------------------------------------------------------------------
+# Preload / seating cycle
+# ----------------------------------------------------------------------------
+
+
+def test_a_hold_free_cycle_among_held_ones_is_flagged_as_a_possible_preload():
+    """A small, clean, hold-free ramp ahead of several held stages is exactly
+    the real signature found on the T050E1 export -- adaptive segmentation
+    now correctly finds it as its own cycle (it is real, cleanly-separated
+    signal, not noise), and it is kept in the data rather than silently
+    dropped. This diagnostic is what keeps that honest instead of letting a
+    reader assume every counted cycle is a programmed stage."""
+    from conftest import BASELINE_MM, cycle_arrays
+
+    parts_s, parts_x = [np.zeros(200)], [np.full(200, BASELINE_MM)]
+    x_perm = BASELINE_MM
+    preload_peak = 10.0
+    s, x = cycle_arrays(preload_peak, x_perm, 0.01, 0.0, 0.0002, hold=False)
+    parts_s.append(s)
+    parts_x.append(x)
+    x_perm += 0.0002
+    for peak in (100.0, 200.0, 300.0):
+        s, x = cycle_arrays(peak, x_perm, 0.03, 0.003, 0.001, hold=True)
+        parts_s.append(s)
+        parts_x.append(x)
+        x_perm += 0.001
+
+    test = _test_data(np.concatenate(parts_s), np.concatenate(parts_x))
+    df = analyse_test(test, Config())
+    assert len(df) == 4
+    assert not df["HoldDetected"].iloc[0]
+    assert df["HoldDetected"].iloc[1:].all()
+
+    warnings = [w for w in collect(test, df, Config()) if w["code"] == "possible_preload_cycle"]
+    assert warnings
+    assert warnings[0]["severity"] == "caution"
+    assert "Cycle(s) 1" in warnings[0]["message"]
+
+
+def test_no_preload_warning_when_every_cycle_holds(signal):
+    """The ordinary synthetic multi-stage test: every cycle dwells, so there
+    is no hold-free outlier to flag."""
+    stress, disp = signal
+    test = _test_data(stress, disp)
+    df = analyse_test(test, Config())
+
+    assert "possible_preload_cycle" not in _codes(collect(test, df, Config()))
+
+
+def test_no_preload_warning_when_holds_are_the_exception_not_the_norm():
+    """A mostly hold-free, fast-cycling test (a legitimate test design of its
+    own) is not the preload signature -- only a hold-free MINORITY among an
+    otherwise-held test is."""
+    from conftest import BASELINE_MM, cycle_arrays
+
+    parts_s, parts_x = [np.zeros(200)], [np.full(200, BASELINE_MM)]
+    x_perm = BASELINE_MM
+    for peak, hold in ((10.0, False), (20.0, False), (30.0, True)):
+        s, x = cycle_arrays(peak, x_perm, 0.01, 0.0, 0.0002, hold=hold)
+        parts_s.append(s)
+        parts_x.append(x)
+        x_perm += 0.0002
+
+    test = _test_data(np.concatenate(parts_s), np.concatenate(parts_x))
+    df = analyse_test(test, Config())
+    assert len(df) == 3
+
+    assert "possible_preload_cycle" not in _codes(collect(test, df, Config()))
+
+
+# ----------------------------------------------------------------------------
 # Delivery
 # ----------------------------------------------------------------------------
 

@@ -269,6 +269,51 @@ def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
     )
 
 
+def _possible_preload_cycle(df: pd.DataFrame, cfg: Config) -> Optional[Warning_]:
+    """A cycle with no detected dwell, in a test where dwell is clearly the
+    norm, is most plausibly the machine's preload/seating step (settling
+    full contact before the programmed sequence proper) rather than one of
+    the real stages -- the same signature `analyse_test` already uses
+    internally to prefer a HELD cycle as the cross-cycle reference (see its
+    docstring). Segmentation can legitimately surface a genuine, cleanly
+    separated load-unload event like this as its own cycle now that it is
+    no longer silently merged into whatever follows it -- exactly the kind
+    of previously-hidden real signal this engine's redesign exists to stop
+    discarding (see core.segment_cycles). It is NOT excluded from the data
+    or the cycle count here: it is real, non-noise signal, and quietly
+    dropping it would trade one silent behaviour for another. This only
+    makes the ambiguity visible, so a report is never read as if every
+    counted cycle were a programmed stage without someone having checked.
+    """
+    if df.empty or not cfg.detect_holds or "HoldDetected" not in df:
+        return None
+    held = df["HoldDetected"].astype(bool)
+    if held.all() or not held.any():
+        return None
+    # Only worth flagging when a dwell is clearly this test's norm -- a
+    # genuinely mixed-dwell test (a legitimate design, not this signature)
+    # is not what this diagnostic is for.
+    if held.mean() <= 0.5:
+        return None
+
+    which = ", ".join(str(c) for c in df.loc[~held, "Cycle"].tolist())
+    return Warning_(
+        code="possible_preload_cycle",
+        severity="caution",
+        message=(
+            f"Cycle(s) {which} have no detected dwell while {int(held.sum())} of "
+            f"{len(df)} cycles in this test do. A clean, fully-separated "
+            "load-unload event with no programmed hold, in an otherwise-held "
+            "test, is most plausibly the machine's preload/seating step rather "
+            "than a real programmed stage -- kept in the data because it is "
+            "real signal, not noise, but excluded from this test's cross-"
+            "cycle reference cycle for the same reason (see ref_stress_mpa / "
+            "stiffness_common_lo_mpa). Confirm against the test protocol "
+            "before counting it as a numbered stage in a report."
+        ),
+    )
+
+
 def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional[Warning_]:
     """Strain and modulus are only as good as the gauge length behind them."""
     if not has_strain:
@@ -324,6 +369,7 @@ def collect(
         _residual_reference_not_low(df, residual_stress),
         _cycles_discarded(test, cfg),
         _variable_dwell(df),
+        _possible_preload_cycle(df, cfg),
     ]
     order = {name: i for i, name in enumerate(SEVERITIES)}
     return [

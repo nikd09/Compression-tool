@@ -76,6 +76,7 @@ CONTRACT_WARNING_CODES: tuple[str, ...] = (
     "first_cycle_residual_unreachable",
     "residual_unreadable_cycles",
     "residual_reference_not_low",
+    "possible_preload_cycle",
 )
 
 
