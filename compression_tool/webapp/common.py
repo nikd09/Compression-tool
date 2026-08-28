@@ -159,37 +159,60 @@ def config_form(detect_holds: bool) -> Config:
             "most exports; change one only if Preview below shows a stage being "
             "lost or a cycle miscounted."
         )
+        # Every field pairs a plain-language label (what a materials engineer
+        # who has never opened core.py would call this) with the exact
+        # Config field name/CLI flag as a small caption underneath -- not
+        # replaced, since that name is still what --unload-frac etc. expect
+        # on the command line and what "Settings this run used" on Config
+        # prints back. Neither alone was right: the raw field name as the
+        # ONLY label assumes everyone reads this file's source; the plain
+        # label alone would silently break the link to the CLI/JSON name the
+        # same knob is addressed by everywhere else.
         c1, c2 = st.columns(2)
         with c1:
             unload_frac = st.number_input(
-                "unload_frac", value=d.unload_frac, format="%.3f",
+                "Unload sensitivity", value=d.unload_frac, format="%.3f",
                 help="A candidate cycle's bounding valley must give back at least this "
                      "fraction of the candidate's OWN peak stress to count as a real "
                      "load-unload separation, rather than a shoulder on the ramp toward "
                      "a taller neighbouring peak.")
+            st.caption("`unload_frac`")
             major_cycle_frac = st.number_input(
-                "major_cycle_frac", value=d.major_cycle_frac, format="%.3f",
+                "Minimum cycle size", value=d.major_cycle_frac, format="%.3f",
                 help="A candidate peaking below this fraction of the GLOBAL peak is "
                      "rejected outright, regardless of its neighbours -- catches "
                      "near-zero contact-finding blips. Kept low: real stages are judged "
                      "by unload_frac and local noise, not by this.")
+            st.caption("`major_cycle_frac`")
             stiff_lo_frac = st.number_input(
-                "stiff_lo_frac", value=d.stiff_lo_frac, format="%.2f",
+                "Stiffness window start (fallback)", value=d.stiff_lo_frac, format="%.2f",
                 help="Fallback stiffness window (fraction of that cycle's own peak), "
                      "used only when no auto-located window clears the minimum span.")
+            st.caption("`stiff_lo_frac`")
             stiff_hi_frac = st.number_input(
-                "stiff_hi_frac", value=d.stiff_hi_frac, format="%.2f",
-                help="Fallback stiffness window upper bound -- see stiff_lo_frac.")
+                "Stiffness window end (fallback)", value=d.stiff_hi_frac, format="%.2f",
+                help="Fallback stiffness window upper bound -- see Stiffness window start.")
+            st.caption("`stiff_hi_frac`")
         with c2:
             ref_stress_frac = st.number_input(
-                "ref_stress_frac", value=d.ref_stress_frac, format="%.2f",
+                "Reference stress", value=d.ref_stress_frac, format="%.2f",
                 help="Reference stress for cross-cycle comparison, as a fraction of the smallest cycle peak.")
+            st.caption("`ref_stress_frac`")
             residual_stress_frac = st.number_input(
-                "residual_stress_frac", value=d.residual_stress_frac, format="%.2f")
-            hold_tol_frac = st.number_input("hold_tol_frac", value=d.hold_tol_frac, format="%.3f")
+                "Residual stress reference", value=d.residual_stress_frac, format="%.2f",
+                help="Low reference stress used to read permanent set on the loading "
+                     "and unloading branches -- see the warning below if a cycle's own "
+                     "peak puts this in the contact-loss-noise range.")
+            st.caption("`residual_stress_frac`")
+            hold_tol_frac = st.number_input(
+                "Hold detection tolerance", value=d.hold_tol_frac, format="%.3f",
+                help="How much a signal can drift during a dwell and still count as "
+                     "\"held\", as a fraction of that cycle's peak stress.")
+            st.caption("`hold_tol_frac`")
             h0_text = st.text_input(
-                "h0_mm override", value="",
+                "Specimen thickness override (h0)", value="",
                 placeholder="blank = read from the export's metadata sheet")
+            st.caption("`h0_mm`")
     h0_mm = None
     if h0_text.strip():
         try:
