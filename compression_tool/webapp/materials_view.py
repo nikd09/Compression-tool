@@ -20,6 +20,17 @@ from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
 
+# Rename/Delete are visible to every visitor, not hidden for a non-admin --
+# someone who cannot use them should still be able to see the option exists
+# and find out why it is blocked (this message, shown on click), rather than
+# a feature that only admins even know is there. permissions.is_admin() is
+# checked at CLICK time instead, inside render() below.
+_NOT_ADMIN_MESSAGE = (
+    "Only an admin can do this - see the \"Admin access\" card on the "
+    "Config tab to see who is listed, or to claim admin access yourself "
+    "if nobody has yet."
+)
+
 # Scoped via st.container(key=...) -- a documented, stable Streamlit hook for
 # exactly this (style one specific container's contents without a fragile
 # sibling-selector trick) -- so this cannot leak onto a tertiary button, or a
@@ -46,7 +57,17 @@ _CARD_CSS = """
    to become grid items instead of stacked rows. */
 .st-key-materials_grid{
   display:grid!important;
-  grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;
+  /* 230px is chosen so four equal-width cards fit at ~960px of content
+     width and up -- confirmed live at a 1440px browser window with the
+     sidebar open; the 300px this replaced only ever reached three columns
+     at that size. auto-fill still grows to five, six... on a bigger
+     monitor and drops to three, two, one on a narrower one, every card
+     always the same width as its row-mates (1fr) at whatever size
+     actually fits. Rename/Delete/Download are stacked full-width buttons
+     (not side by side) specifically so this width never wraps their text
+     -- see the three separate st.button/st.download_button calls below,
+     each use_container_width=True on its own row. */
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;
   gap:1rem!important;
 }
 .st-key-materials_grid button[kind="tertiary"]{
@@ -154,20 +175,48 @@ def render(ws: Workspace) -> None:
                     "Thickness (h0)",
                     f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
                 )
-                if can_manage:
-                    rn_col, del_col = st.columns(2)
-                    with rn_col:
-                        if st.button(
-                            "Rename", key=f"rename_material_{row['slug']}",
-                            icon=":material/edit:", use_container_width=True,
-                        ):
-                            _rename_dialog(ws, row["material"])
-                    with del_col:
-                        if st.button(
-                            "Delete", key=f"delete_material_{row['slug']}",
-                            icon=":material/delete:", use_container_width=True,
-                        ):
-                            _delete_dialog(ws, row["material"])
+                # Stacked full-width, not side by side: at four-per-row
+                # card widths, "Rename"/"Delete" in a 2-column row wrapped
+                # onto two lines each (confirmed live) -- one button per
+                # row never wraps regardless of how narrow the card gets.
+                if st.button(
+                    "Rename", key=f"rename_material_{row['slug']}",
+                    icon=":material/edit:", use_container_width=True,
+                ):
+                    if can_manage:
+                        _rename_dialog(ws, row["material"])
+                    else:
+                        st.error(_NOT_ADMIN_MESSAGE)
+                if st.button(
+                    "Delete", key=f"delete_material_{row['slug']}",
+                    icon=":material/delete:", use_container_width=True,
+                ):
+                    if can_manage:
+                        _delete_dialog(ws, row["material"])
+                    else:
+                        st.error(_NOT_ADMIN_MESSAGE)
+
+                # Downloading a local copy of the dashboard needs no admin
+                # access -- it is a read, not a write, the same as opening
+                # the material's dashboard by clicking its card. Only shown
+                # once the combined dashboard actually exists on disk:
+                # building it from here (export_material(), the same slow
+                # path _render_material_dashboard() falls back to) would
+                # mean every card in the grid pays that cost on every
+                # rerun, not just the one someone actually wants.
+                dashboard_path = ws.root / "reports" / f"{slugify(row['material'])}.html"
+                if dashboard_path.exists():
+                    st.download_button(
+                        "Download dashboard", data=dashboard_path.read_bytes(),
+                        file_name=f"{row['material']}.html", mime="text/html",
+                        key=f"download_material_{row['slug']}",
+                        icon=":material/download:", use_container_width=True,
+                    )
+                else:
+                    st.caption(
+                        "Dashboard not built yet - click the material name "
+                        "above to open (and generate) it first."
+                    )
     if clicked_material:
         st.session_state[_SESSION_KEY] = clicked_material
         st.rerun()

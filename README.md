@@ -569,6 +569,19 @@ computation behind two presentations that always agree with each other:
   material name in Explorer/Finder, so it is the first thing anyone sees
   when they open the `reports/` folder.
 
+Each card also carries a **Download dashboard** button -- a local copy of
+that material's combined `.html` dashboard, needing no admin access (a read,
+not a write, the same as clicking through to view it). Only shown once that
+file already exists on disk; a material whose dashboard has not been built
+yet shows a caption pointing at opening it once instead, rather than paying
+the cost of building every card's dashboard on every grid render just so the
+button can offer a fresher copy nobody asked for.
+
+The grid itself is `auto-fill` with a 230px-per-card minimum, not a fixed
+column count -- as many equal-width cards fit per row as the window actually
+allows (four at a normal laptop width, more on a wider monitor, fewer on a
+narrower one), all the same size and font regardless of row length.
+
 An earlier version of this page led with a "mean peak stress by material"
 bar chart ranking every material against each other. Dropped: a single
 number ranking materials against each other by one metric is a comparison
@@ -694,18 +707,29 @@ case-insensitively, the same identity `audit.py` already attributes every
 ingest to. The same pattern as `materials.json`: a small, shared,
 hand-editable file at the workspace root, not a login system.
 
-Unrestricted -- both buttons visible to everyone -- until `admins.json`
+Unrestricted -- every action allowed for everyone -- until `admins.json`
 exists. The first person to open Config's "Admin access" panel and click
 "Claim admin access for myself" seeds it with just their username; every
 visitor after that is restricted to whoever is listed, manageable from the
 same panel by an existing admin (or by hand-editing `admins.json` on the
 share). This still is not authentication (see the deployment notes above on
 `COMPRESSION_TOOL_PASSWORD`, and "Still to build") -- nothing here proves
-who is actually at the keyboard, only what the OS happens to report. It exists to keep the many people who
-only read from ever seeing the buttons, and to keep an accidental click from
-a casual visitor from renaming or deleting a shared material -- not to stop
-someone deliberately editing the file or running as another account. Real
-per-person enforcement needs the app hosted behind corporate SSO.
+who is actually at the keyboard, only what the OS happens to report. It
+exists to keep an accidental click from a casual visitor from renaming or
+deleting a shared material -- not to stop someone deliberately editing the
+file or running as another account. Real per-person enforcement needs the
+app hosted behind corporate SSO.
+
+**Rename and Delete stay visible to everyone, restricted or not** --
+`permissions.is_admin(ws)` is checked at CLICK time in `materials_view.py`,
+not used to hide the buttons. A non-admin sees both buttons exactly like an
+admin does; clicking either shows an error explaining who can do this and
+where to ask, instead of opening the rename/delete dialog. Hiding the
+buttons entirely used to be the behaviour here -- changed on the reasoning
+that a control nobody but an admin even knows exists is worse than one that
+is visible and explains itself when it refuses: a non-admin colleague can
+now discover the admin workflow exists at all, and knows who to ask, rather
+than a capability quietly missing with no trace of why.
 
 ### Concurrent ingest: the filesystem decides who owns a run folder
 
