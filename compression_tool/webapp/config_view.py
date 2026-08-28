@@ -1,7 +1,14 @@
 """Config: what settings a run was actually ingested with. Read-only by
 design -- changing a threshold belongs on the Ingest form, where it can be
 tried against a Preview before anything is committed; this view exists so a
-result can always be traced back to the exact numbers behind it, per run."""
+result can always be traced back to the exact numbers behind it, per run.
+
+Organised as tabs, not one long scroll: "Run" (trace this run's numbers back
+to their source), "Re-analyse" (the one write action here), "Exports"
+(cross-run/cross-material output), "Activity" (the workspace-wide audit
+trail) and "Administration" (index/admin, neither of which depends on a run
+being selected at all). The run picker sits above the tabs, not inside one
+of them, so switching tabs never re-asks which run you meant."""
 
 from __future__ import annotations
 
@@ -22,33 +29,46 @@ def render(ws: Workspace) -> None:
     st.header("Config")
     st.caption("What a run was actually ingested with, traced back per run, not the app's current form defaults.")
 
-    with st.container(border=True, key="card_index"):
-        st.markdown("##### Index")
-        st.caption(
-            "The database every tab reads from, built from the JSON records "
-            "under Records/. It only ever grows or updates when this app "
-            "writes to it - if a record's file was deleted outside the app "
-            "(Explorer, the shared drive) the index still lists it until "
-            "reindexed, and a tab that then tries to open it will show an "
-            "error instead of the material. Rebuilding is always safe: the "
-            "JSON records are the source of truth, the index is only ever "
-            "derived from them."
-        )
-        if st.button("Reindex from disk", icon=":material/refresh:", key="reindex_from_disk"):
-            count = knowledge_base.rebuild(ws)
-            st.success(f"Reindexed {count} specimen record(s) from disk.")
-
-    _render_admin_access(ws)
-
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
-    if not manifests:
-        st.info("Nothing ingested into this workspace yet - use Ingest first.")
+
+    manifest = None
+    if manifests:
+        # Rendered above the tabs, not inside one -- every tab that needs
+        # "which run" reads this same selection, so switching tabs never
+        # re-asks for it.
+        labels = {m: f"{m.parent.name}" for m in manifests}
+        chosen = st.selectbox("Run", manifests, format_func=lambda m: labels[m])
+        manifest = read_json(chosen)
+
+    tab_run, tab_reanalyze, tab_exports, tab_activity, tab_admin = st.tabs([
+        ":material/description: Run",
+        ":material/refresh: Re-analyse",
+        ":material/download: Exports",
+        ":material/history: Activity",
+        ":material/admin_panel_settings: Administration",
+    ])
+
+    if manifest is None:
+        for tab in (tab_run, tab_reanalyze, tab_exports, tab_activity):
+            with tab:
+                st.info("Nothing ingested into this workspace yet - use Ingest first.")
+        with tab_admin:
+            _render_administration(ws)
         return
 
-    labels = {m: f"{m.parent.name}" for m in manifests}
-    chosen = st.selectbox("Run", manifests, format_func=lambda m: labels[m])
-    manifest = read_json(chosen)
+    with tab_run:
+        _render_run(manifest)
+    with tab_reanalyze:
+        _render_reanalyze(ws, manifest)
+    with tab_exports:
+        _render_exports(ws, manifest)
+    with tab_activity:
+        _render_activity(ws)
+    with tab_admin:
+        _render_administration(ws)
 
+
+def _render_run(manifest: dict) -> None:
     with st.container(border=True, key="card_run_summary"):
         st.subheader(manifest.get("material", "-"))
         c1, c2, c3 = st.columns(3)
@@ -65,8 +85,52 @@ def render(ws: Workspace) -> None:
             help=f"Full timestamp: {created}",
         )
 
-    _render_reanalyze(ws, manifest)
+    st.markdown("##### Sources")
+    sources = manifest.get("sources", [])
+    if sources:
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "File": [s.get("source_file", "-") for s in sources],
+                    "sha256": [s.get("sha256", "-")[:12] + "…" for s in sources],
+                }
+            ),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.caption("None recorded.")
 
+    st.markdown("##### Specimens")
+    specimens = manifest.get("specimens", [])
+    if specimens:
+        labels_ = [s.get("label", "-") for s in specimens]
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "": [short_tag(lbl, i + 1) for i, lbl in enumerate(labels_)],
+                    "Label": labels_,
+                    "Cycles": [s.get("n_cycles", "-") for s in specimens],
+                    "JSON": [s.get("json", "-") for s in specimens],
+                }
+            ),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.caption("None recorded.")
+
+    with st.expander("Settings this run used"):
+        st.json(manifest.get("config", {}), expanded=False)
+    with st.expander("Full manifest"):
+        st.json(manifest)
+
+    st.caption(
+        "This is what the run was actually ingested with, not the app's current "
+        "form defaults. The two can differ once someone changes a threshold on "
+        "the Ingest tab for a later run."
+    )
+
+
+def _render_exports(ws: Workspace, manifest: dict) -> None:
     material = manifest.get("material", "")
     reports_dir = ws.root / "reports"
     xlsx_path = reports_dir / f"{slugify(material)}.xlsx"
@@ -112,74 +176,50 @@ def render(ws: Workspace) -> None:
             else:
                 st.warning("No indexed specimens found in this workspace.")
 
+
+def _render_activity(ws: Workspace) -> None:
     entries = audit.list_entries(ws, limit=15)
-    if entries:
-        with st.container(border=True, key="card_recent_activity"):
-            st.markdown("##### Recent activity")
-            st.caption(
-                "Who ingested what, and when: one record per Commit, "
-                "across the whole workspace, not just this run. The 15 "
-                "most recent; every record ever written is a small JSON "
-                "file under audit/, or `compression_tool audit` on the CLI."
-            )
-            st.dataframe(
-                pd.DataFrame({
-                    "Time (UTC)": [e.get("timestamp_utc", "-") for e in entries],
-                    "User": [e.get("user", "-") for e in entries],
-                    "Host": [e.get("host", "-") for e in entries],
-                    "Material": [e.get("material", "-") for e in entries],
-                    "Specimens": [len(e.get("specimens", [])) for e in entries],
-                    "Skipped": [len(e.get("skipped", [])) for e in entries],
-                    "Run": [e.get("run_dir", "-") for e in entries],
-                }),
-                use_container_width=True, hide_index=True,
-            )
-
-    with st.expander("Settings this run used"):
-        st.json(manifest.get("config", {}), expanded=False)
-
-    st.markdown("##### Sources")
-    sources = manifest.get("sources", [])
-    if sources:
-        st.dataframe(
-            pd.DataFrame(
-                {
-                    "File": [s.get("source_file", "-") for s in sources],
-                    "sha256": [s.get("sha256", "-")[:12] + "…" for s in sources],
-                }
-            ),
-            use_container_width=True, hide_index=True,
-        )
-    else:
-        st.caption("None recorded.")
-
-    st.markdown("##### Specimens")
-    specimens = manifest.get("specimens", [])
-    if specimens:
-        labels_ = [s.get("label", "-") for s in specimens]
-        st.dataframe(
-            pd.DataFrame(
-                {
-                    "": [short_tag(lbl, i + 1) for i, lbl in enumerate(labels_)],
-                    "Label": labels_,
-                    "Cycles": [s.get("n_cycles", "-") for s in specimens],
-                    "JSON": [s.get("json", "-") for s in specimens],
-                }
-            ),
-            use_container_width=True, hide_index=True,
-        )
-    else:
-        st.caption("None recorded.")
-
-    with st.expander("Full manifest"):
-        st.json(manifest)
-
-    st.divider()
+    if not entries:
+        st.info("No activity recorded yet.")
+        return
     st.caption(
-        "This is what the run was actually ingested with, not the app's current "
-        "form defaults. The two can differ once someone changes a threshold on "
-        "the Ingest tab for a later run."
+        "Who ingested what, and when: one record per Commit, across the "
+        "whole workspace, not scoped to one run. The 15 most recent; every "
+        "record ever written is a small JSON file under audit/, or "
+        "`compression_tool audit` on the CLI."
     )
+    st.dataframe(
+        pd.DataFrame({
+            "Time (UTC)": [e.get("timestamp_utc", "-") for e in entries],
+            "User": [e.get("user", "-") for e in entries],
+            "Host": [e.get("host", "-") for e in entries],
+            "Material": [e.get("material", "-") for e in entries],
+            "Specimens": [len(e.get("specimens", [])) for e in entries],
+            "Skipped": [len(e.get("skipped", [])) for e in entries],
+            "Run": [e.get("run_dir", "-") for e in entries],
+        }),
+        use_container_width=True, hide_index=True,
+    )
+
+
+def _render_administration(ws: Workspace) -> None:
+    with st.container(border=True, key="card_index"):
+        st.markdown("##### Index")
+        st.caption(
+            "The database every tab reads from, built from the JSON records "
+            "under Records/. It only ever grows or updates when this app "
+            "writes to it - if a record's file was deleted outside the app "
+            "(Explorer, the shared drive) the index still lists it until "
+            "reindexed, and a tab that then tries to open it will show an "
+            "error instead of the material. Rebuilding is always safe: the "
+            "JSON records are the source of truth, the index is only ever "
+            "derived from them."
+        )
+        if st.button("Reindex from disk", icon=":material/refresh:", key="reindex_from_disk"):
+            count = knowledge_base.rebuild(ws)
+            st.success(f"Reindexed {count} specimen record(s) from disk.")
+
+    _render_admin_access(ws)
 
 
 def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[str]]:
@@ -222,52 +262,63 @@ def _render_reanalyze(ws: Workspace, manifest: dict) -> None:
     found, missing = _reanalyze_sources(ws, manifest)
     total = len(found) + len(missing)
 
-    with st.container(border=True, key="card_reanalyze"):
-        st.markdown("##### Re-analyse this run")
+    st.caption(
+        "Re-run this run's archived source file(s) with different "
+        "thresholds, without re-uploading anything. Change a value below "
+        "only if this run's numbers look wrong and a different setting "
+        "would fix it -- most runs never need this."
+    )
+    if not found:
         st.caption(
-            "Re-run this run's archived source file(s) with different "
-            "thresholds, without re-uploading anything. Change a value below "
-            "only if this run's numbers look wrong and a different setting "
-            "would fix it -- most runs never need this."
+            "Not available - none of this run's source files were "
+            "archived (ingested with 'Archive a copy of the uploaded "
+            "file' unchecked on the Ingest tab), so there is nothing on "
+            "disk to re-run this from."
         )
-        if not found:
-            st.caption(
-                "Not available - none of this run's source files were "
-                "archived (ingested with 'Archive a copy of the uploaded "
-                "file' unchecked on the Ingest tab), so there is nothing on "
-                "disk to re-run this from."
-            )
-            return
-        if missing:
-            st.warning(
-                f"{len(missing)} of {total} source file(s) for this run are "
-                f"missing from the archive and will be skipped: "
-                f"{', '.join(missing)}"
-            )
+        return
+    if missing:
+        st.warning(
+            f"{len(missing)} of {total} source file(s) for this run are "
+            f"missing from the archive and will be skipped: "
+            f"{', '.join(missing)}"
+        )
 
-        detect_holds = st.checkbox(
-            "Test has a hold at peak", value=True, key="cfg_reanalyze_holds",
+    detect_holds = st.checkbox(
+        "Test has a hold at peak", value=True, key="cfg_reanalyze_holds",
+    )
+    cfg = config_form(detect_holds)
+    gauge_confirmed = st.checkbox(
+        "Gauge length confirmed", key="cfg_reanalyze_gauge",
+        help="Check this only once someone has verified the displacement "
+        "channel spans exactly this specimen's h0. Left unchecked, strain "
+        "and modulus stay provisional in the re-analysed record.",
+    )
+    st.caption(
+        "This overwrites this run's stored numbers in place if the settings "
+        "below fingerprint the same as today's, or creates a new run "
+        "alongside it if they don't -- either way, nothing here touches the "
+        "original uploaded export."
+    )
+    confirm = st.checkbox(
+        "I understand this replaces this run's stored analysis",
+        key="cfg_reanalyze_confirm",
+    )
+    if st.button(
+        "Re-analyse now", icon=":material/refresh:", key="cfg_reanalyze_btn",
+        disabled=not confirm,
+    ):
+        result = ingest(
+            found, ws, material=material, cfg=cfg,
+            gauge_length_confirmed=gauge_confirmed,
+            archive_originals=True, write_reports=True,
         )
-        cfg = config_form(detect_holds)
-        gauge_confirmed = st.checkbox(
-            "Gauge length confirmed", key="cfg_reanalyze_gauge",
-            help="Check this only once someone has verified the displacement "
-            "channel spans exactly this specimen's h0. Left unchecked, strain "
-            "and modulus stay provisional in the re-analysed record.",
+        st.success(
+            f"Re-analysed into {result.run_dir} - "
+            f"{len(result.specimens)} specimen(s)."
         )
-        if st.button("Re-analyse now", icon=":material/refresh:", key="cfg_reanalyze_btn"):
-            result = ingest(
-                found, ws, material=material, cfg=cfg,
-                gauge_length_confirmed=gauge_confirmed,
-                archive_originals=True, write_reports=True,
-            )
-            st.success(
-                f"Re-analysed into {result.run_dir} - "
-                f"{len(result.specimens)} specimen(s)."
-            )
-            for name, why in result.skipped:
-                st.warning(f"Skipped {name}: {why}")
-            st.rerun()
+        for name, why in result.skipped:
+            st.warning(f"Skipped {name}: {why}")
+        st.rerun()
 
 
 def _render_admin_access(ws: Workspace) -> None:

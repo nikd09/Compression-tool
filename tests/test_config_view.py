@@ -13,6 +13,8 @@ now" button's callback does.
 
 from __future__ import annotations
 
+from streamlit.testing.v1 import AppTest
+
 from compression_tool import Workspace, ingest
 from compression_tool.core import Config
 from compression_tool.persistence import read_json
@@ -104,3 +106,66 @@ def test_reanalyzing_with_the_same_config_overwrites_the_run_in_place(workspace,
     )
 
     assert second.run_dir == first.run_dir
+
+
+def _app() -> None:
+    import os
+
+    from compression_tool.persistence import Workspace
+    from compression_tool.webapp import config_view
+
+    ws = Workspace.at(os.environ["_CT_TEST_WORKSPACE_ROOT"])
+    config_view.render(ws)
+
+
+def _run(monkeypatch, workspace) -> AppTest:
+    monkeypatch.setenv("_CT_TEST_WORKSPACE_ROOT", str(workspace))
+    return AppTest.from_function(_app).run()
+
+
+def test_config_page_renders_as_tabs_with_the_run_picker_shared_above_them(
+    monkeypatch, workspace, single_file
+):
+    """The reorganised Config page: one Run picker feeding every tab, not a
+    long scroll mixing run inspection, the one write action (Re-analyse),
+    cross-run exports, the audit trail and workspace administration."""
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="TALCO50")
+
+    at = _run(monkeypatch, workspace)
+
+    assert not at.exception
+    tab_labels = {t.label for t in at.tabs}
+    assert tab_labels == {
+        ":material/description: Run",
+        ":material/refresh: Re-analyse",
+        ":material/download: Exports",
+        ":material/history: Activity",
+        ":material/admin_panel_settings: Administration",
+    }
+    assert any(sb.label == "Run" for sb in at.selectbox)
+
+
+def test_administration_tab_works_even_with_nothing_ingested(monkeypatch, workspace):
+    ws = Workspace.at(workspace).ensure()
+
+    at = _run(monkeypatch, workspace)
+
+    assert not at.exception
+    assert any(b.label == "Claim admin access for myself" for b in at.button)
+
+
+def test_reanalyze_button_is_disabled_until_the_confirm_checkbox_is_ticked(
+    monkeypatch, workspace, single_file
+):
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="TALCO50")
+
+    at = _run(monkeypatch, workspace)
+    reanalyze_btn = next(b for b in at.button if b.key == "cfg_reanalyze_btn")
+    assert reanalyze_btn.disabled
+
+    confirm = next(cb for cb in at.checkbox if cb.key == "cfg_reanalyze_confirm")
+    at = confirm.check().run()
+    reanalyze_btn = next(b for b in at.button if b.key == "cfg_reanalyze_btn")
+    assert not reanalyze_btn.disabled
