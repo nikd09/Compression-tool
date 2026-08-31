@@ -22,7 +22,7 @@ from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..pipeline import ingest
 from ..reports_overview import build_overview
-from .common import config_form, short_tag
+from .common import config_form, short_tag, with_utm_animation
 
 
 def render(ws: Workspace) -> None:
@@ -149,7 +149,9 @@ def _render_exports(ws: Workspace, manifest: dict) -> None:
         else:
             st.caption("Not built yet for this material.")
         if st.button("Rebuild now", icon=":material/refresh:", key="rebuild_material_export"):
-            result = export_material(ws, material)
+            result = with_utm_animation(
+                "Rebuilding...", lambda: export_material(ws, material)
+            )
             if result["xlsx"]:
                 st.success(f"Rebuilt from every indexed specimen of {material!r}.")
             else:
@@ -170,7 +172,7 @@ def _render_exports(ws: Workspace, manifest: dict) -> None:
         else:
             st.caption("Not built yet.")
         if st.button("Rebuild now", icon=":material/refresh:", key="rebuild_overview"):
-            result = build_overview(ws)
+            result = with_utm_animation("Rebuilding...", lambda: build_overview(ws))
             if result:
                 st.success("Rebuilt from every indexed material.")
             else:
@@ -216,7 +218,7 @@ def _render_administration(ws: Workspace) -> None:
             "derived from them."
         )
         if st.button("Reindex from disk", icon=":material/refresh:", key="reindex_from_disk"):
-            count = knowledge_base.rebuild(ws)
+            count = with_utm_animation("Reindexing...", lambda: knowledge_base.rebuild(ws))
             st.success(f"Reindexed {count} specimen record(s) from disk.")
 
     _render_admin_access(ws)
@@ -241,6 +243,32 @@ def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[
         else:
             missing.append(source.get("source_file", "-"))
     return found, missing
+
+
+def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
+    """Maps each re-analysed source's resolved archive path to the filename
+    stem its ORIGINAL ingest used, for ingest()'s own `label_stems` param.
+
+    Without this, re-analysing re-derives every specimen's label from the
+    ARCHIVE copy's own filename (`Raw exports/<sha12>_<slugified-name>.xlsx`)
+    instead of the name the file actually had at first ingest -- a
+    different label means a different specimen ID (persistence.specimen_id
+    hashes source content + label + material), which means re-analysing
+    silently adds a second, duplicate specimen to the index instead of
+    updating the original in place. Confirmed live: exactly this, as two
+    copies of the same specimen in Results, one under the plain original
+    name and one under "<hash>_Slugified-Original-Name_S1". See
+    core.load_tests' own docstring for the full mechanism.
+    """
+    stems: dict[str, str] = {}
+    for source in manifest.get("sources", []):
+        rel = source.get("raw_input_path")
+        if not rel:
+            continue
+        path = ws.root / rel
+        if path.exists():
+            stems[str(path.resolve())] = Path(source.get("source_file", "")).stem
+    return stems
 
 
 def _render_reanalyze(ws: Workspace, manifest: dict) -> None:
@@ -307,10 +335,14 @@ def _render_reanalyze(ws: Workspace, manifest: dict) -> None:
         "Re-analyse now", icon=":material/refresh:", key="cfg_reanalyze_btn",
         disabled=not confirm,
     ):
-        result = ingest(
-            found, ws, material=material, cfg=cfg,
-            gauge_length_confirmed=gauge_confirmed,
-            archive_originals=True, write_reports=True,
+        result = with_utm_animation(
+            "Re-analysing...",
+            lambda: ingest(
+                found, ws, material=material, cfg=cfg,
+                gauge_length_confirmed=gauge_confirmed,
+                archive_originals=True, write_reports=True,
+                label_stems=_reanalyze_label_stems(ws, manifest),
+            ),
         )
         st.success(
             f"Re-analysed into {result.run_dir} - "

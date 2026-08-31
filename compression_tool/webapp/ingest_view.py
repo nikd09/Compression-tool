@@ -19,7 +19,7 @@ from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview, preview_dashboard_data
-from .common import config_form, utm_press_html
+from .common import config_form, with_utm_animation
 
 _NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
@@ -341,20 +341,6 @@ def _render_dashboard_preview(state: dict) -> None:
     _open_in_new_tab_button(state["html"])
 
 
-def _with_utm_animation(caption: str, fn):
-    """Runs `fn()` (a blocking call -- preview/ingest) with the UTM press
-    animation shown for its duration. The animation is CSS-driven and keeps
-    looping in the browser's own render loop once this markup has reached
-    it, independent of Python being busy; the placeholder is what lets it
-    disappear again the moment `fn()` returns, success or failure alike."""
-    placeholder = st.empty()
-    placeholder.markdown(utm_press_html(caption), unsafe_allow_html=True)
-    try:
-        return fn()
-    finally:
-        placeholder.empty()
-
-
 def render(ws: Workspace) -> None:
     _sweep_stale_uploads()
 
@@ -450,7 +436,7 @@ def render(ws: Workspace) -> None:
             )
             return rows_, dashboard_
 
-        rows, dashboard_state = _with_utm_animation("Analysing…", _preview_and_build_dashboard)
+        rows, dashboard_state = with_utm_animation("Analysing…", _preview_and_build_dashboard)
         st.session_state["ingest_preview_rows"] = rows
         st.session_state["ingest_preview_dashboard"] = dashboard_state
 
@@ -495,7 +481,7 @@ def render(ws: Workspace) -> None:
             # would otherwise land every specimen under just one of them.
             # With no split, material_groups is {material: paths} -- one
             # group, one call, identical to before.
-            results = _with_utm_animation(
+            results = with_utm_animation(
                 "Committing…",
                 lambda: [
                     ingest(

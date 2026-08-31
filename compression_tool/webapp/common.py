@@ -349,6 +349,28 @@ def utm_press_html(caption: str = "Analysing…") -> str:
 """
 
 
+def with_utm_animation(caption: str, fn):
+    """Runs `fn()` (a blocking call) with the UTM press animation shown for
+    its duration -- the same overlay Ingest's Preview/Commit already use,
+    now shared so every other blocking action in the app (Config's
+    Re-analyse, Reindex, and the two Rebuild-export buttons) gets the same
+    "the machine is working" feedback instead of Streamlit's own silent
+    blocking rerun, which previously left those four buttons with no
+    visual feedback at all while they ran.
+
+    The animation is CSS-driven and keeps looping in the browser's own
+    render loop once this markup has reached it, independent of Python
+    being busy; the placeholder is what lets it disappear again the moment
+    `fn()` returns, success or failure alike.
+    """
+    placeholder = st.empty()
+    placeholder.markdown(utm_press_html(caption), unsafe_allow_html=True)
+    try:
+        return fn()
+    finally:
+        placeholder.empty()
+
+
 _SAMPLE_SUFFIX = re.compile(r"[_\s-](S\d+)$", re.IGNORECASE)
 
 

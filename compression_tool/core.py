@@ -275,12 +275,16 @@ def _clean_pair(disp_raw, stress_raw, d_fac, s_fac) -> tuple[np.ndarray, np.ndar
     return pair["d"].to_numpy() * d_fac, pair["s"].to_numpy() * s_fac
 
 
-def load_series_format(path: str, cfg: Config) -> list[TestData]:
+def load_series_format(path: str, cfg: Config, *, label_stem: Optional[str] = None) -> list[TestData]:
     """Multi-sample workbook: 'Werte Serie' holds sample columns side by side.
 
     Layout (row 0 = sample no, row 1 = channel name, row 2 = unit, then data).
     Column pairs are (displacement, stress) per sample -- but which of the two
     is which is decided from the UNIT row, never from position.
+
+    `label_stem` overrides the filename-derived stem every specimen's label
+    is built from (see `_stem`) -- see `load_tests`'s docstring for why this
+    exists.
     """
     xl = pd.ExcelFile(path, engine="openpyxl")
     sheets = xl.sheet_names
@@ -288,6 +292,7 @@ def load_series_format(path: str, cfg: Config) -> list[TestData]:
     if values_sheet is None:
         raise ValueError("No 'Werte Serie' sheet found")
 
+    stem = label_stem if label_stem is not None else _stem(path)
     meta = _read_series_metadata(path, sheets)
     raw = pd.read_excel(path, sheet_name=values_sheet, header=None, engine="openpyxl")
 
@@ -323,7 +328,7 @@ def load_series_format(path: str, cfg: Config) -> list[TestData]:
 
         tests.append(
             TestData(
-                label=f"{_stem(path)}_S{sid}",
+                label=f"{stem}_S{sid}",
                 displacement_mm=disp,
                 stress_mpa=stress,
                 source_file=path,
@@ -337,12 +342,15 @@ def load_series_format(path: str, cfg: Config) -> list[TestData]:
     return tests
 
 
-def load_single_format(path: str, cfg: Config) -> list[TestData]:
+def load_single_format(path: str, cfg: Config, *, label_stem: Optional[str] = None) -> list[TestData]:
     """One sample per sheet: row 0 = title, row 1 = channel, row 2 = unit.
 
     Such exports often carry BOTH a crosshead channel (Standardweg) and an
     extensometer channel (Sonder LAA). The extensometer is preferred because
     the crosshead signal includes machine compliance.
+
+    `label_stem` overrides the filename-derived label (see `_stem`) -- see
+    `load_tests`'s docstring for why this exists.
     """
     raw = pd.read_excel(path, sheet_name=0, header=None, engine="openpyxl")
     channels = [str(v).strip() for v in raw.iloc[1].tolist()]
@@ -371,7 +379,7 @@ def load_single_format(path: str, cfg: Config) -> list[TestData]:
     )
     return [
         TestData(
-            label=_stem(path),
+            label=label_stem if label_stem is not None else _stem(path),
             displacement_mm=disp,
             stress_mpa=stress,
             source_file=path,
@@ -383,11 +391,38 @@ def load_single_format(path: str, cfg: Config) -> list[TestData]:
     ]
 
 
-def load_tests(path: str, cfg: Optional[Config] = None) -> list[TestData]:
-    """Entry point: detect the export layout and return one TestData per specimen."""
+def load_tests(
+    path: str, cfg: Optional[Config] = None, *, label_stem: Optional[str] = None
+) -> list[TestData]:
+    """Entry point: detect the export layout and return one TestData per specimen.
+
+    `label_stem` overrides the filename-derived stem every specimen's label
+    is built from -- every label is `{stem}` (single-sample exports) or
+    `{stem}_S{n}` (multi-sample exports), so the specimen ID
+    (persistence.specimen_id, hashed from source content + label + material)
+    is only stable across two ingests of the SAME bytes if the stem is too.
+
+    That is silently NOT the case for Config's "Re-analyse this run": it
+    feeds back the archive's own copy of the source
+    (`Raw exports/<sha12>_<slugified-original-name>.xlsx`, see
+    persistence.archive_raw), whose filename -- both the added hash prefix
+    and the slugified original name (spaces become hyphens, etc.) -- differs
+    from whatever the file was named at the ORIGINAL ingest. Without this
+    override, re-analysing produces a different label, therefore a different
+    specimen ID, therefore a second, duplicate row in the index alongside
+    the original instead of updating it in place -- confirmed live: exactly
+    this, visible as two copies of the same specimen in the Results picker,
+    one under the plain original name and one under
+    "<hash>_Slugified-Original-Name_S1". Callers that already know the
+    stem the ORIGINAL ingest used (pipeline.ingest, via its own
+    `label_stems` parameter) pass it through here instead of letting it be
+    re-derived from whatever path happens to be on disk now.
+    """
     cfg = cfg or Config()
     fmt = detect_format(path)
-    return load_series_format(path, cfg) if fmt == "series" else load_single_format(path, cfg)
+    if fmt == "series":
+        return load_series_format(path, cfg, label_stem=label_stem)
+    return load_single_format(path, cfg, label_stem=label_stem)
 
 
 def _stem(path: str) -> str:

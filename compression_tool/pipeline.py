@@ -247,6 +247,7 @@ def ingest(
     update_index: bool = True,
     gauge_length_confirmed: bool = False,
     archive_originals: bool = True,
+    label_stems: Optional[dict[str, str]] = None,
     write_reports: bool = True,
 ) -> IngestResult:
     """Archive, analyse, persist and index one or more exports.
@@ -269,6 +270,14 @@ def ingest(
     Neither flag touches the JSON record or curve cache: everything else,
     including the combined export, is rebuilt FROM those, so they are never
     optional.
+
+    `label_stems`, keyed on `str(Path(p).resolve())` for entries in `paths`,
+    overrides the filename-derived label core.load_tests would otherwise
+    re-derive for that path -- see load_tests' own docstring for why a
+    caller re-ingesting from the ARCHIVE (Config's "Re-analyse this run")
+    needs to pass the original ingest's stem through here rather than
+    letting one get re-derived from the archive's own hash-prefixed,
+    slugified filename, which is never the same string.
     """
     cfg = cfg or Config()
     ws = workspace if isinstance(workspace, Workspace) else Workspace.at(workspace)
@@ -335,7 +344,10 @@ def ingest(
     for source in sources:
         path_str = source["source_file"]
         try:
-            tests = load_tests(path_str, cfg)
+            tests = load_tests(
+                path_str, cfg,
+                label_stem=(label_stems or {}).get(path_str),
+            )
         except Exception as exc:  # noqa: BLE001
             result.skipped.append((Path(path_str).name, f"{type(exc).__name__}: {exc}"))
             _log.warning("ingest: %s failed to load: %s", Path(path_str).name, exc)

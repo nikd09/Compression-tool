@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from streamlit.testing.v1 import AppTest
 
-from compression_tool import Workspace, ingest
+from compression_tool import Workspace, ingest, knowledge_base
 from compression_tool.core import Config
 from compression_tool.persistence import read_json
-from compression_tool.webapp.config_view import _reanalyze_sources
+from compression_tool.webapp.config_view import _reanalyze_label_stems, _reanalyze_sources
 
 
 def test_reanalyze_sources_finds_an_archived_source(workspace, single_file):
@@ -78,6 +78,7 @@ def test_reanalyzing_with_a_different_config_creates_a_new_run_and_reuses_the_ar
     second = ingest(
         found, ws, material=manifest["material"], cfg=changed_cfg,
         archive_originals=True, write_reports=True,
+        label_stems=_reanalyze_label_stems(ws, manifest),
     )
 
     assert second.run_dir != first.run_dir
@@ -89,6 +90,39 @@ def test_reanalyzing_with_a_different_config_creates_a_new_run_and_reuses_the_ar
         second_manifest["sources"][0]["raw_input_path"]
         == manifest["sources"][0]["raw_input_path"]
     )
+
+
+def test_reanalyzing_keeps_the_same_specimen_label_and_id(workspace, single_file):
+    """The regression this exists to pin: re-analysing used to re-derive
+    each specimen's label from the ARCHIVE's own hash-prefixed, slugified
+    filename instead of the name the file had at first ingest -- a
+    different label means a different specimen_id (persistence.specimen_id
+    hashes source content + label + material), so the "same" specimen
+    showed up TWICE in Results after a re-analysis: once under its
+    original name, once under "<hash>_Slugified-Name_S1". Confirmed live
+    before this fix."""
+    ws = Workspace.at(workspace).ensure()
+    first = ingest([single_file], ws, material="TALCO50")
+    first_manifest = read_json(first.run_dir / "run.json")
+    first_label = first_manifest["specimens"][0]["label"]
+
+    found, _ = _reanalyze_sources(ws, first_manifest)
+    second = ingest(
+        found, ws, material=first_manifest["material"], cfg=Config(unload_frac=0.05),
+        archive_originals=True, write_reports=True,
+        label_stems=_reanalyze_label_stems(ws, first_manifest),
+    )
+    second_manifest = read_json(second.run_dir / "run.json")
+    second_label = second_manifest["specimens"][0]["label"]
+
+    assert second_label == first_label
+    assert second_manifest["specimens"][0]["specimen_id"] == first_manifest["specimens"][0]["specimen_id"]
+
+    # And the index reflects one specimen, not two, once both runs are indexed.
+    conn = knowledge_base.connect(ws.db_path)
+    specimens = knowledge_base.list_specimens(conn)
+    assert len(specimens) == 1
+    assert specimens.iloc[0]["label"] == first_label
 
 
 def test_reanalyzing_with_the_same_config_overwrites_the_run_in_place(workspace, single_file):
@@ -103,6 +137,7 @@ def test_reanalyzing_with_the_same_config_overwrites_the_run_in_place(workspace,
     second = ingest(
         found, ws, material=manifest["material"], cfg=Config(),
         archive_originals=True, write_reports=True,
+        label_stems=_reanalyze_label_stems(ws, manifest),
     )
 
     assert second.run_dir == first.run_dir
