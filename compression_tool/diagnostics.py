@@ -62,7 +62,7 @@ class Warning_:
 def _first_cycle_at_risk(
     stress: np.ndarray, df: pd.DataFrame, cfg: Config
 ) -> Optional[Warning_]:
-    """The reference cycle (smallest peak -- used for ref_stress and the
+    """The reference cycle (smallest peak -- used to auto-locate the
     common-band stiffness window) is close to disappearing.
 
     Segmentation no longer accepts a cycle by comparing its peak to one fixed
@@ -106,9 +106,9 @@ def _first_cycle_at_risk(
         code="first_cycle_near_discard_threshold",
         severity="critical",
         message=(
-            f"The reference cycle (smallest peak, {ref_peak:.2f} MPa -- used for "
-            "the cross-cycle reference stress and the common-band stiffness "
-            f"window) is no longer found when unload_frac is tightened by "
+            f"The reference cycle (smallest peak, {ref_peak:.2f} MPa -- used to "
+            "auto-locate the common-band stiffness window) is no longer found "
+            f"when unload_frac is tightened by "
             f"{(1 - FIRST_CYCLE_MARGIN) * 100:.0f}% ({cfg.unload_frac:g} -> "
             f"{tighter.unload_frac:g}). It is close to the margin segmentation "
             "actually accepted it by; a small change in the raw signal or the "
@@ -274,8 +274,9 @@ def _possible_preload_cycle(df: pd.DataFrame, cfg: Config) -> Optional[Warning_]
     norm, is most plausibly the machine's preload/seating step (settling
     full contact before the programmed sequence proper) rather than one of
     the real stages -- the same signature `analyse_test` already uses
-    internally to prefer a HELD cycle as the cross-cycle reference (see its
-    docstring). Segmentation can legitimately surface a genuine, cleanly
+    internally to prefer a HELD cycle as the reference cycle the common-band
+    stiffness window is auto-located on (see its docstring). Segmentation
+    can legitimately surface a genuine, cleanly
     separated load-unload event like this as its own cycle now that it is
     no longer silently merged into whatever follows it -- exactly the kind
     of previously-hidden real signal this engine's redesign exists to stop
@@ -306,10 +307,11 @@ def _possible_preload_cycle(df: pd.DataFrame, cfg: Config) -> Optional[Warning_]
             "load-unload event with no programmed hold, in an otherwise-held "
             "test, is most plausibly the machine's preload/seating step rather "
             "than a real programmed stage -- kept in the data because it is "
-            "real signal, not noise, but excluded from this test's cross-"
-            "cycle reference cycle for the same reason (see ref_stress_mpa / "
-            "stiffness_common_lo_mpa). Confirm against the test protocol "
-            "before counting it as a numbered stage in a report."
+            "real signal, not noise, but excluded from being the reference "
+            "cycle the common-band stiffness window is auto-located on, for "
+            "the same reason (see stiffness_common_lo_mpa). Confirm against "
+            "the test protocol before counting it as a numbered stage in a "
+            "report."
         ),
     )
 

@@ -53,8 +53,6 @@ def _cycle_row(c: dict, points: list[list[float]]) -> dict:
         "holdDisp": c.get("Creep_during_hold_mm"),
         "holdPer1k": hold_disp_per_1000_samples(c.get("Creep_during_hold_mm"), c.get("HoldPoints")),
         "maxStrainPct": c.get("MaxStrain_pct"),
-        "dispRefLoad": c.get("DispAtRef_load_mm"),
-        "dispRefUnload": c.get("DispAtRef_unload_mm"),
         "residDispUnload": c.get("ResidualDisp_unload_mm"),
     }
 
@@ -85,7 +83,6 @@ def _specimen_block(payload: dict, curve: Optional[dict], short: str) -> dict:
         "d0": spec.get("d0_mm"),
         "temp": spec.get("temperature_c"),
         "channel": spec.get("displacement_channel"),
-        "refStress": analysis.get("ref_stress_mpa"),
         "residStress": analysis.get("residual_stress_mpa"),
         "stiffLo": stiff_lo,
         "stiffHi": stiff_hi,

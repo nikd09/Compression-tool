@@ -97,14 +97,24 @@ class Config:
     stiff_lo_frac: float = 0.25    # fallback lower bound of regression window
     stiff_hi_frac: float = 0.75    # fallback upper bound of regression window
 
-    # --- reference stress for cross-cycle comparison ------------------------
-    # None => auto: use the SMALLEST cycle peak in the test, so the reference
-    # level is reachable in every cycle of a multi-stage test.
-    ref_stress_mpa: Optional[float] = None
-    ref_stress_frac: float = 0.50  # used with the auto reference peak
-
-    # low reference stress for residual/permanent-set readout.
-    # Measured on the loading branch, NOT at zero stress -- see notes below.
+    # --- the one reference stress ------------------------------------------
+    # A single low, test-wide stress, read on both branches of every cycle.
+    # Used for two different jobs -- permanent deformation (ResidualDisp_mm /
+    # ResidualDisp_unload_mm, see analyse_test) and cross-cycle comparison
+    # (the same two columns, read cycle over cycle) -- which used to be two
+    # separate constants (residual_stress at 0.02x global peak, ref_stress at
+    # 0.50x the smallest held cycle's peak). Merged into one: a SEPARATE
+    # mid-range reference is unreachable on exactly the small/single-cycle
+    # tests this engine is built to still get right (T050E1's own cycle 1,
+    # peak 9.96 MPa, never reaches a 25 MPa reference), while anchoring to the
+    # global peak keeps this one low enough to be reachable everywhere and
+    # still clear of the low-stress contact-loss noise confirmed on real data
+    # (MeshG_3mpa_10cyc_3's cycle 1: a non-monotonic plateau at 0.75-0.85 MPa,
+    # comfortably above 0.02x its 29.92 MPa global peak = 0.60 MPa).
+    #
+    # Measured on the loading branch, NOT at zero stress: at zero the
+    # specimen loses contact with the platen and the signal returns to its
+    # unloaded baseline, which makes a zero-referenced reading meaningless.
     residual_stress_mpa: Optional[float] = None
     residual_stress_frac: float = 0.02  # of global peak, if not set explicitly
 
@@ -777,29 +787,28 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
     peaks = [float(np.nanmax(s[a : b + 1])) for a, b in cycles]
     global_peak = max(peaks)
 
-    # Reference stress must be reachable in EVERY cycle, so it is tied to the
-    # smallest cycle peak. In a multi-stage test (50 -> 450 MPa) a reference
-    # based on the global peak would be unreachable in the early cycles.
+    # ref_peak picks which cycle the common-band stiffness window (below) is
+    # auto-located on -- it is NOT a stress anything is measured at; the one
+    # reference stress (residual_stress, see Config) is anchored to the
+    # global peak instead and does not depend on this at all.
     #
-    # Among cycles that pass segmentation, prefer one with a detected dwell
-    # as the reference: a short, fast, hold-free excursion at the very start
-    # of a record is a plausible preload/seating ramp (the machine settling
-    # full contact before the programmed sequence proper), and adaptive
-    # segmentation can legitimately surface one as its own cycle now that it
-    # is no longer silently merged into whatever follows it (see
-    # segment_cycles) -- exactly the kind of previously-hidden real signal
-    # this redesign exists to stop discarding. But anchoring ref_stress and
-    # the common-band window to something smaller and unlike every real
-    # stage narrows both for every OTHER cycle too, for no comparability
-    # benefit. Falls back to the plain smallest peak if no cycle has a
-    # detected hold -- a genuinely fast-cycling test (or one with
-    # detect_holds off) is not making a false claim either way.
+    # Among cycles that pass segmentation, prefer one with a detected dwell:
+    # a short, fast, hold-free excursion at the very start of a record is a
+    # plausible preload/seating ramp (the machine settling full contact
+    # before the programmed sequence proper), and adaptive segmentation can
+    # legitimately surface one as its own cycle now that it is no longer
+    # silently merged into whatever follows it (see segment_cycles) --
+    # exactly the kind of previously-hidden real signal this redesign exists
+    # to stop discarding. But anchoring the common-band window to something
+    # smaller and unlike every real stage narrows it for every OTHER cycle
+    # too, for no comparability benefit. Falls back to the plain smallest
+    # peak if no cycle has a detected hold -- a genuinely fast-cycling test
+    # (or one with detect_holds off) is not making a false claim either way.
     held_peaks = [
         peak for peak, (a, b) in zip(peaks, cycles)
         if detect_hold(s[a : b + 1], cfg) is not None
     ]
     ref_peak = min(held_peaks) if held_peaks else min(peaks)
-    ref_stress = cfg.ref_stress_mpa or cfg.ref_stress_frac * ref_peak
     residual_stress = cfg.residual_stress_mpa or cfg.residual_stress_frac * global_peak
 
     # Common-band stiffness window: auto-located ONCE, on the reference
@@ -857,11 +866,17 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
                 # removed, which is a damage signature no other column here
                 # carries. Reported in MPa so it can be read against the peak.
                 "StressAtMaxDisp_MPa": float(cs[int(np.argmax(cx))]),
-                # --- residual / permanent deformation -----------------------
+                # --- the one reference stress, both branches -----------------
                 # Read on the loading branch at a LOW common stress, not at
                 # zero: at zero stress the specimen loses contact and the
                 # displacement signal returns to its unloaded baseline, which
-                # makes a zero-referenced permanent set meaningless here.
+                # makes a zero-referenced permanent set meaningless here. This
+                # single value now does double duty: subtracted cycle-within-
+                # cycle it is permanent deformation (PermDef_incremental_mm
+                # below); plotted cycle over cycle it is the cross-cycle
+                # comparison a separate mid-range reference used to serve
+                # (dropped -- unreachable on exactly the small/single-cycle
+                # tests this engine exists to still get right; see Config).
                 "ResidualDisp_mm": _interp_on_branch(cs, cx, residual_stress, "loading"),
                 # The SAME reference stress, read on the UNLOADING branch of
                 # THIS cycle. The gap between this and ResidualDisp_mm above,
@@ -889,9 +904,6 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
                 "Stiffness_relative_r2": k_rel_r2,
                 "Stiffness_relative_lo_MPa": rel_lo,
                 "Stiffness_relative_hi_MPa": rel_hi,
-                # --- displacement at reference stress, both branches ---------
-                "DispAtRef_load_mm": _interp_on_branch(cs, cx, ref_stress, "loading"),
-                "DispAtRef_unload_mm": _interp_on_branch(cs, cx, ref_stress, "unloading"),
                 # --- energy --------------------------------------------------
                 "Energy_in_MPa_mm": w_in,
                 "Energy_dissipated_MPa_mm": w_diss,
@@ -947,7 +959,6 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
             df[dst] = df[src] / test.h0_mm * 100.0
 
     df.attrs["label"] = test.label
-    df.attrs["ref_stress_mpa"] = ref_stress
     df.attrs["residual_stress_mpa"] = residual_stress
     df.attrs["global_peak_mpa"] = global_peak
     # The auto-located common-band window is ONE pair of bounds for the whole

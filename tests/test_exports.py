@@ -160,7 +160,7 @@ def test_config_sheet_records_the_settings(tmp_path, single_payload):
     }
 
     assert pairs["unload_frac"] == pytest.approx(0.5)
-    assert pairs["ref_stress_mpa"] == "auto"
+    assert pairs["residual_stress_mpa"] == "auto"
     assert any("reference stress (MPa)" in str(k) for k in pairs)
 
 

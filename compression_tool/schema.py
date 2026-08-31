@@ -29,7 +29,7 @@ from typing import Optional
 # tests/test_json_contract.py pins the exact key set at every level, so any
 # change to the shape of a record has to be a deliberate edit to that test
 # rather than something that slips through.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Top-level sections of a specimen record.
 CONTRACT_TOP_LEVEL: tuple[str, ...] = (
@@ -43,7 +43,7 @@ CONTRACT_SPECIMEN: tuple[str, ...] = (
 )
 
 CONTRACT_ANALYSIS: tuple[str, ...] = (
-    "n_cycles", "global_peak_mpa", "multi_stage", "ref_stress_mpa",
+    "n_cycles", "global_peak_mpa", "multi_stage",
     "residual_stress_mpa", "h0_mm", "has_strain", "notes",
     "strain_basis", "warnings",
     # Common-band stiffness window, auto-located once on the reference
@@ -158,7 +158,9 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "stress. Deliberately not read at zero stress: at zero the specimen "
         "loses contact and the signal falls back to an unloaded baseline of a "
         "few micrometres, which makes a zero-referenced permanent set "
-        "meaningless.",
+        "meaningless. The same reference stress on every cycle, so this is "
+        "also the column to plot cycle over cycle for a cross-test "
+        "comparison, not only within-cycle against ResidualDisp_unload_mm.",
     ),
     Column(
         "ResidualDisp_unload_mm", "REAL", "Residual displacement (unloading)", "mm",
@@ -250,18 +252,6 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "Upper bound of the auto-located relative-band window for THIS cycle, "
         "in absolute MPa.",
         fmt="0.00", internal=True,
-    ),
-    Column(
-        "DispAtRef_load_mm", "REAL", "Displacement at reference stress, loading", "mm",
-        "Displacement where the loading branch crosses the reference stress. "
-        "The reference is tied to the smallest cycle peak so that it is "
-        "reachable in every cycle of a multi-stage test.",
-    ),
-    Column(
-        "DispAtRef_unload_mm", "REAL", "Displacement at reference stress, unloading", "mm",
-        "Displacement where the unloading branch crosses the same reference "
-        "stress. The gap to the loading value is the width of the hysteresis "
-        "loop at that stress.",
     ),
     Column(
         "Energy_in_MPa_mm", "REAL", "Energy in", "MPa*mm",
@@ -490,10 +480,11 @@ SPECIMEN_FIELDS: tuple[Field, ...] = (
     Field("multi_stage", "INTEGER", "Multi-stage", "",
           "True when cycle peaks vary by more than 5% of the global peak, i.e. "
           "the cycles are stages rather than repeats and must not be averaged."),
-    Field("ref_stress_mpa", "REAL", "Reference stress", "MPa",
-          "Common stress at which cross-cycle displacements are read."),
-    Field("residual_stress_mpa", "REAL", "Residual reference stress", "MPa",
-          "Low common stress at which residual displacement is read."),
+    Field("residual_stress_mpa", "REAL", "Reference stress", "MPa",
+          "The one low, test-wide reference stress, reachable in every cycle: "
+          "used both for permanent deformation (within one cycle) and for "
+          "cross-cycle comparison (the same reading, plotted cycle over "
+          "cycle)."),
     Field("created_utc", "TEXT", "Analysed at", "UTC", "Timestamp of the analysis run."),
     Field("run_dir", "TEXT", "Run directory", "", "Output folder for this run."),
     Field("json_path", "TEXT", "Record", "", "Path of the specimen's JSON record."),

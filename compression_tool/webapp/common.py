@@ -194,15 +194,14 @@ def config_form(detect_holds: bool) -> Config:
                 help="Fallback stiffness window upper bound -- see Stiffness window start.")
             st.caption("`stiff_hi_frac`")
         with c2:
-            ref_stress_frac = st.number_input(
-                "Reference stress", value=d.ref_stress_frac, format="%.2f",
-                help="Reference stress for cross-cycle comparison, as a fraction of the smallest cycle peak.")
-            st.caption("`ref_stress_frac`")
             residual_stress_frac = st.number_input(
-                "Residual stress reference", value=d.residual_stress_frac, format="%.2f",
-                help="Low reference stress used to read permanent set on the loading "
-                     "and unloading branches -- see the warning below if a cycle's own "
-                     "peak puts this in the contact-loss-noise range.")
+                "Reference stress", value=d.residual_stress_frac, format="%.2f",
+                help="The one low, test-wide reference stress (fraction of the global "
+                     "peak), read on the loading and unloading branches of every cycle. "
+                     "Used both for permanent deformation (within one cycle) and for "
+                     "cross-cycle comparison (the same reading, cycle over cycle) -- "
+                     "see the warning below if a cycle's own peak puts this in the "
+                     "contact-loss-noise range.")
             st.caption("`residual_stress_frac`")
             hold_tol_frac = st.number_input(
                 "Hold detection tolerance", value=d.hold_tol_frac, format="%.3f",
@@ -224,7 +223,6 @@ def config_form(detect_holds: bool) -> Config:
         major_cycle_frac=major_cycle_frac,
         stiff_lo_frac=stiff_lo_frac,
         stiff_hi_frac=stiff_hi_frac,
-        ref_stress_frac=ref_stress_frac,
         residual_stress_frac=residual_stress_frac,
         hold_tol_frac=hold_tol_frac,
         h0_mm=h0_mm,

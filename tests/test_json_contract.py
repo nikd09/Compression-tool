@@ -38,7 +38,6 @@ CONTRACT_CYCLE_ALWAYS = (
     "Stiffness_common_lo_MPa", "Stiffness_common_hi_MPa",
     "Stiffness_relative_MPa_per_mm", "Stiffness_relative_n", "Stiffness_relative_r2",
     "Stiffness_relative_lo_MPa", "Stiffness_relative_hi_MPa",
-    "DispAtRef_load_mm", "DispAtRef_unload_mm",
     "Energy_in_MPa_mm", "Energy_dissipated_MPa_mm", "HysteresisLoss_rel",
     "HoldDetected", "HoldPoints", "Creep_during_hold_mm",
     "_start", "_end",
@@ -67,10 +66,17 @@ def record_no_strain(tmp_path_factory, single_file):
 # ----------------------------------------------------------------------------
 
 
-def test_schema_version_is_frozen_at_2():
+def test_schema_version_is_frozen_at_3():
     """Bumping this is how a breaking change is announced. If this fails,
-    confirm every consumer was updated before changing the number."""
-    assert SCHEMA_VERSION == 2
+    confirm every consumer was updated before changing the number.
+
+    Bumped 2 -> 3: ref_stress_mpa (analysis) and DispAtRef_load_mm /
+    DispAtRef_unload_mm (cycles) removed -- residual_stress_mpa is now the
+    one shared reference stress for both permanent deformation and
+    cross-cycle comparison, so a separate mid-range reference (unreachable
+    on a small/single-cycle test) and its two now-redundant columns are
+    gone rather than kept alongside an identical ResidualDisp_* pair."""
+    assert SCHEMA_VERSION == 3
 
 
 def test_top_level_keys(record):

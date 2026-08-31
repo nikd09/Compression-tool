@@ -404,7 +404,6 @@ def build_payload(
             "n_cycles": int(len(df)),
             "global_peak_mpa": jsonable(attrs.get("global_peak_mpa")),
             "multi_stage": bool(attrs.get("multi_stage", False)),
-            "ref_stress_mpa": jsonable(attrs.get("ref_stress_mpa")),
             "residual_stress_mpa": jsonable(attrs.get("residual_stress_mpa")),
             # Auto-located common-band stiffness window (core.py) -- a
             # test-wide pair of bounds, found once from the reference cycle.

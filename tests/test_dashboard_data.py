@@ -133,7 +133,7 @@ def test_specimen_metadata_matches_the_record(one_payload):
     assert sp["d0"] == spec["d0_mm"]
     assert sp["channel"] == spec["displacement_channel"]
     assert sp["globalPeak"] == payload["analysis"]["global_peak_mpa"]
-    assert sp["refStress"] == payload["analysis"]["ref_stress_mpa"]
+    assert sp["residStress"] == payload["analysis"]["residual_stress_mpa"]
 
 
 def test_stiffness_window_is_read_from_the_auto_located_bounds(one_payload):
@@ -182,7 +182,7 @@ def test_every_template_key_the_charts_read_is_present(one_payload):
     sp = build_dashboard_data([payload], [curve])["specimens"][0]
     required = {
         "n", "pts", "peakStress", "kCommon", "permCumPct", "maxStrainPct",
-        "loss", "holdDisp", "maxDisp", "eDiss", "dispRefLoad",
+        "loss", "holdDisp", "maxDisp", "eDiss",
         "stressAtMaxDisp", "unloadYield", "residDisp", "kRel", "kRelN", "kRelR2",
     }
     for c in sp["cycles"]:

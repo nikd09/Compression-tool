@@ -405,9 +405,6 @@ def _write_config(book, f, payloads: Sequence[dict]) -> None:
         analysis = payload.get("analysis", {})
         label = payload.get("specimen", {}).get("label", "")
         sheet.write(r, 0, f"{label}: reference stress (MPa)", f["key"])
-        _write_value(sheet, r, 1, analysis.get("ref_stress_mpa"), f["text"], f["num"])
-        r += 1
-        sheet.write(r, 0, f"{label}: residual reference stress (MPa)", f["key"])
         _write_value(sheet, r, 1, analysis.get("residual_stress_mpa"), f["text"], f["num"])
         r += 1
 

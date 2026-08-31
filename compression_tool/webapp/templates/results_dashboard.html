@@ -733,11 +733,6 @@ const PANELS=[
    why:"The area enclosed by the loop: work that went into the specimen and did not come back "+
        "out. Units are work per unit CROSS-SECTIONAL AREA, not per unit volume: divide by h₀ "+
        "for work per unit volume in MPa."},
-  {k:"dispRefLoad", t:"Reference-stress displacement", u:"mm, loading branch", f:v=>fmt(v,3),
-   u2:"mm",
-   why:"Displacement at a common reference stress on the loading branch, reachable in every "+
-       "cycle of a rising multi-stage test. Because the stress is the same every time, the "+
-       "growth here is the specimen changing, not the schedule."},
   // Last, and full width: the raw signal the panels above are read out of.
   {k:"__loop", t:"Stress-displacement curves", u:"Every cycle, every specimen shown",
    draw:loopChart, wide:true,
@@ -1044,8 +1039,6 @@ const COLS=[
   ["Hold length (samples)", c=>c.holdPts, 0],
   ["Hold disp (mm)", c=>c.holdDisp, 5],
   ["Hold disp / 1000 (µm)", c=>c.holdPer1k, 2],
-  ["Disp at ref, load (mm)", c=>c.dispRefLoad, 4],
-  ["Disp at ref, unload (mm)", c=>c.dispRefUnload, 4],
 ];
 function renderTable(){
   const shown = visible();
@@ -1094,10 +1087,8 @@ function renderMethod(){
       <td>auto-located once on the reference (smallest-peak) cycle's own most-linear region, reused as this same absolute window on every cycle</td></tr>
     <tr><td>Stiffness window fallback</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
       <td>of that cycle's own peak -- used only when no auto-located window clears the minimum span</td></tr>
-    <tr><td>Reference stress</td><td>${(cfg.ref_stress_frac*100).toFixed(0)}%</td>
-      <td>of the smallest cycle peak = ${s.refStress} MPa, reachable in every cycle</td></tr>
-    <tr><td>Residual read stress</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
-      <td>of global peak = ${s.residStress} MPa, above the contact-loss baseline</td></tr>
+    <tr><td>Reference stress</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
+      <td>of global peak = ${s.residStress} MPa, above the contact-loss baseline -- the one reference stress, used both for permanent deformation and for cross-cycle comparison</td></tr>
     <tr><td>Dwell tolerance</td><td>${(cfg.hold_tol_frac*100).toFixed(1)}%</td>
       <td>of cycle peak, stress within this band counts as held</td></tr>
   </tbody></table></div>

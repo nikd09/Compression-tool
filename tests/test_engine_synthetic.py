@@ -293,17 +293,21 @@ def test_residual_is_read_above_the_contact_loss_baseline(signal):
     assert (df["ResidualDisp_unload_mm"] > BASELINE_MM).all()
 
 
-def test_reference_stress_is_reachable_in_the_smallest_cycle(signal):
-    """Tying the reference to the global peak would put it out of reach of the
-    early stages of a multi-stage test."""
+def test_residual_stress_is_reachable_in_the_smallest_cycle(signal):
+    """residual_stress is the one reference stress now, anchored to the
+    GLOBAL peak (not the smallest cycle's own peak, the way the old,
+    now-removed ref_stress was -- see Config). At its low default fraction
+    (0.02) it still lands well inside even the smallest stage of a
+    realistic multi-stage test, so both branches stay readable at every
+    cycle."""
     stress, disp = signal
     df = analyse_test(_as_test(stress, disp))
 
-    assert df.attrs["ref_stress_mpa"] < df["PeakStress_MPa"].min()
-    assert df["DispAtRef_load_mm"].notna().all()
-    assert df["DispAtRef_unload_mm"].notna().all()
+    assert df.attrs["residual_stress_mpa"] < df["PeakStress_MPa"].min()
+    assert df["ResidualDisp_mm"].notna().all()
+    assert df["ResidualDisp_unload_mm"].notna().all()
     # The loop is open at the reference stress: unloading sits to the right.
-    assert (df["DispAtRef_unload_mm"] > df["DispAtRef_load_mm"]).all()
+    assert (df["ResidualDisp_unload_mm"] > df["ResidualDisp_mm"]).all()
 
 
 def test_single_cycle_test_reports_real_permanent_deformation():
