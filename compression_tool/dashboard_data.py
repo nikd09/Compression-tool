@@ -40,6 +40,8 @@ def _cycle_row(c: dict, points: list[list[float]]) -> dict:
         "residDisp": c.get("ResidualDisp_mm"),
         "permCum": c.get("PermDef_cumulative_mm"),
         "permCumPct": c.get("PermDef_cumulative_pct"),
+        "permInc": c.get("PermDef_incremental_mm"),
+        "permIncPct": c.get("PermDef_incremental_pct"),
         "kCommon": c.get("Stiffness_common_MPa_per_mm"),
         "kCommonN": c.get("Stiffness_common_n"),
         "kCommonR2": c.get("Stiffness_common_r2"),

@@ -181,7 +181,7 @@ def test_every_template_key_the_charts_read_is_present(one_payload):
     payload, curve = one_payload
     sp = build_dashboard_data([payload], [curve])["specimens"][0]
     required = {
-        "n", "pts", "peakStress", "kCommon", "permCumPct", "maxStrainPct",
+        "n", "pts", "peakStress", "kCommon", "permCumPct", "permIncPct", "maxStrainPct",
         "loss", "holdDisp", "maxDisp", "eDiss",
         "stressAtMaxDisp", "unloadYield", "residDisp", "kRel", "kRelN", "kRelR2",
     }

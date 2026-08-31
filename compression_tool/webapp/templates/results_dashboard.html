@@ -707,12 +707,23 @@ const PANELS=[
        "across cycles of a multi-stage test, since the window itself moves with each cycle's "+
        "own peak. A hatched, dimmed bar means the fit behind it is thin or curved -- same "+
        "rule as the common band."},
-  {k:"permCumPct", t:"Permanent deformation", u:"% of h₀, cumulative", f:v=>fmt(v,1), u2:"%",
-   why:"Running total of the permanent set gained EACH cycle, read WITHIN that cycle: the gap "+
-       "between the residual displacement on the way up and on the way back down, at the same "+
-       "low reference stress both times. Not read at zero stress: at zero the specimen loses "+
-       "contact and the signal falls back to a few-micrometre baseline. Well-defined at every "+
-       "cycle count, including a single-cycle test. NOT compression set in the ASTM D395 sense."},
+  {k:"permIncPct", t:"Permanent deformation, this cycle", u:"% of h₀, gained in that cycle alone", f:v=>fmt(v,2), u2:"%",
+   why:"How much permanent set THIS cycle alone added, read within itself: the gap between the "+
+       "residual displacement on the way up and on the way back down, at the same low reference "+
+       "stress both times, with no other cycle involved. Not read at zero stress: at zero the "+
+       "specimen loses contact and the signal falls back to a few-micrometre baseline. Well-"+
+       "defined at every cycle count, including a single-cycle test. This is the view that "+
+       "shows a sudden jump -- a step change here, even a small one against a flat run of "+
+       "earlier cycles, is the first sign of new damage starting in that specific cycle; on the "+
+       "running-total chart the same jump only shows up as a slightly steeper step among several "+
+       "rising bars. NOT compression set in the ASTM D395 / ISO 815 sense."},
+  {k:"permCumPct", t:"Permanent deformation, running total", u:"% of h₀, added up across the test", f:v=>fmt(v,1), u2:"%",
+   why:"The per-cycle amounts to the left, added up cycle by cycle: how much of the specimen's "+
+       "thickness has NOT sprung back by this point in the test, altogether. Always rises or "+
+       "holds flat, never falls, so it is the number to quote for \"how much permanent set has "+
+       "this specimen taken so far\" -- but a single unusually large cycle can be hard to spot "+
+       "here, since it only steepens one step among a run of already-rising bars. Check the "+
+       "per-cycle chart alongside it to see which cycle actually did the damage."},
   {k:"maxStrainPct", t:"Maximum strain", u:"% of h₀", f:v=>fmt(v,1), u2:"%",
    why:"Maximum displacement divided by the specimen's own measured thickness h₀. Valid only "+
        "as far as h₀ is the length the displacement channel actually spans."},
@@ -1034,8 +1045,10 @@ const COLS=[
   ["Max strain (%)", c=>c.maxStrainPct, 2],
   ["Residual disp, loading (mm)", c=>c.residDisp, 4],
   ["Residual disp, unloading (mm)", c=>c.residDispUnload, 4],
-  ["Permanent def (mm)", c=>c.permCum, 4],
-  ["Permanent def (%)", c=>c.permCumPct, 3],
+  ["Permanent def, this cycle (mm)", c=>c.permInc, 4],
+  ["Permanent def, this cycle (%)", c=>c.permIncPct, 3],
+  ["Permanent def, running total (mm)", c=>c.permCum, 4],
+  ["Permanent def, running total (%)", c=>c.permCumPct, 3],
   ["Stiffness common (MPa/mm)", c=>c.kCommon, 0],
   ["n", c=>c.kCommonN, 0],
   ["R²", c=>c.kCommonR2, 3],
@@ -1071,7 +1084,8 @@ const DEFS=[
   ["Stiffness, relative band","MPa/mm","Slope over a window auto-located on THIS cycle's own loading branch (ASTM E111 toe compensation / chord modulus). Describes the cycle faithfully but is NOT comparable across cycles, since the window itself moves with each cycle's own peak."],
   ["Maximum displacement","mm","Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held."],
   ["Stress at maximum displacement","MPa","Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED: a damage signature no other column carries."],
-  ["Permanent deformation","mm / %","Running total of the permanent set gained EACH cycle, read WITHIN that cycle: residual displacement on the loading branch versus the unloading branch, at the same low reference stress. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. Well-defined at every cycle count. NOT compression set in the ASTM D395 / ISO 815 sense."],
+  ["Permanent deformation, this cycle","mm / %","How much permanent set THIS cycle alone added, read within itself: residual displacement on the loading branch versus the unloading branch, at the same low reference stress, with no other cycle involved. Not read at zero stress: at zero the specimen loses contact and the signal falls back to a few-micrometre baseline. Well-defined at every cycle count, including a single-cycle test. The view that shows a sudden jump -- a step change here is the first sign of new damage starting in that specific cycle. NOT compression set in the ASTM D395 / ISO 815 sense."],
+  ["Permanent deformation, running total","mm / %","The per-cycle amounts above, added up cycle by cycle: how much of the specimen's thickness has not sprung back by this point in the test, altogether. Always rises or holds flat, never falls. A single unusually large cycle can be hard to spot here since it only steepens one step among a run of already-rising bars -- check the per-cycle figure to see which cycle actually did the damage."],
   ["Energy in / dissipated","MPa·mm","Work per unit CROSS-SECTIONAL AREA: the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress."],
   ["Hysteresis loss","-","Dissipated divided by input energy. The cross-test comparable form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on the absolute number."],
   ["Hold length","samples","Length of the detected dwell in SAMPLES, not seconds: the export carries no time channel. Meaningless on its own and mandatory alongside the hold displacement beside it."],
