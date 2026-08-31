@@ -69,6 +69,14 @@ _CARD_CSS = """
      each use_container_width=True on its own row. */
   grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;
   gap:1rem!important;
+  /* Grid items stretch to the row's tallest by default -- EXCEPT Streamlit's
+     own base styling sets align-items:start upstream of this rule (confirmed
+     live via computed styles: a 3-line material name's card measured 414px
+     while its unwrapped row-mates measured 360px, the row's own tallest
+     item never being shared). This is the actual fix; the flex rules below
+     are what make that extra height land somewhere useful once each card
+     has it, instead of just adding blank space below a short title. */
+  align-items:stretch!important;
 }
 .st-key-materials_grid button[kind="tertiary"]{
   padding:0!important; border:none!important; background:transparent!important;
@@ -84,11 +92,26 @@ _CARD_CSS = """
 .st-key-materials_grid [class*="st-key-mat_card_"]{
   padding:.85rem 1rem!important;
   transition:box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+  /* height:100% fills the now-stretched grid cell (see align-items:stretch
+     above); the flex column is what lets mat_top_ (below) claim the extra
+     room a shorter card's row-mate has, rather than every child just
+     sitting at its own natural height with dead space at the bottom. */
+  height:100%!important;
+  display:flex!important;
+  flex-direction:column!important;
 }
 .st-key-materials_grid [class*="st-key-mat_card_"]:hover{
   box-shadow:0 8px 22px rgba(0,0,0,.10);
   transform:translateY(-2px);
   border-color:var(--primary-color,#2a78d6);
+}
+/* Everything above the button stack (name, date, the four metrics) grows
+   to absorb the row's extra height -- a two- or three-line material name
+   on one card no longer leaves that card's own Rename/Delete/Download
+   buttons sitting lower than every other card in the same row; they stay
+   pinned to the bottom of every card, at the same height, across the row. */
+.st-key-materials_grid [class*="st-key-mat_top_"]{
+  flex:1 1 auto!important;
 }
 .st-key-materials_grid [data-testid="stMetricValue"]{ font-size:1.3rem!important; }
 .st-key-materials_grid [data-testid="stMetricLabel"]{ font-size:.66rem!important; }
@@ -142,39 +165,52 @@ def render(ws: Workspace) -> None:
     with st.container(key="materials_grid"):
         for row in rows:
             with st.container(border=True, key=f"mat_card_{row['slug']}"):
-                name_col, added_col = st.columns([5, 2])
-                with name_col:
-                    if st.button(row["material"], key=f"open_material_{row['slug']}", type="tertiary"):
-                        clicked_material = row["material"]
-                with added_col:
-                    added = row["dateAdded"]
-                    added = added[:10] if len(added) >= 10 else added
-                    # No "Added " prefix and white-space:nowrap -- with the
-                    # label there, "Added 2026-08-26" wrapped inside this
-                    # narrow a column (a grid cell now, not a full-width row),
-                    # dropping the date onto its own second line. The date
-                    # alone, forced onto one line, is what actually fits.
-                    st.markdown(
-                        f'<div style="text-align:right;font-size:.72rem;opacity:.6;'
-                        f'margin-top:.55rem;white-space:nowrap">{html.escape(added)}</div>',
-                        unsafe_allow_html=True,
+                # Everything above the button stack, in its own container
+                # (key "mat_top_..." -- deliberately NOT sharing the
+                # "mat_card_" prefix _CARD_CSS's border/hover rules match on
+                # a substring, or this inner wrapper would pick up the
+                # outer card's own border/hover treatment too). Grid rows
+                # stretch every card to the tallest one in that row (see
+                # align-items:stretch below), and this is what actually
+                # absorbs the extra height when a longer material name
+                # wraps to two or three lines -- without it, only the
+                # wrapping card grows while its row-mates stay their own
+                # shorter content height, so their button stacks end up at
+                # a different vertical position across the same row.
+                with st.container(key=f"mat_top_{row['slug']}"):
+                    name_col, added_col = st.columns([5, 2])
+                    with name_col:
+                        if st.button(row["material"], key=f"open_material_{row['slug']}", type="tertiary"):
+                            clicked_material = row["material"]
+                    with added_col:
+                        added = row["dateAdded"]
+                        added = added[:10] if len(added) >= 10 else added
+                        # No "Added " prefix and white-space:nowrap -- with the
+                        # label there, "Added 2026-08-26" wrapped inside this
+                        # narrow a column (a grid cell now, not a full-width row),
+                        # dropping the date onto its own second line. The date
+                        # alone, forced onto one line, is what actually fits.
+                        st.markdown(
+                            f'<div style="text-align:right;font-size:.72rem;opacity:.6;'
+                            f'margin-top:.55rem;white-space:nowrap">{html.escape(added)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    # 2x2, not a single row of 4: a card this narrow (a grid
+                    # cell, not a full-width row any more) has no room for four
+                    # metric columns side by side without truncating values
+                    # like "0.471 mm".
+                    top_l, top_r = st.columns(2)
+                    top_l.metric("Specimens", row["specimens"])
+                    top_r.metric("Runs", row["runs"])
+                    bot_l, bot_r = st.columns(2)
+                    bot_l.metric(
+                        "Peak stress",
+                        f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "-",
                     )
-                # 2x2, not a single row of 4: a card this narrow (a grid
-                # cell, not a full-width row any more) has no room for four
-                # metric columns side by side without truncating values
-                # like "0.471 mm".
-                top_l, top_r = st.columns(2)
-                top_l.metric("Specimens", row["specimens"])
-                top_r.metric("Runs", row["runs"])
-                bot_l, bot_r = st.columns(2)
-                bot_l.metric(
-                    "Peak stress",
-                    f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "-",
-                )
-                bot_r.metric(
-                    "Thickness (h0)",
-                    f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
-                )
+                    bot_r.metric(
+                        "Thickness (h0)",
+                        f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
+                    )
                 # Stacked full-width, not side by side: at four-per-row
                 # card widths, "Rename"/"Delete" in a 2-column row wrapped
                 # onto two lines each (confirmed live) -- one button per

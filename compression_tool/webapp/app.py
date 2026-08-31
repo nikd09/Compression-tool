@@ -72,10 +72,10 @@ _STATIC = Path(__file__).parent / "static"
 # every button click and view dispatch actually uses.
 NAV_SECTIONS = [
     ("Workflow", [
-        ("Overview", ":material/space_dashboard:", overview_view.render),
         ("Ingest", ":material/upload_file:", ingest_view.render),
         ("Results", ":material/bar_chart:", results_view.render),
         ("Compare", ":material/compare_arrows:", compare_view.render),
+        ("Overview", ":material/space_dashboard:", overview_view.render),
     ]),
     ("Library", [
         ("Materials", ":material/inventory_2:", materials_view.render),
@@ -85,6 +85,10 @@ NAV_SECTIONS = [
     ]),
 ]
 NAV_ITEMS = [item for _, items in NAV_SECTIONS for item in items]
+# The landing page on first load -- pinned by name, not by NAV_ITEMS[0], so
+# Overview's own position within Workflow (see above) can move without
+# silently changing what a fresh session opens on.
+_DEFAULT_NAV_VIEW = "Overview"
 
 _NAV_CSS = """
 <style>
@@ -199,7 +203,7 @@ def main() -> None:
     )
     polish()
     st.markdown(_NAV_CSS, unsafe_allow_html=True)
-    st.session_state.setdefault("nav_view", NAV_ITEMS[0][0])
+    st.session_state.setdefault("nav_view", _DEFAULT_NAV_VIEW)
     nav_before_this_run = st.session_state["nav_view"]
 
     with st.sidebar:
