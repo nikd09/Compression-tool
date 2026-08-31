@@ -720,8 +720,7 @@ const PANELS=[
    why:"Dissipated divided by input energy. The cross-test comparable form: absolute loss "+
        "scales with stress amplitude, so a 50 MPa and a 450 MPa stage cannot be compared on "+
        "the absolute number, but they can be compared on this ratio."},
-  {k:"holdDisp", t:"Hold displacement", u:"µm, a total, not a rate", f:v=>fmt(v,0), u2:"µm",
-   scale:1000,
+  {k:"holdDisp", t:"Hold displacement", u:"mm, a total, not a rate", f:v=>fmt(v,4), u2:"mm",
    why:"Displacement accumulated across the dwell at peak stress: a TOTAL, not a rate. Dwell "+
        "length varies across the cycles of this test, so a longer dwell accumulates more at "+
        "identical material behaviour. Read it against the hold length in the values table."},
@@ -740,7 +739,17 @@ const PANELS=[
        "up the loading branch, across the dwell at peak, down the unloading branch. The area "+
        "inside a loop is the energy dissipated in that cycle; the rightward drift between loops "+
        "is the permanent deformation accumulating."},
-];
+// A panel whose key is null on EVERY cycle of EVERY specimen (not just the
+// currently hidden/shown ones -- SPS, not series(), so toggling a specimen's
+// visibility never makes a panel appear or disappear) would otherwise still
+// render its title, unit and legend with a blank chart body underneath --
+// confirmed live on a test with no detected hold anywhere: an empty "Hold
+// displacement" card. Filtered out entirely here, once, so `data-i` (the
+// expand/PNG/keyboard-nav index into this same array) never has to account
+// for a gap. __loop has no per-cycle key of its own (draw:loopChart reads
+// straight from SPS), so a custom-drawn panel is never a candidate for this
+// and is always kept.
+].filter(p => p.draw || SPS.some(s => s.cycles.some(c => c[p.k] != null)));
 
 /* icons */
 const ICONS={
