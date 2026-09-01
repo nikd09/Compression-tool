@@ -13,7 +13,7 @@ from .. import knowledge_base
 from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..dashboard_data import COMFORTABLE_SPECIMENS, MAX_SPECIMENS, build_dashboard_data
 from ..persistence import Workspace, read_json
-from .common import connect_readonly, short_tag
+from .common import connect_readonly, inject_dashboard_lang, short_tag
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "results_dashboard.html"
 
@@ -115,9 +115,9 @@ def render(ws: Workspace) -> None:
         return
 
     data = build_dashboard_data(payloads, curves)
-    html = _TEMPLATE_PATH.read_text(encoding="utf-8").replace(
+    html = inject_dashboard_lang(_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
         "/*__DATA__*/", json.dumps(data)
-    )
+    ))
     # A FIXED, screen-sized frame, scrolling INSIDE itself -- not a frame sized
     # to the content's total height. That earlier approach put the dashboard's
     # own `vh` units (used to size the expanded-chart dialog) against the

@@ -4,6 +4,7 @@ helpers every specimen picker uses so they read the same way everywhere."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -369,6 +370,59 @@ def with_utm_animation(caption: str, fn):
         return fn()
     finally:
         placeholder.empty()
+
+
+_LANG_KEY = "app_lang"
+
+
+def language_picker() -> str:
+    """Render the ONE EN/DE toggle for the whole app session, the same
+    "called exactly once, from app.py" pattern workspace_picker() above
+    uses -- so switching language is one control, not a separate one on
+    Compare and a separate one again inside every embedded dashboard.
+
+    Returns the two-letter code ('en'/'de'), also stashed in
+    st.session_state[_LANG_KEY] for dashboard_lang()/inject_dashboard_lang()
+    to read from views that do not call this directly.
+    """
+    choice = st.radio(
+        "Language", ["EN", "DE"], horizontal=True, key="app_lang_choice",
+        label_visibility="collapsed",
+    )
+    lang = "de" if choice == "DE" else "en"
+    st.session_state[_LANG_KEY] = lang
+    return lang
+
+
+def dashboard_lang() -> str:
+    """The current shared language, for a view that reads it without
+    rendering the toggle itself (every view except app.py's sidebar)."""
+    return st.session_state.get(_LANG_KEY, "en")
+
+
+def inject_dashboard_lang(html_text: str) -> str:
+    """Seeds results_dashboard.html's own LANG with the shared toggle's
+    current value, by prepending a small global read ahead of the
+    template's own `const DATA = ...` line -- see that file's `let LANG =`
+    init, which checks `window.__CT_LANG__` before its own localStorage
+    default. Applied at every Streamlit call site that embeds the
+    template (Results, Ingest's Preview, the Materials dashboard) so all
+    three start in the language the sidebar is set to, instead of each
+    iframe defaulting independently.
+
+    A file that never passes through here -- opened directly from disk,
+    outside Streamlit, e.g. reports/<material>.html mailed to a colleague
+    -- keeps the template's own localStorage-based default and its own
+    in-page EN/DE buttons still work there; there is no Streamlit session
+    to read in that case.
+    """
+    marker = "<script>\nconst DATA"
+    if marker not in html_text:
+        return html_text
+    lang = dashboard_lang()
+    return html_text.replace(
+        marker, f"<script>\nwindow.__CT_LANG__={json.dumps(lang)};\nconst DATA", 1,
+    )
 
 
 _SAMPLE_SUFFIX = re.compile(r"[_\s-](S\d+)$", re.IGNORECASE)

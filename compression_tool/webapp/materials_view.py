@@ -19,6 +19,7 @@ from ..material_admin import delete_material, rename_material
 from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
+from .common import inject_dashboard_lang
 
 # Rename/Delete are visible to every visitor, not hidden for a non-admin --
 # someone who cannot use them should still be able to see the option exists
@@ -368,5 +369,6 @@ def _render_material_dashboard(ws: Workspace, material: str) -> None:
 
     st.subheader(material)
     components.html(
-        html_path.read_text(encoding="utf-8"), height=_FRAME_HEIGHT_PX, scrolling=True
+        inject_dashboard_lang(html_path.read_text(encoding="utf-8")),
+        height=_FRAME_HEIGHT_PX, scrolling=True
     )

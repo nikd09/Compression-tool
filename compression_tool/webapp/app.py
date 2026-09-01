@@ -26,7 +26,7 @@ from compression_tool.webapp import (
     results_view,
 )
 from compression_tool.webapp.auth import require_password
-from compression_tool.webapp.common import polish, workspace_picker
+from compression_tool.webapp.common import language_picker, polish, workspace_picker
 
 st.set_page_config(page_title="CompressLab", page_icon="📊", layout="wide")
 
@@ -207,6 +207,15 @@ def main() -> None:
     nav_before_this_run = st.session_state["nav_view"]
 
     with st.sidebar:
+        # The ONE language toggle for the whole app -- see
+        # common.language_picker()'s own docstring for why this replaced
+        # Compare's separate radio and every dashboard's separate in-page
+        # buttons defaulting independently. First thing in the sidebar,
+        # same reasoning a language switcher is conventionally the first
+        # thing on a page: it should be seen and set before anything else
+        # here is read.
+        language_picker()
+        st.divider()
         for section_name, items in NAV_SECTIONS:
             st.markdown(f'<div class="ct-nav-section">{section_name}</div>', unsafe_allow_html=True)
             for name, icon, _ in items:

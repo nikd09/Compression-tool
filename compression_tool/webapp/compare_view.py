@@ -15,7 +15,7 @@ import streamlit as st
 from .. import knowledge_base
 from ..persistence import Workspace
 from ..schema import user_facing_cycle_columns
-from .common import CATEGORICAL_LIGHT, connect_readonly, dot, short_tag
+from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot, short_tag
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
 
@@ -33,12 +33,10 @@ div[data-testid="stElementToolbarButton"]:has(button[aria-label="Copy Vega-Lite 
 </style>
 """
 
-# EN/DE strings for this page only -- the same {en,de}-pair convention the
-# results dashboard template uses, kept local rather than shared: Compare is
-# a Streamlit-widget page (Python, reruns top to bottom), not the dashboard's
-# one static HTML/JS file, so there is no existing cross-page mechanism to
-# hook into without widening this into the whole-app translation the scoping
-# question on this deliberately did NOT choose. Metric names/units
+# EN/DE strings for this page's own widgets/chart. The language ITSELF now
+# comes from the one shared sidebar toggle (common.dashboard_lang(), set by
+# common.language_picker() in app.py) rather than a separate widget here --
+# see that toggle's own docstring for why. Metric names/units
 # (metric.label/metric.unit, from schema.py) are left in English on purpose:
 # they are shared with every other view's values table and are out of this
 # page's own scope.
@@ -136,20 +134,13 @@ def _default_group_count(n_materials: int) -> int:
 
 
 def render(ws: Workspace) -> None:
-    hcol, lcol = st.columns([6, 1])
-    with lcol:
-        lang_choice = st.radio(
-            "Language", ["EN", "DE"], key="cmp_lang", horizontal=True,
-            label_visibility="collapsed",
-        )
-    lang = "de" if lang_choice == "DE" else "en"
+    lang = dashboard_lang()
 
     def L(key: str, **kw) -> str:
         s = _T[key][lang]
         return s.format(**kw) if kw else s
 
-    with hcol:
-        st.header(L("header"))
+    st.header(L("header"))
     conn = connect_readonly(ws)
     if conn is None:
         st.info(L("no_data"))

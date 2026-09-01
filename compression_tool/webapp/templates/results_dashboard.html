@@ -442,7 +442,16 @@ const state = {
    messages in DATA.warnings are generated server-side (diagnostics.py) and
    stay in English; only this template's own strings are translated. */
 let LANG = "en";
-try{ LANG = localStorage.getItem("ct-lang") || "en"; }catch(e){}
+try{
+  // window.__CT_LANG__ is set by the app's ONE shared sidebar toggle
+  // (webapp/common.py's inject_dashboard_lang), ahead of this script, when
+  // this page is embedded from Streamlit -- it wins over this page's own
+  // remembered choice so every embedded dashboard opens in whatever the
+  // sidebar is set to, not whatever this one iframe last saw. A file opened
+  // directly from disk (no Streamlit) never gets that global set, so it
+  // keeps this page's own localStorage-remembered choice as before.
+  LANG = window.__CT_LANG__ || localStorage.getItem("ct-lang") || "en";
+}catch(e){}
 const L = x => x==null ? x : (typeof x === "string" ? x : (x[LANG] ?? x.en));
 const UI = {
   tabResults:{en:"Results",de:"Ergebnisse"},

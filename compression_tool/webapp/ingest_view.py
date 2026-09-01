@@ -19,7 +19,7 @@ from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview, preview_dashboard_data
-from .common import config_form, with_utm_animation
+from .common import config_form, inject_dashboard_lang, with_utm_animation
 
 _NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
@@ -263,9 +263,9 @@ def _build_dashboard_preview(
     html = None
     if result["payloads"]:
         data = build_dashboard_data(result["payloads"], result["curves"])
-        html = _DASHBOARD_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
+        html = inject_dashboard_lang(_DASHBOARD_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
             "/*__DATA__*/", json.dumps(data)
-        )
+        ))
     return {
         "skipped": result["skipped"],
         "truncated": result["truncated"],
