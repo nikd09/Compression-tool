@@ -138,6 +138,91 @@ def polish() -> None:
     st.markdown(_POLISH, unsafe_allow_html=True)
 
 
+_CONFIG_FORM_T = {
+    "expander": {"en": "Advanced: segmentation and reference thresholds",
+        "de": "Erweitert: Segmentierungs- und Referenzschwellenwerte"},
+    "intro": {
+        "en": "Every threshold is relative to the test's own peak stress, never "
+              "absolute: the same knobs `--unload-frac` etc. expose on the "
+              "command line. Cycle boundaries are found by locally-adaptive peak "
+              "detection, not by these numbers directly -- unload_frac and "
+              "major_cycle_frac are SAFETY FLOORS on that, and the stiffness "
+              "window is auto-located from the data, with stiff_lo_frac / "
+              "stiff_hi_frac used only as a fallback. Defaults work unmodified for "
+              "most exports; change one only if Preview below shows a stage being "
+              "lost or a cycle miscounted.",
+        "de": "Jeder Schwellenwert ist relativ zur eigenen Spitzenspannung der "
+              "Prüfung, nie absolut: dieselben Regler, die `--unload-frac` usw. "
+              "auf der Kommandozeile bereitstellen. Zyklusgrenzen werden durch "
+              "lokal-adaptive Peak-Erkennung gefunden, nicht direkt durch diese "
+              "Zahlen -- unload_frac und major_cycle_frac sind "
+              "SICHERHEITSUNTERGRENZEN dafür, und das Steifigkeitsfenster wird "
+              "automatisch aus den Daten bestimmt, wobei stiff_lo_frac / "
+              "stiff_hi_frac nur als Ersatzwert dienen. Die Standardwerte "
+              "funktionieren unverändert für die meisten Exporte; einen Wert nur "
+              "ändern, wenn die Vorschau unten eine verlorene Stufe oder einen "
+              "falsch gezählten Zyklus zeigt."},
+    "unload_sensitivity": {"en": "Unload sensitivity", "de": "Entlastungsempfindlichkeit"},
+    "unload_sensitivity_help": {
+        "en": "A candidate cycle's bounding valley must give back at least this "
+              "fraction of the candidate's OWN peak stress to count as a real "
+              "load-unload separation, rather than a shoulder on the ramp toward "
+              "a taller neighbouring peak.",
+        "de": "Das umgebende Tal eines Kandidatenzyklus muss mindestens diesen "
+              "Anteil der EIGENEN Spitzenspannung des Kandidaten nachgeben, um "
+              "als echte Trennung zwischen Be- und Entlastung zu zählen, statt "
+              "als Schulter auf dem Weg zu einem höheren Nachbarn."},
+    "min_cycle_size": {"en": "Minimum cycle size", "de": "Mindestzyklusgröße"},
+    "min_cycle_size_help": {
+        "en": "A candidate peaking below this fraction of the GLOBAL peak is "
+              "rejected outright, regardless of its neighbours -- catches "
+              "near-zero contact-finding blips. Kept low: real stages are judged "
+              "by unload_frac and local noise, not by this.",
+        "de": "Ein Kandidat mit einer Spitze unter diesem Anteil der GLOBALEN "
+              "Spitze wird unabhängig von seinen Nachbarn sofort verworfen -- "
+              "fängt Nahe-Null-Kontaktartefakte ab. Niedrig gehalten: echte "
+              "Stufen werden anhand von unload_frac und lokalem Rauschen "
+              "beurteilt, nicht hierdurch."},
+    "stiff_lo": {"en": "Stiffness window start (fallback)", "de": "Steifigkeitsfenster Anfang (Ersatzwert)"},
+    "stiff_lo_help": {
+        "en": "Fallback stiffness window (fraction of that cycle's own peak), "
+              "used only when no auto-located window clears the minimum span.",
+        "de": "Ersatz-Steifigkeitsfenster (Anteil der eigenen Spitze dieses "
+              "Zyklus), nur verwendet, wenn kein automatisch bestimmtes Fenster "
+              "die Mindestspanne erreicht."},
+    "stiff_hi": {"en": "Stiffness window end (fallback)", "de": "Steifigkeitsfenster Ende (Ersatzwert)"},
+    "stiff_hi_help": {"en": "Fallback stiffness window upper bound -- see Stiffness window start.",
+        "de": "Obere Grenze des Ersatz-Steifigkeitsfensters -- siehe Steifigkeitsfenster Anfang."},
+    "reference_stress": {"en": "Reference stress", "de": "Referenzspannung"},
+    "reference_stress_help": {
+        "en": "The one low, test-wide reference stress (fraction of the global "
+              "peak), read on the loading and unloading branches of every cycle. "
+              "Used both for permanent deformation (within one cycle) and for "
+              "cross-cycle comparison (the same reading, cycle over cycle) -- "
+              "see the warning below if a cycle's own peak puts this in the "
+              "contact-loss-noise range.",
+        "de": "Die eine niedrige, prüfungsweite Referenzspannung (Anteil der "
+              "globalen Spitze), gelesen auf dem Belastungs- und Entlastungsast "
+              "jedes Zyklus. Verwendet sowohl für die bleibende Verformung "
+              "(innerhalb eines Zyklus) als auch für den Zyklenvergleich "
+              "(dieselbe Ablesung, Zyklus für Zyklus) -- siehe den Hinweis "
+              "unten, falls die eigene Spitze eines Zyklus dies in den "
+              "Kontaktverlust-Rauschbereich bringt."},
+    "hold_tol": {"en": "Hold detection tolerance", "de": "Toleranz für Halteerkennung"},
+    "hold_tol_help": {
+        "en": "How much a signal can drift during a dwell and still count as "
+              "\"held\", as a fraction of that cycle's peak stress.",
+        "de": "Wie weit ein Signal während einer Verweilzeit driften darf und "
+              "noch als „gehalten“ zählt, als Anteil der Spitzenspannung dieses "
+              "Zyklus."},
+    "h0_override": {"en": "Specimen thickness override (h0)", "de": "Überschreibung der Probendicke (h0)"},
+    "h0_placeholder": {"en": "blank = read from the export's metadata sheet",
+        "de": "leer = aus dem Metadatenblatt des Exports gelesen"},
+    "h0_error": {"en": "h0_mm override must be a number, got {value!r}",
+        "de": "Die Überschreibung von h0_mm muss eine Zahl sein, erhalten: {value!r}"},
+}
+
+
 def config_form(detect_holds: bool) -> Config:
     """The "Advanced: segmentation and reference thresholds" expander --
     every threshold knob the CLI also exposes, defaulted from a fresh
@@ -147,19 +232,15 @@ def config_form(detect_holds: bool) -> Config:
     run's already-archived sources) so the two never drift into offering a
     different set of knobs for the same underlying Config fields.
     """
+    lang = dashboard_lang()
+
+    def L(key: str, **kw) -> str:
+        s = _CONFIG_FORM_T[key][lang]
+        return s.format(**kw) if kw else s
+
     d = Config()
-    with st.expander("Advanced: segmentation and reference thresholds"):
-        st.caption(
-            "Every threshold is relative to the test's own peak stress, never "
-            "absolute: the same knobs `--unload-frac` etc. expose on the "
-            "command line. Cycle boundaries are found by locally-adaptive peak "
-            "detection, not by these numbers directly -- unload_frac and "
-            "major_cycle_frac are SAFETY FLOORS on that, and the stiffness "
-            "window is auto-located from the data, with stiff_lo_frac / "
-            "stiff_hi_frac used only as a fallback. Defaults work unmodified for "
-            "most exports; change one only if Preview below shows a stage being "
-            "lost or a cycle miscounted."
-        )
+    with st.expander(L("expander")):
+        st.caption(L("intro"))
         # Every field pairs a plain-language label (what a materials engineer
         # who has never opened core.py would call this) with the exact
         # Config field name/CLI flag as a small caption underneath -- not
@@ -172,53 +253,40 @@ def config_form(detect_holds: bool) -> Config:
         c1, c2 = st.columns(2)
         with c1:
             unload_frac = st.number_input(
-                "Unload sensitivity", value=d.unload_frac, format="%.3f",
-                help="A candidate cycle's bounding valley must give back at least this "
-                     "fraction of the candidate's OWN peak stress to count as a real "
-                     "load-unload separation, rather than a shoulder on the ramp toward "
-                     "a taller neighbouring peak.")
+                L("unload_sensitivity"), value=d.unload_frac, format="%.3f",
+                help=L("unload_sensitivity_help"))
             st.caption("`unload_frac`")
             major_cycle_frac = st.number_input(
-                "Minimum cycle size", value=d.major_cycle_frac, format="%.3f",
-                help="A candidate peaking below this fraction of the GLOBAL peak is "
-                     "rejected outright, regardless of its neighbours -- catches "
-                     "near-zero contact-finding blips. Kept low: real stages are judged "
-                     "by unload_frac and local noise, not by this.")
+                L("min_cycle_size"), value=d.major_cycle_frac, format="%.3f",
+                help=L("min_cycle_size_help"))
             st.caption("`major_cycle_frac`")
             stiff_lo_frac = st.number_input(
-                "Stiffness window start (fallback)", value=d.stiff_lo_frac, format="%.2f",
-                help="Fallback stiffness window (fraction of that cycle's own peak), "
-                     "used only when no auto-located window clears the minimum span.")
+                L("stiff_lo"), value=d.stiff_lo_frac, format="%.2f",
+                help=L("stiff_lo_help"))
             st.caption("`stiff_lo_frac`")
             stiff_hi_frac = st.number_input(
-                "Stiffness window end (fallback)", value=d.stiff_hi_frac, format="%.2f",
-                help="Fallback stiffness window upper bound -- see Stiffness window start.")
+                L("stiff_hi"), value=d.stiff_hi_frac, format="%.2f",
+                help=L("stiff_hi_help"))
             st.caption("`stiff_hi_frac`")
         with c2:
             residual_stress_frac = st.number_input(
-                "Reference stress", value=d.residual_stress_frac, format="%.2f",
-                help="The one low, test-wide reference stress (fraction of the global "
-                     "peak), read on the loading and unloading branches of every cycle. "
-                     "Used both for permanent deformation (within one cycle) and for "
-                     "cross-cycle comparison (the same reading, cycle over cycle) -- "
-                     "see the warning below if a cycle's own peak puts this in the "
-                     "contact-loss-noise range.")
+                L("reference_stress"), value=d.residual_stress_frac, format="%.2f",
+                help=L("reference_stress_help"))
             st.caption("`residual_stress_frac`")
             hold_tol_frac = st.number_input(
-                "Hold detection tolerance", value=d.hold_tol_frac, format="%.3f",
-                help="How much a signal can drift during a dwell and still count as "
-                     "\"held\", as a fraction of that cycle's peak stress.")
+                L("hold_tol"), value=d.hold_tol_frac, format="%.3f",
+                help=L("hold_tol_help"))
             st.caption("`hold_tol_frac`")
             h0_text = st.text_input(
-                "Specimen thickness override (h0)", value="",
-                placeholder="blank = read from the export's metadata sheet")
+                L("h0_override"), value="",
+                placeholder=L("h0_placeholder"))
             st.caption("`h0_mm`")
     h0_mm = None
     if h0_text.strip():
         try:
             h0_mm = float(h0_text)
         except ValueError:
-            st.error(f"h0_mm override must be a number, got {h0_text!r}")
+            st.error(L("h0_error", value=h0_text))
     return Config(
         unload_frac=unload_frac,
         major_cycle_frac=major_cycle_frac,

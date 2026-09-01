@@ -175,6 +175,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"No indexed specimens for material {args.material!r}.")
             return 1
         print(f"Workbook  : {exported['xlsx']}")
+        print(f"Workbook (DE): {exported['xlsx_de']}")
         print(f"Dashboard : {exported['html']}")
         return 0
 

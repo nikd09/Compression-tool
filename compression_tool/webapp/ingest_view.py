@@ -19,9 +19,8 @@ from ..dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from ..material_registry import load_materials
 from ..persistence import Workspace
 from ..pipeline import ingest, preview, preview_dashboard_data
-from .common import config_form, inject_dashboard_lang, with_utm_animation
+from .common import config_form, dashboard_lang, inject_dashboard_lang, with_utm_animation
 
-_NEW_MATERIAL = "+ Add new material…"
 _UPLOAD_PREFIX = "compression_tool_upload_"
 _DASHBOARD_TEMPLATE_PATH = (
     Path(__file__).parent / "templates" / "results_dashboard.html"
@@ -39,6 +38,151 @@ _STALE_UPLOAD_MAX_AGE_S = 24 * 3600
 _SWEEP_INTERVAL_S = 3600
 _last_sweep = 0.0
 
+# EN/DE strings for this page's own chrome. Threaded through every helper as
+# an `L` closure reading the one shared sidebar toggle (common.dashboard_lang),
+# same pattern as every other translated view.
+_T = {
+    "header": {"en": "Ingest", "de": "Einlesen"},
+    "subtitle": {"en": "Upload one or more exports of the same series, look before committing, then archive and index them.",
+        "de": "Eine oder mehrere Exportdateien derselben Serie hochladen, vor dem Speichern prüfen, dann archivieren und indizieren."},
+    "step1": {"en": "Upload", "de": "Hochladen"},
+    "uploader_label": {"en": "Compression test export(s)", "de": "Druckversuchs-Exportdatei(en)"},
+    "uploader_help": {"en": "One or more .xlsx exports of the same series. Nothing is written to the workspace until Commit.",
+        "de": "Eine oder mehrere .xlsx-Exporte derselben Serie. Es wird nichts in den Workspace geschrieben, bis „Speichern“ gedrückt wird."},
+    "new_material": {"en": "+ Add new material…", "de": "+ Neues Material hinzufügen…"},
+    "material_label": {"en": "Material", "de": "Material"},
+    "material_placeholder_empty": {"en": "e.g. PEEK-GF30, the first material in this workspace",
+        "de": "z. B. PEEK-GF30, das erste Material in diesem Workspace"},
+    "material_help_empty": {"en": "Every material typed here becomes a pickable option next time, so it never has to be retyped or matched exactly again.",
+        "de": "Jedes hier eingetippte Material wird beim nächsten Mal auswählbar, sodass es nie wieder exakt eingetippt werden muss."},
+    "material_placeholder_pick": {"en": "Pick a material, or add a new one", "de": "Ein Material auswählen, oder ein neues hinzufügen"},
+    "material_help_pick": {
+        "en": "Picking from this list, rather than retyping the name, is "
+              "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
+              "two materials that never compare against each other.",
+        "de": "Aus dieser Liste auszuwählen, statt den Namen neu einzutippen, "
+              "verhindert, dass „SteelMesh“ und „Steel Mesh“ stillschweigend zu "
+              "zwei Materialien werden, die nie miteinander verglichen werden."},
+    "new_material_name": {"en": "New material name", "de": "Name des neuen Materials"},
+    "new_material_placeholder": {"en": "e.g. PEEK-GF30", "de": "z. B. PEEK-GF30"},
+    "hold_at_peak": {"en": "Test has a hold at peak", "de": "Prüfung hat ein Halten am Spitzenwert"},
+    "hold_at_peak_help": {
+        "en": "Uncheck for a fast-cycling test with no programmed dwell. "
+              "A short cycle still spends a few samples turning around at peak "
+              "stress (geometry, not a hold), and on a short enough cycle "
+              "that turnaround can accidentally look long enough to be misread "
+              "as a real one. Unchecking skips hold detection entirely, so "
+              "every cycle reports no hold and no creep, instead of a few "
+              "false ones scattered through an otherwise hold-free test.",
+        "de": "Deaktivieren bei einer schnell zyklierenden Prüfung ohne "
+              "programmiertes Halten. Ein kurzer Zyklus verbringt trotzdem ein "
+              "paar Messpunkte mit der Umkehr bei Spitzenspannung (Geometrie, "
+              "kein Halten), und bei einem ausreichend kurzen Zyklus kann diese "
+              "Umkehr versehentlich lang genug wirken, um als echtes Halten "
+              "fehlgedeutet zu werden. Deaktivieren überspringt die "
+              "Halteerkennung vollständig, sodass jeder Zyklus kein Halten und "
+              "kein Kriechen meldet, statt vereinzelter falscher Treffer in "
+              "einer sonst haltefreien Prüfung."},
+    "gauge_confirmed": {"en": "Gauge length confirmed", "de": "Messlänge bestätigt"},
+    "gauge_confirmed_help": {
+        "en": "Check this only once someone has verified the displacement "
+              "channel's extensometer spans exactly this specimen's measured "
+              "thickness h0, not just that h0 gives a plausible modulus. Left "
+              "unchecked, strain and modulus stay provisional and carry a "
+              "critical warning.",
+        "de": "Nur aktivieren, wenn jemand bestätigt hat, dass der Extensometer "
+              "des Wegkanals genau die gemessene Dicke h0 dieser Probe erfasst, "
+              "nicht nur, dass h0 einen plausiblen Modul ergibt. Unmarkiert "
+              "bleiben Dehnung und Modul vorläufig und tragen einen kritischen "
+              "Hinweis."},
+    "filename_warning": {
+        "en": "'{material}' looks like the export's file name, not a material "
+              "code. A short code (e.g. 'T050LR1') reads far better as a "
+              "Materials card and in Compare's legend - the file name itself "
+              "is already kept, in full, on every specimen record. This can "
+              "still be fixed after Commit, from the Materials tab.",
+        "de": "„{material}“ sieht wie der Dateiname des Exports aus, nicht wie "
+              "ein Materialcode. Ein kurzer Code (z. B. „T050LR1“) liest sich "
+              "als Materials-Karte und in der Compare-Legende deutlich besser "
+              "- der Dateiname selbst wird bereits vollständig in jedem "
+              "Probendatensatz aufbewahrt. Das lässt sich auch nach dem "
+              "Speichern noch im Materials-Tab korrigieren."},
+    "diff_materials_expander": {"en": "Different materials in this batch? ({n} files uploaded)",
+        "de": "Unterschiedliche Materialien in diesem Stapel? ({n} Dateien hochgeladen)"},
+    "diff_materials_caption": {
+        "en": "Each file defaults to the Material picked above. Change a file "
+              "here only if IT specifically belongs to a different material -- "
+              "e.g. two exports for two different materials uploaded together, "
+              "which would otherwise be silently combined into one material.",
+        "de": "Jede Datei verwendet zunächst das oben gewählte Material. Eine "
+              "Datei hier nur ändern, wenn SIE speziell zu einem anderen "
+              "Material gehört -- z. B. zwei Exporte für zwei verschiedene "
+              "Materialien, die zusammen hochgeladen wurden und sonst "
+              "stillschweigend zu einem Material zusammengeführt würden."},
+    "same_as_above": {"en": "(same as above)", "de": "(wie oben)"},
+    "step2": {"en": "Thresholds", "de": "Schwellenwerte"},
+    "optional": {"en": "Optional.", "de": "Optional."},
+    "no_upload_info": {"en": "Upload one or more exports above to preview them.",
+        "de": "Oben eine oder mehrere Exportdateien hochladen, um sie in der Vorschau zu sehen."},
+    "step3": {"en": "Preview", "de": "Vorschau"},
+    "step3_sub": {"en": "Check the files parse, then open the full interactive dashboard in a new tab, before anything is written.",
+        "de": "Prüfen, ob die Dateien sich einlesen lassen, dann das vollständige interaktive Dashboard in einem neuen Tab öffnen, bevor etwas geschrieben wird."},
+    "run_preview": {"en": "Run preview", "de": "Vorschau ausführen"},
+    "analysing": {"en": "Analysing…", "de": "Wird analysiert…"},
+    "skipped": {"en": "Skipped {name}: {why}", "de": "{name} übersprungen: {why}"},
+    "nothing_to_chart": {"en": "Nothing to chart: every file failed to analyse, or had no cycles.",
+        "de": "Nichts darzustellen: jede Datei ließ sich nicht analysieren oder hatte keine Zyklen."},
+    "truncated_caption": {
+        "en": "Showing the {max} most recent of {total} specimens; the "
+              "dashboard's colour palette has a hard {max}-series limit.",
+        "de": "Zeigt die {max} neuesten von {total} Proben; die Farbpalette des "
+              "Dashboards hat ein hartes Limit von {max} Serien."},
+    "open_in_new_tab": {"en": "Open dashboard in a new tab", "de": "Dashboard in neuem Tab öffnen"},
+    "step4": {"en": "Commit", "de": "Speichern"},
+    "step4_sub": {"en": "Archives the raw file and writes the record - re-running the same file is a no-op.",
+        "de": "Archiviert die Rohdatei und schreibt den Datensatz - dieselbe Datei erneut auszuführen bewirkt nichts."},
+    "archive_checkbox": {"en": "Archive a copy of the uploaded file", "de": "Eine Kopie der hochgeladenen Datei archivieren"},
+    "archive_help": {
+        "en": "Copies the export into Raw exports/ before analysis, so a "
+              "result can always be traced back to the exact bytes that "
+              "produced it. Uncheck if you already keep your own copies "
+              "elsewhere and do not want a second one on disk. The file's "
+              "SHA-256 is still recorded either way, which is what a "
+              "re-ingest of the same file is detected from.",
+        "de": "Kopiert den Export vor der Analyse nach Raw exports/, damit ein "
+              "Ergebnis immer bis zu den exakten Bytes zurückverfolgt werden "
+              "kann, die es erzeugt haben. Deaktivieren, wenn bereits eigene "
+              "Kopien anderswo aufbewahrt werden und keine zweite auf der "
+              "Festplatte gewünscht ist. Der SHA-256-Wert der Datei wird in "
+              "jedem Fall erfasst, woran ein erneutes Einlesen derselben Datei "
+              "erkannt wird."},
+    "write_reports_checkbox": {"en": "Write per-run Excel/CSV/HTML", "de": "Excel/CSV/HTML je Lauf schreiben"},
+    "write_reports_help": {
+        "en": "Writes a per-specimen and per-run Excel workbook, CSV and "
+              "HTML report alongside the JSON record. Uncheck if you only "
+              "open the combined report in reports/<material> (see Config) "
+              "and find these per-run copies redundant. The JSON record "
+              "and curve cache, which the combined report and every chart "
+              "are rebuilt from, are always written either way.",
+        "de": "Schreibt eine Excel-Arbeitsmappe, CSV und einen HTML-Bericht je "
+              "Probe und je Lauf, zusätzlich zum JSON-Datensatz. Deaktivieren, "
+              "wenn nur der zusammengeführte Bericht unter reports/<material> "
+              "(siehe Config) geöffnet wird und diese Kopien je Lauf "
+              "überflüssig sind. Der JSON-Datensatz und der Kurven-Cache, aus "
+              "denen der zusammengeführte Bericht und jedes Diagramm neu "
+              "erzeugt werden, werden in jedem Fall immer geschrieben."},
+    "commit_button": {"en": "Commit to workspace", "de": "In Workspace speichern"},
+    "commit_error_no_material": {"en": "Pick or type a material name above before committing.",
+        "de": "Vor dem Speichern oben einen Materialnamen auswählen oder eingeben."},
+    "committing": {"en": "Committing…", "de": "Wird gespeichert…"},
+    "matched_existing": {
+        "en": "'{typed}' matched to the existing material '{actual}' instead of creating a near-duplicate.",
+        "de": "„{typed}“ wurde dem bestehenden Material „{actual}“ zugeordnet, "
+              "statt ein Fast-Duplikat anzulegen."},
+    "ingested_success": {"en": "Ingested {n} specimen(s) of '{material}' into {run_dir}",
+        "de": "{n} Probe(n) von „{material}“ in {run_dir} eingelesen"},
+}
+
 
 def _step(n: int, title: str, sub: str = "") -> None:
     st.markdown(
@@ -48,7 +192,7 @@ def _step(n: int, title: str, sub: str = "") -> None:
     )
 
 
-def _material_picker(ws: Workspace, *, key_suffix: str = "") -> str:
+def _material_picker(ws: Workspace, L, *, key_suffix: str = "") -> str:
     """A picker, not a free-text box, once at least one material exists --
     "SteelMesh", "Steel Mesh" and "steel-mesh" typed on three different
     days become three materials that never compare against each other in
@@ -64,31 +208,29 @@ def _material_picker(ws: Workspace, *, key_suffix: str = "") -> str:
     SAME widget instance.
     """
     materials = load_materials(ws)
+    new_material = L("new_material")
     if not materials:
         return st.text_input(
-            "Material", key=f"ingest_material_text{key_suffix}",
-            placeholder="e.g. PEEK-GF30, the first material in this workspace",
-            help="Every material typed here becomes a pickable option next "
-            "time, so it never has to be retyped or matched exactly again.",
+            L("material_label"), key=f"ingest_material_text{key_suffix}",
+            placeholder=L("material_placeholder_empty"),
+            help=L("material_help_empty"),
         )
     choice = st.selectbox(
-        "Material", materials + [_NEW_MATERIAL], index=None,
+        L("material_label"), materials + [new_material], index=None,
         key=f"ingest_material_select{key_suffix}",
-        placeholder="Pick a material, or add a new one",
-        help="Picking from this list, rather than retyping the name, is "
-        "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
-        "two materials that never compare against each other.",
+        placeholder=L("material_placeholder_pick"),
+        help=L("material_help_pick"),
     )
-    if choice == _NEW_MATERIAL:
+    if choice == new_material:
         return st.text_input(
-            "New material name", key=f"ingest_material_new{key_suffix}",
-            placeholder="e.g. PEEK-GF30",
+            L("new_material_name"), key=f"ingest_material_new{key_suffix}",
+            placeholder=L("new_material_placeholder"),
             label_visibility="collapsed",
         )
     return choice or ""
 
 
-def _per_file_materials(ws: Workspace, uploaded, default_material: str) -> dict[int, str]:
+def _per_file_materials(ws: Workspace, uploaded, default_material: str, L) -> dict[int, str]:
     """Optional per-file material override for a multi-file upload.
 
     The bug this exists to fix: Ingest used to have exactly ONE Material
@@ -106,26 +248,20 @@ def _per_file_materials(ws: Workspace, uploaded, default_material: str) -> dict[
     """
     if len(uploaded) < 2:
         return {}
-    _SAME = "(same as above)"
+    _SAME = L("same_as_above")
+    new_material = L("new_material")
     materials = load_materials(ws)
     overrides: dict[int, str] = {}
-    with st.expander(
-        f"Different materials in this batch? ({len(uploaded)} files uploaded)"
-    ):
-        st.caption(
-            "Each file defaults to the Material picked above. Change a file "
-            "here only if IT specifically belongs to a different material -- "
-            "e.g. two exports for two different materials uploaded together, "
-            "which would otherwise be silently combined into one material."
-        )
+    with st.expander(L("diff_materials_expander", n=len(uploaded))):
+        st.caption(L("diff_materials_caption"))
         for i, f in enumerate(uploaded):
             key_base = f"ingest_pf_{i}_{f.name}_{f.size}"
-            options = [_SAME, _NEW_MATERIAL] + materials
+            options = [_SAME, new_material] + materials
             choice = st.selectbox(f.name, options, index=0, key=f"{key_base}_sel")
-            if choice == _NEW_MATERIAL:
+            if choice == new_material:
                 typed = st.text_input(
-                    "New material name", key=f"{key_base}_new",
-                    label_visibility="collapsed", placeholder="e.g. PEEK-GF30",
+                    L("new_material_name"), key=f"{key_base}_new",
+                    label_visibility="collapsed", placeholder=L("new_material_placeholder"),
                 )
                 if typed.strip():
                     overrides[i] = typed.strip()
@@ -277,7 +413,7 @@ def _build_dashboard_preview(
 _OPEN_IN_NEW_TAB_HEIGHT_PX = 56
 
 
-def _open_in_new_tab_button(html: str, label: str = "Open dashboard in a new tab") -> None:
+def _open_in_new_tab_button(html: str, label: str) -> None:
     """A button that opens `html` as a genuine new browser tab -- a real
     page, not an iframe embedded in the Ingest page itself.
 
@@ -326,73 +462,55 @@ def _open_in_new_tab_button(html: str, label: str = "Open dashboard in a new tab
     components.html(snippet, height=_OPEN_IN_NEW_TAB_HEIGHT_PX)
 
 
-def _render_dashboard_preview(state: dict) -> None:
+def _render_dashboard_preview(state: dict, L) -> None:
     for name, why in state["skipped"]:
-        st.warning(f"Skipped {name}: {why}")
+        st.warning(L("skipped", name=name, why=why))
     if not state["html"]:
-        st.warning("Nothing to chart: every file failed to analyse, or had no cycles.")
+        st.warning(L("nothing_to_chart"))
         return
     if state["truncated"]:
-        st.caption(
-            f"Showing the {MAX_SPECIMENS} most recent of {state['total_specimens']} "
-            f"specimens; the dashboard's colour palette has a hard "
-            f"{MAX_SPECIMENS}-series limit."
-        )
-    _open_in_new_tab_button(state["html"])
+        st.caption(L("truncated_caption", max=MAX_SPECIMENS, total=state["total_specimens"]))
+    _open_in_new_tab_button(state["html"], L("open_in_new_tab"))
 
 
 def render(ws: Workspace) -> None:
     _sweep_stale_uploads()
+    lang = dashboard_lang()
 
-    st.header("Ingest")
-    st.caption(
-        "Upload one or more exports of the same series, look before "
-        "committing, then archive and index them."
-    )
+    def L(key: str, **kw) -> str:
+        s = _T[key][lang]
+        return s.format(**kw) if kw else s
 
-    _step(1, "Upload")
+    st.header(L("header"))
+    st.caption(L("subtitle"))
+
+    _step(1, L("step1"))
     uploaded = st.file_uploader(
-        "Compression test export(s)", type=["xlsx"], accept_multiple_files=True,
+        L("uploader_label"), type=["xlsx"], accept_multiple_files=True,
         label_visibility="collapsed",
-        help="One or more .xlsx exports of the same series. Nothing is written to the workspace until Commit.",
+        help=L("uploader_help"),
     )
     c1, c2 = st.columns([2, 1])
     with c1:
-        material = _material_picker(ws)
+        material = _material_picker(ws, L)
     with c2:
         st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
         detect_holds = st.checkbox(
-            "Test has a hold at peak", value=True,
-            help="Uncheck for a fast-cycling test with no programmed dwell. "
-            "A short cycle still spends a few samples turning around at peak "
-            "stress (geometry, not a hold), and on a short enough cycle "
-            "that turnaround can accidentally look long enough to be misread "
-            "as a real one. Unchecking skips hold detection entirely, so "
-            "every cycle reports no hold and no creep, instead of a few "
-            "false ones scattered through an otherwise hold-free test.",
+            L("hold_at_peak"), value=True,
+            help=L("hold_at_peak_help"),
         )
         gauge_confirmed = st.checkbox(
-            "Gauge length confirmed",
-            help="Check this only once someone has verified the displacement "
-            "channel's extensometer spans exactly this specimen's measured "
-            "thickness h0, not just that h0 gives a plausible modulus. Left "
-            "unchecked, strain and modulus stay provisional and carry a "
-            "critical warning.",
+            L("gauge_confirmed"),
+            help=L("gauge_confirmed_help"),
         )
 
     if uploaded and _looks_like_a_filename(material, uploaded):
-        st.warning(
-            f"'{material}' looks like the export's file name, not a material "
-            f"code. A short code (e.g. 'T050LR1') reads far better as a "
-            f"Materials card and in Compare's legend - the file name itself "
-            f"is already kept, in full, on every specimen record. This can "
-            f"still be fixed after Commit, from the Materials tab."
-        )
+        st.warning(L("filename_warning", material=material))
 
-    per_file_material = _per_file_materials(ws, uploaded, material) if uploaded else {}
+    per_file_material = _per_file_materials(ws, uploaded, material, L) if uploaded else {}
 
     st.divider()
-    _step(2, "Thresholds", "Optional.")
+    _step(2, L("step2"), L("optional"))
     cfg = config_form(detect_holds)
 
     if not uploaded:
@@ -400,18 +518,14 @@ def render(ws: Workspace) -> None:
         # was cleared): no reason to keep a copy of files that are no
         # longer in the form around on disk.
         _cleanup_upload_dir()
-        st.info("Upload one or more exports above to preview them.")
+        st.info(L("no_upload_info"))
         return
     paths = _save_uploads(uploaded)
     material_groups = _resolve_material_groups(paths, material.strip(), per_file_material)
 
     st.divider()
-    _step(
-        3, "Preview",
-        "Check the files parse, then open the full interactive dashboard "
-        "in a new tab, before anything is written.",
-    )
-    if st.button("Run preview", icon=":material/visibility:"):
+    _step(3, L("step3"), L("step3_sub"))
+    if st.button(L("run_preview"), icon=":material/visibility:"):
         # Invert material_groups (material -> its paths) back into path ->
         # material, so a multi-material batch previews with each specimen
         # correctly labelled instead of all of them under one material --
@@ -436,7 +550,7 @@ def render(ws: Workspace) -> None:
             )
             return rows_, dashboard_
 
-        rows, dashboard_state = with_utm_animation("Analysing…", _preview_and_build_dashboard)
+        rows, dashboard_state = with_utm_animation(L("analysing"), _preview_and_build_dashboard)
         st.session_state["ingest_preview_rows"] = rows
         st.session_state["ingest_preview_dashboard"] = dashboard_state
 
@@ -445,34 +559,24 @@ def render(ws: Workspace) -> None:
         _render_preview_errors(rows)
     dashboard_state = st.session_state.get("ingest_preview_dashboard")
     if dashboard_state:
-        _render_dashboard_preview(dashboard_state)
+        _render_dashboard_preview(dashboard_state, L)
 
     st.divider()
-    _step(4, "Commit", "Archives the raw file and writes the record - re-running the same file is a no-op.")
+    _step(4, L("step4"), L("step4_sub"))
     c1, c2 = st.columns(2)
     with c1:
         archive_originals = st.checkbox(
-            "Archive a copy of the uploaded file", value=True,
-            help="Copies the export into Raw exports/ before analysis, so a "
-            "result can always be traced back to the exact bytes that "
-            "produced it. Uncheck if you already keep your own copies "
-            "elsewhere and do not want a second one on disk. The file's "
-            "SHA-256 is still recorded either way, which is what a "
-            "re-ingest of the same file is detected from.",
+            L("archive_checkbox"), value=True,
+            help=L("archive_help"),
         )
     with c2:
         write_reports = st.checkbox(
-            "Write per-run Excel/CSV/HTML", value=True,
-            help="Writes a per-specimen and per-run Excel workbook, CSV and "
-            "HTML report alongside the JSON record. Uncheck if you only "
-            "open the combined report in reports/<material> (see Config) "
-            "and find these per-run copies redundant. The JSON record "
-            "and curve cache, which the combined report and every chart "
-            "are rebuilt from, are always written either way.",
+            L("write_reports_checkbox"), value=True,
+            help=L("write_reports_help"),
         )
-    if st.button("Commit to workspace", type="primary", icon=":material/save:"):
+    if st.button(L("commit_button"), type="primary", icon=":material/save:"):
         if any(not mat for mat in material_groups):
-            st.error("Pick or type a material name above before committing.")
+            st.error(L("commit_error_no_material"))
         else:
             # One ingest() call PER MATERIAL GROUP, not one call for the
             # whole upload -- ingest() only ever accepts a single material
@@ -482,7 +586,7 @@ def render(ws: Workspace) -> None:
             # With no split, material_groups is {material: paths} -- one
             # group, one call, identical to before.
             results = with_utm_animation(
-                "Committing…",
+                L("committing"),
                 lambda: [
                     ingest(
                         group_paths, ws, material=mat, cfg=cfg,
@@ -503,15 +607,8 @@ def render(ws: Workspace) -> None:
             # iterates that same mapping once, in order.
             for mat, result in zip(material_groups.keys(), results):
                 if result.material != mat:
-                    st.info(
-                        f"'{mat}' matched to the existing material "
-                        f"'{result.material}' instead of creating a "
-                        f"near-duplicate."
-                    )
-                st.success(
-                    f"Ingested {len(result.specimens)} specimen(s) of "
-                    f"'{result.material}' into {result.run_dir}"
-                )
+                    st.info(L("matched_existing", typed=mat, actual=result.material))
+                st.success(L("ingested_success", n=len(result.specimens), material=result.material, run_dir=result.run_dir))
                 st.code(result.summary())
                 for name, why in result.skipped:
-                    st.warning(f"Skipped {name}: {why}")
+                    st.warning(L("skipped", name=name, why=why))

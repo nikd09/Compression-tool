@@ -19,18 +19,91 @@ from ..material_admin import delete_material, rename_material
 from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
-from .common import inject_dashboard_lang
+from .common import dashboard_lang, inject_dashboard_lang
+
+# EN/DE strings for this page's own chrome -- not the embedded dashboard
+# (results_dashboard.html), which is already translated on its own and
+# just gets its starting language seeded here via inject_dashboard_lang().
+_T = {
+    "header": {"en": "Materials", "de": "Materialien"},
+    "search_placeholder": {"en": "Search materials…", "de": "Materialien durchsuchen…"},
+    "caption": {"en": "Every material in this workspace, at a glance. Click one to open its full dashboard.",
+        "de": "Jedes Material in diesem Workspace auf einen Blick. Anklicken, um sein vollständiges Dashboard zu öffnen."},
+    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
+        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Ingest“ eine Datei hinzufügen."},
+    "no_match": {"en": "No materials match “{query}”.", "de": "Keine Materialien passen zu „{query}“."},
+    "specimens": {"en": "Specimens", "de": "Proben"},
+    "runs": {"en": "Runs", "de": "Läufe"},
+    "peak_stress": {"en": "Peak stress", "de": "Spitzenspannung"},
+    "thickness": {"en": "Thickness (h0)", "de": "Dicke (h0)"},
+    "rename": {"en": "Rename", "de": "Umbenennen"},
+    "delete": {"en": "Delete", "de": "Löschen"},
+    "download_dashboard": {"en": "Download dashboard", "de": "Dashboard herunterladen"},
+    "dashboard_not_built": {"en": "Dashboard not built yet - click the material name above to open (and generate) it first.",
+        "de": "Dashboard noch nicht erstellt - zuerst oben auf den Materialnamen klicken, um es zu öffnen (und zu erzeugen)."},
+    "not_admin": {"en": "Only an admin can do this - see the \"Admin access\" card on the "
+        "Config tab to see who is listed, or to claim admin access yourself if nobody has yet.",
+        "de": "Das kann nur ein Admin. Auf der Karte „Admin-Zugriff“ im Config-Tab steht, wer "
+        "gelistet ist, oder dort selbst Admin-Zugriff beanspruchen, falls es noch niemand hat."},
+    "rename_dialog_title": {"en": "Rename material", "de": "Material umbenennen"},
+    "rename_dialog_caption": {
+        "en": "Renames \"{material}\" everywhere it appears: every run folder, "
+              "specimen record, curve cache and report. Materials, Compare and "
+              "Results all pick up the new name immediately - nothing needs "
+              "re-ingesting.",
+        "de": "Benennt „{material}“ überall um, wo es vorkommt: jeden Lauf-Ordner, "
+              "jeden Probendatensatz, jeden Kurven-Cache und jeden Bericht. "
+              "Materials, Compare und Results übernehmen den neuen Namen sofort - "
+              "nichts muss neu eingelesen werden."},
+    "new_name": {"en": "New name", "de": "Neuer Name"},
+    "name_empty": {"en": "New name cannot be empty.", "de": "Der neue Name darf nicht leer sein."},
+    "name_unchanged": {"en": "That's already the current name.", "de": "Das ist bereits der aktuelle Name."},
+    "renamed_partial": {
+        "en": "Renamed to '{material}', but {n} run folder(s) could not be moved "
+              "on disk (records were still updated, so they show correctly here "
+              "- only the folder name on disk still reads old): {failed}",
+        "de": "Umbenannt in „{material}“, aber {n} Lauf-Ordner konnten auf der "
+              "Festplatte nicht verschoben werden (die Datensätze wurden trotzdem "
+              "aktualisiert und werden hier korrekt angezeigt - nur der "
+              "Ordnername auf der Festplatte lautet noch alt): {failed}"},
+    "renamed": {"en": "Renamed to '{material}'.", "de": "Umbenannt in „{material}“."},
+    "cancel": {"en": "Cancel", "de": "Abbrechen"},
+    "delete_dialog_title": {"en": "Delete material", "de": "Material löschen"},
+    "delete_dialog_error": {
+        "en": "This permanently deletes every run, specimen record, curve cache "
+              "and report for \"{material}\". This cannot be undone from inside the app.",
+        "de": "Dies löscht dauerhaft jeden Lauf, jeden Probendatensatz, jeden "
+              "Kurven-Cache und jeden Bericht für „{material}“. Das kann in der "
+              "App nicht rückgängig gemacht werden."},
+    "delete_raw_checkbox": {"en": "Also delete its archived raw exports", "de": "Auch die archivierten Roh-Exporte löschen"},
+    "delete_raw_help": {
+        "en": "Off by default: a raw export is content-addressed and can be "
+              "shared with another material's specimens - the same file ingested "
+              "a second time under a different name reuses the identical archived "
+              "copy. Left unchecked, only this material's own records, curve "
+              "caches and reports are removed; a raw file still used elsewhere is "
+              "never deleted even if this is checked.",
+        "de": "Standardmäßig aus: ein Roh-Export ist inhaltsadressiert und kann "
+              "mit Proben eines anderen Materials geteilt werden - dieselbe Datei, "
+              "ein zweites Mal unter anderem Namen eingelesen, verwendet dieselbe "
+              "archivierte Kopie erneut. Unmarkiert werden nur die eigenen "
+              "Datensätze, Kurven-Caches und Berichte dieses Materials entfernt; "
+              "eine anderswo noch verwendete Rohdatei wird nie gelöscht, selbst "
+              "wenn dies markiert ist."},
+    "confirm_type": {"en": "Type \"{material}\" to confirm", "de": "„{material}“ eingeben, um zu bestätigen"},
+    "delete_permanently": {"en": "Delete permanently", "de": "Dauerhaft löschen"},
+    "deleted_toast": {"en": "Deleted {specimens} specimen(s) across {runs} run(s).",
+        "de": "{specimens} Probe(n) über {runs} Lauf/Läufe gelöscht."},
+    "back_to_materials": {"en": "← Back to Materials", "de": "← Zurück zu Materialien"},
+    "no_dashboard": {"en": "No dashboard could be built for {material!r}: it may have no indexed specimens.",
+        "de": "Für {material!r} konnte kein Dashboard erstellt werden: es hat möglicherweise keine indizierten Proben."},
+}
 
 # Rename/Delete are visible to every visitor, not hidden for a non-admin --
 # someone who cannot use them should still be able to see the option exists
 # and find out why it is blocked (this message, shown on click), rather than
 # a feature that only admins even know is there. permissions.is_admin() is
 # checked at CLICK time instead, inside render() below.
-_NOT_ADMIN_MESSAGE = (
-    "Only an admin can do this - see the \"Admin access\" card on the "
-    "Config tab to see who is listed, or to claim admin access yourself "
-    "if nobody has yet."
-)
 
 # Scoped via st.container(key=...) -- a documented, stable Streamlit hook for
 # exactly this (style one specific container's contents without a fragile
@@ -133,31 +206,37 @@ _SESSION_KEY = "materials_open"
 
 
 def render(ws: Workspace) -> None:
+    lang = dashboard_lang()
+
+    def L(key: str, **kw) -> str:
+        s = _T[key][lang]
+        return s.format(**kw) if kw else s
+
     selected = st.session_state.get(_SESSION_KEY)
     if selected:
-        _render_material_dashboard(ws, selected)
+        _render_material_dashboard(ws, selected, L)
         return
 
     head_l, head_r = st.columns([3.2, 1.3])
     with head_l:
-        st.header("Materials")
+        st.header(L("header"))
     with head_r:
         st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
         query = st.text_input(
-            "Search", placeholder="Search materials…", label_visibility="collapsed",
+            "Search", placeholder=L("search_placeholder"), label_visibility="collapsed",
         )
-    st.caption("Every material in this workspace, at a glance. Click one to open its full dashboard.")
+    st.caption(L("caption"))
 
     rows = material_rows(ws)
     if not rows:
-        st.info("Nothing ingested into this workspace yet - use Ingest first.")
+        st.info(L("no_data"))
         return
 
     if query.strip():
         q = query.strip().casefold()
         rows = [r for r in rows if q in r["material"].casefold()]
     if not rows:
-        st.info(f"No materials match “{query}”.")
+        st.info(L("no_match", query=query))
         return
 
     can_manage = permissions.is_admin(ws)
@@ -201,15 +280,15 @@ def render(ws: Workspace) -> None:
                     # metric columns side by side without truncating values
                     # like "0.471 mm".
                     top_l, top_r = st.columns(2)
-                    top_l.metric("Specimens", row["specimens"])
-                    top_r.metric("Runs", row["runs"])
+                    top_l.metric(L("specimens"), row["specimens"])
+                    top_r.metric(L("runs"), row["runs"])
                     bot_l, bot_r = st.columns(2)
                     bot_l.metric(
-                        "Peak stress",
+                        L("peak_stress"),
                         f"{row['meanPeak']:.0f} MPa" if row["meanPeak"] is not None else "-",
                     )
                     bot_r.metric(
-                        "Thickness (h0)",
+                        L("thickness"),
                         f"{row['meanH0']:.3f} mm" if row["meanH0"] is not None else "-",
                     )
                 # Stacked full-width, not side by side: at four-per-row
@@ -217,21 +296,21 @@ def render(ws: Workspace) -> None:
                 # onto two lines each (confirmed live) -- one button per
                 # row never wraps regardless of how narrow the card gets.
                 if st.button(
-                    "Rename", key=f"rename_material_{row['slug']}",
+                    L("rename"), key=f"rename_material_{row['slug']}",
                     icon=":material/edit:", use_container_width=True,
                 ):
                     if can_manage:
-                        _rename_dialog(ws, row["material"])
+                        st.dialog(L("rename_dialog_title"))(_rename_dialog_body)(ws, row["material"], L)
                     else:
-                        st.error(_NOT_ADMIN_MESSAGE)
+                        st.error(L("not_admin"))
                 if st.button(
-                    "Delete", key=f"delete_material_{row['slug']}",
+                    L("delete"), key=f"delete_material_{row['slug']}",
                     icon=":material/delete:", use_container_width=True,
                 ):
                     if can_manage:
-                        _delete_dialog(ws, row["material"])
+                        st.dialog(L("delete_dialog_title"))(_delete_dialog_body)(ws, row["material"], L)
                     else:
-                        st.error(_NOT_ADMIN_MESSAGE)
+                        st.error(L("not_admin"))
 
                 # Downloading a local copy of the dashboard needs no admin
                 # access -- it is a read, not a write, the same as opening
@@ -244,16 +323,13 @@ def render(ws: Workspace) -> None:
                 dashboard_path = ws.root / "reports" / f"{slugify(row['material'])}.html"
                 if dashboard_path.exists():
                     st.download_button(
-                        "Download dashboard", data=dashboard_path.read_bytes(),
+                        L("download_dashboard"), data=dashboard_path.read_bytes(),
                         file_name=f"{row['material']}.html", mime="text/html",
                         key=f"download_material_{row['slug']}",
                         icon=":material/download:", use_container_width=True,
                     )
                 else:
-                    st.caption(
-                        "Dashboard not built yet - click the material name "
-                        "above to open (and generate) it first."
-                    )
+                    st.caption(L("dashboard_not_built"))
     if clicked_material:
         st.session_state[_SESSION_KEY] = clicked_material
         # Plain state, not a widget key -- results_view.py's Material
@@ -265,22 +341,16 @@ def render(ws: Workspace) -> None:
         st.rerun()
 
 
-@st.dialog("Rename material")
-def _rename_dialog(ws: Workspace, material: str) -> None:
-    st.caption(
-        f"Renames \"{material}\" everywhere it appears: every run folder, "
-        f"specimen record, curve cache and report. Materials, Compare and "
-        f"Results all pick up the new name immediately - nothing needs "
-        f"re-ingesting."
-    )
-    new_name = st.text_input("New name", value=material)
+def _rename_dialog_body(ws: Workspace, material: str, L) -> None:
+    st.caption(L("rename_dialog_caption", material=material))
+    new_name = st.text_input(L("new_name"), value=material)
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("Rename", type="primary", use_container_width=True):
+        if st.button(L("rename"), type="primary", use_container_width=True):
             if not new_name.strip():
-                st.error("New name cannot be empty.")
+                st.error(L("name_empty"))
             elif new_name.strip() == material:
-                st.info("That's already the current name.")
+                st.info(L("name_unchanged"))
             else:
                 try:
                     result = rename_material(ws, material, new_name.strip())
@@ -294,43 +364,28 @@ def _rename_dialog(ws: Workspace, material: str) -> None:
                         # ever seen -- a toast is the one Streamlit element
                         # that survives past the rerun that triggers it.
                         st.toast(
-                            f"Renamed to '{result['material']}', but "
-                            f"{len(result['failed'])} run folder(s) could not "
-                            f"be moved on disk (records were still updated, "
-                            f"so they show correctly here - only the folder "
-                            f"name on disk still reads old): "
-                            + ", ".join(result["failed"]),
+                            L(
+                                "renamed_partial", material=result["material"],
+                                n=len(result["failed"]), failed=", ".join(result["failed"]),
+                            ),
                             icon=":material/warning:",
                         )
                     else:
-                        st.toast(f"Renamed to '{result['material']}'.", icon=":material/check:")
+                        st.toast(L("renamed", material=result["material"]), icon=":material/check:")
                     st.rerun()
     with c2:
-        if st.button("Cancel", use_container_width=True):
+        if st.button(L("cancel"), use_container_width=True):
             st.rerun()
 
 
-@st.dialog("Delete material")
-def _delete_dialog(ws: Workspace, material: str) -> None:
-    st.error(
-        f"This permanently deletes every run, specimen record, curve cache "
-        f"and report for \"{material}\". This cannot be undone from inside "
-        f"the app."
-    )
-    delete_raw = st.checkbox(
-        "Also delete its archived raw exports",
-        help="Off by default: a raw export is content-addressed and can be "
-        "shared with another material's specimens - the same file ingested "
-        "a second time under a different name reuses the identical archived "
-        "copy. Left unchecked, only this material's own records, curve "
-        "caches and reports are removed; a raw file still used elsewhere is "
-        "never deleted even if this is checked.",
-    )
-    confirm = st.text_input(f'Type "{material}" to confirm')
+def _delete_dialog_body(ws: Workspace, material: str, L) -> None:
+    st.error(L("delete_dialog_error", material=material))
+    delete_raw = st.checkbox(L("delete_raw_checkbox"), help=L("delete_raw_help"))
+    confirm = st.text_input(L("confirm_type", material=material))
     c1, c2 = st.columns(2)
     with c1:
         if st.button(
-            "Delete permanently", type="primary", use_container_width=True,
+            L("delete_permanently"), type="primary", use_container_width=True,
             disabled=(confirm != material),
         ):
             try:
@@ -340,18 +395,17 @@ def _delete_dialog(ws: Workspace, material: str) -> None:
             else:
                 st.session_state.pop(_SESSION_KEY, None)
                 st.toast(
-                    f"Deleted {result['removed_specimens']} specimen(s) "
-                    f"across {result['removed_run_dirs']} run(s).",
+                    L("deleted_toast", specimens=result["removed_specimens"], runs=result["removed_run_dirs"]),
                     icon=":material/check:",
                 )
                 st.rerun()
     with c2:
-        if st.button("Cancel", use_container_width=True):
+        if st.button(L("cancel"), use_container_width=True):
             st.rerun()
 
 
-def _render_material_dashboard(ws: Workspace, material: str) -> None:
-    if st.button("← Back to Materials", icon=":material/arrow_back:"):
+def _render_material_dashboard(ws: Workspace, material: str, L) -> None:
+    if st.button(L("back_to_materials"), icon=":material/arrow_back:"):
         del st.session_state[_SESSION_KEY]
         st.rerun()
 
@@ -364,7 +418,7 @@ def _render_material_dashboard(ws: Workspace, material: str) -> None:
         exported = export_material(ws, material)
         html_path = exported["html"]
     if not html_path or not html_path.exists():
-        st.warning(f"No dashboard could be built for {material!r}: it may have no indexed specimens.")
+        st.warning(L("no_dashboard", material=material))
         return
 
     st.subheader(material)

@@ -62,7 +62,7 @@ def test_a_different_material_is_not_pulled_in(workspace, series_file, single_fi
 def test_no_specimens_returns_none_rather_than_an_empty_file(workspace):
     ws = Workspace.at(workspace)
     result = export_material(ws, "NothingIngestedYet")
-    assert result == {"xlsx": None, "html": None}
+    assert result == {"xlsx": None, "xlsx_de": None, "html": None}
 
 
 def test_html_title_names_the_material_not_one_specimens_file(workspace, series_file):

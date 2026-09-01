@@ -32,21 +32,29 @@ _TEMPLATE_PATH = (
 
 
 def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
-    """(Re)write the combined workbook and dashboard for `material`.
+    """(Re)write the combined workbook(s) and dashboard for `material`.
 
-    Returns {"xlsx": Path, "html": Path}, or {"xlsx": None, "html": None} if
-    the material has no indexed specimens -- nothing to write. Overwrites
-    whatever was there before; callers never need to clean up a stale copy.
+    Returns {"xlsx": Path, "xlsx_de": Path, "html": Path}, or every value
+    None if the material has no indexed specimens -- nothing to write.
+    Overwrites whatever was there before; callers never need to clean up a
+    stale copy.
+
+    Two workbooks, not one: Excel has no runtime to switch language inside
+    a file the way the HTML dashboard's own EN/DE buttons do (see
+    excel_export.write_workbook's own docstring), so German gets its own
+    <material>_de.xlsx built from the identical payloads -- same numbers,
+    translated headers/labels/descriptions. The HTML dashboard stays a
+    single file; it already carries both languages via its in-page toggle.
     """
     if not ws.db_path.exists():
-        return {"xlsx": None, "html": None}
+        return {"xlsx": None, "xlsx_de": None, "html": None}
     conn = knowledge_base.connect(ws.db_path)
     try:
         specimens = knowledge_base.list_specimens(conn, material)
     finally:
         conn.close()
     if specimens.empty:
-        return {"xlsx": None, "html": None}
+        return {"xlsx": None, "xlsx_de": None, "html": None}
 
     # Oldest first, so a capped dashboard slice (below) keeps the newest runs
     # rather than whichever sorted first.
@@ -65,7 +73,7 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
         except (FileNotFoundError, OSError):
             continue
     if not payloads:
-        return {"xlsx": None, "html": None}
+        return {"xlsx": None, "xlsx_de": None, "html": None}
 
     out_dir = ws.root / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +81,8 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
 
     # No colour-palette limit on a table -- every specimen ever ingested for
     # this material goes in the workbook, no matter how many.
-    xlsx_path = excel_export.write_workbook(payloads, out_dir / f"{stem}.xlsx")
+    xlsx_path = excel_export.write_workbook(payloads, out_dir / f"{stem}.xlsx", lang="en")
+    xlsx_de_path = excel_export.write_workbook(payloads, out_dir / f"{stem}_de.xlsx", lang="de")
 
     dash_payloads, dash_json_paths = payloads, json_paths
     truncated = len(payloads) > MAX_SPECIMENS
@@ -114,4 +123,4 @@ def export_material(ws: Workspace, material: str) -> dict[str, Optional[Path]]:
     tmp.write_text(page, encoding="utf-8")
     os.replace(tmp, html_path)
 
-    return {"xlsx": xlsx_path, "html": html_path}
+    return {"xlsx": xlsx_path, "xlsx_de": xlsx_de_path, "html": html_path}

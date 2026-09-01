@@ -54,6 +54,14 @@ class Warning_:
     code: str
     severity: str
     message: str
+    # German counterpart, computed alongside `message` from the SAME
+    # interpolated values -- not a runtime translation, so no consumer needs
+    # the original numbers again to build it. Additive column, no schema
+    # version bump (see schema.py's own rule): an older record has no
+    # message_de and stays English-only in German mode until re-analysed,
+    # the same "record is what it was ingested with" trade-off Re-analyse
+    # already exists to fix for everything else in a stored record.
+    message_de: str
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -114,6 +122,16 @@ def _first_cycle_at_risk(
             "actually accepted it by; a small change in the raw signal or the "
             "config could merge or drop it."
         ),
+        message_de=(
+            f"Der Referenzzyklus (kleinste Spitzenspannung, {ref_peak:.2f} MPa -- "
+            "wird zur automatischen Bestimmung des Fensters für die gemeinsame "
+            "Steifigkeit verwendet) wird nicht mehr gefunden, wenn unload_frac um "
+            f"{(1 - FIRST_CYCLE_MARGIN) * 100:.0f}% verschärft wird "
+            f"({cfg.unload_frac:g} -> {tighter.unload_frac:g}). Er liegt nah an "
+            "der Grenze, bei der die Segmentierung ihn gerade noch akzeptiert "
+            "hat; eine kleine Änderung im Rohsignal oder in der Konfiguration "
+            "könnte ihn verschmelzen oder verwerfen."
+        ),
     )
 
 
@@ -147,6 +165,15 @@ def _residual_unreadable_cycles(df: pd.DataFrame) -> Optional[Warning_]:
             "Usually means the cycle's own peak is too close to the residual "
             "reference stress -- lower residual_stress_frac, or note that this "
             "cycle cannot report a permanent-set figure."
+        ),
+        message_de=(
+            f"Zyklus/Zyklen {which} konnten die Restspannungsreferenz auf dem "
+            "Belastungs- und/oder Entlastungsast nicht lesen, daher ist "
+            "PermDef_incremental_mm (und PermDef_cumulative_mm ab diesem Punkt) "
+            "für diesen Zyklus NaN. Meist bedeutet das, dass die eigene "
+            "Spitzenspannung des Zyklus zu nah an der Restspannungsreferenz "
+            "liegt -- residual_stress_frac verringern, oder vermerken, dass "
+            "dieser Zyklus keinen Wert für die bleibende Verformung liefern kann."
         ),
     )
 
@@ -183,6 +210,15 @@ def _residual_reference_not_low(
             "for that cycle specifically -- the assumption ResidualDisp_mm's "
             "reading depends on. Treat that cycle's permanent-deformation figures "
             "as less certain than the others."
+        ),
+        message_de=(
+            f"Zyklus/Zyklen {which}: die Restspannungsreferenz "
+            f"({residual_stress:.2f} MPa) erreicht das {RESIDUAL_HIGH_FRAC:g}-fache "
+            "oder mehr der eigenen Spitzenspannung dieses Zyklus, ist also für "
+            "diesen Zyklus speziell keine NIEDRIGE Referenz mehr -- die Annahme, "
+            "auf der die Ablesung von ResidualDisp_mm beruht. Die Werte zur "
+            "bleibenden Verformung dieses Zyklus als weniger sicher betrachten "
+            "als die der anderen."
         ),
     )
 
@@ -242,6 +278,17 @@ def _cycles_discarded(test: TestData, cfg: Config) -> Optional[Warning_]:
             "finding contact and is correctly excluded; anything else may be a "
             "stage you are losing."
         ),
+        message_de=(
+            f"{len(dropped)} Lastlauf/-läufe, die sich sauber von ihren eigenen "
+            f"Nachbarn getrennt hatten, wurden durch major_cycle_frac "
+            f"({cfg.major_cycle_frac:g} x der globalen Spitze) verworfen -- "
+            "inzwischen eine Sicherheitsuntergrenze statt des primären "
+            f"Segmentierungskriteriums -- siehe Config: {detail}. "
+            "Ein Lauf mit niedriger Spannung am Anfang der Aufzeichnung ist "
+            "normalerweise die Kontaktfindung der Maschine und wird zu Recht "
+            "ausgeschlossen; alles andere könnte eine Stufe sein, die verloren "
+            "geht."
+        ),
     )
 
 
@@ -265,6 +312,14 @@ def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
             "them as a raw total -- a longer dwell accumulates more at identical "
             "material behaviour. Compare the per-1000-samples column instead, "
             "and note that it is a normalisation, not a creep rate."
+        ),
+        message_de=(
+            f"Die Haltedauer variiert zwischen {lo:.0f} und {hi:.0f} Messpunkten "
+            f"({hi / lo:.1f}-fach) über die Zyklen, daher ist der Haltewegzuwachs "
+            "zwischen ihnen als Rohsumme NICHT vergleichbar -- eine längere "
+            "Haltezeit sammelt bei identischem Materialverhalten mehr an. "
+            "Stattdessen die Spalte je 1000 Messpunkte vergleichen, und "
+            "beachten, dass dies eine Normierung ist, keine Kriechrate."
         ),
     )
 
@@ -313,6 +368,20 @@ def _possible_preload_cycle(df: pd.DataFrame, cfg: Config) -> Optional[Warning_]
             "the test protocol before counting it as a numbered stage in a "
             "report."
         ),
+        message_de=(
+            f"Zyklus/Zyklen {which} haben kein erkanntes Halten, während "
+            f"{int(held.sum())} von {len(df)} Zyklen in dieser Prüfung ein "
+            "Halten aufweisen. Ein sauberes, vollständig getrenntes Be-/"
+            "Entlastungsereignis ohne programmiertes Halten in einer sonst "
+            "gehaltenen Prüfung ist am ehesten der Vorlast-/Setzschritt der "
+            "Maschine und keine reale programmierte Stufe -- in den Daten "
+            "belassen, weil es echtes Signal und kein Rauschen ist, aber aus "
+            "demselben Grund von der Auswahl als Referenzzyklus für das "
+            "automatisch bestimmte Fenster der gemeinsamen Steifigkeit "
+            "ausgeschlossen (siehe stiffness_common_lo_mpa). Vor der Zählung "
+            "als nummerierte Stufe in einem Bericht gegen das Prüfprotokoll "
+            "prüfen."
+        ),
     )
 
 
@@ -326,6 +395,11 @@ def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional
                 "No specimen height h0 was available, so strain-normalised "
                 "columns are omitted rather than estimated. Supply h0 to enable "
                 "them."
+            ),
+            message_de=(
+                "Keine Probendicke h0 verfügbar, daher werden dehnungsnormierte "
+                "Spalten weggelassen statt geschätzt. h0 angeben, um sie zu "
+                "aktivieren."
             ),
         )
     if confirmed:
@@ -348,6 +422,23 @@ def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional
             "stress-based metrics remain correct. Confirm the fixturing with "
             "the person who ran the test, then re-ingest with "
             "gauge_length_confirmed=True."
+        ),
+        message_de=(
+            f"Dehnung und jeder daraus abgeleitete Modul sind VORLÄUFIG: es "
+            f"wurde nicht bestätigt, dass '{channel}' ausschließlich die "
+            f"{test.h0_mm:g} mm der Probe erfasst. Das ist NICHT dieselbe "
+            "Frage wie welches h0 zum Teilen verwendet wird -- eine "
+            "Plausibilitätsprüfung des Moduls kann ein falsches h0 "
+            "ausschließen (z. B. eine Referenzlänge am Querhaupt, die einen "
+            "unmöglichen Modul ergäbe), kann aber nicht bestätigen, was der "
+            "Extensometer tatsächlich physisch erfasst; ein Kanal, der "
+            "zusätzliches Material überbrückt, würde trotzdem einen plausibel "
+            "aussehenden, aber falschen Modul liefern. Überbrückt er "
+            "zusätzliches Material, sind jeder Dehnungsprozentsatz und jeder "
+            "Modul um dieses Verhältnis falsch, während alle spannungsbasierten "
+            "Kennzahlen korrekt bleiben. Die Einspannung mit der Person klären, "
+            "die die Prüfung durchgeführt hat, und anschließend mit "
+            "gauge_length_confirmed=True erneut einlesen."
         ),
     )
 

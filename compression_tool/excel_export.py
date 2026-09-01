@@ -29,7 +29,13 @@ from .schema import (
     SPECIMEN_FIELDS,
     STIFFNESS_QUALITY,
     Column,
+    Field,
+    column_description_de,
+    column_header_de,
+    column_label_de,
     hold_disp_per_1000_samples,
+    specimen_description_de,
+    specimen_label_de,
     stiffness_quality,
     unload_yield_frac,
     user_facing_cycle_columns,
@@ -37,6 +43,105 @@ from .schema import (
 
 MAX_COL_WIDTH = 46
 MIN_COL_WIDTH = 9
+
+
+# ----------------------------------------------------------------------------
+# Language
+# ----------------------------------------------------------------------------
+# German is a SEPARATE workbook (material_export.py writes both
+# <material>.xlsx and <material>_de.xlsx from the same payloads), not a
+# runtime toggle inside one file -- Excel has no script runtime to switch
+# labels live the way results_dashboard.html's own EN/DE buttons do, so two
+# static files is the whole answer here. `lang` threads through every
+# function that touches a header/label/section string; the underlying
+# numbers are identical in both files, only the text around them changes.
+_EXCEL_T = {
+    "summary_sheet": {"en": "Summary", "de": "Zusammenfassung"},
+    "summary_title": {"en": "Compression test summary", "de": "Zusammenfassung des Druckversuchs"},
+    "field": {"en": "Field", "de": "Feld"},
+    "specimen_n": {"en": "Specimen {n}", "de": "Probe {n}"},
+    "test_summary": {"en": "Test summary", "de": "Zusammenfassung der Prüfung"},
+    "first_cycle_peak": {"en": "First cycle peak stress (MPa)", "de": "Spitzenspannung erster Zyklus (MPa)"},
+    "last_cycle_peak": {"en": "Last cycle peak stress (MPa)", "de": "Spitzenspannung letzter Zyklus (MPa)"},
+    "cycles_with_hold": {"en": "Cycles with a detected hold", "de": "Zyklen mit erkanntem Halten"},
+    "cycles_of": {"en": "{held} of {total}", "de": "{held} von {total}"},
+    "total_permdef_mm": {"en": "Total permanent deformation (mm)", "de": "Gesamte bleibende Verformung (mm)"},
+    "total_permdef_pct": {"en": "Total permanent deformation (%)", "de": "Gesamte bleibende Verformung (%)"},
+    "mean_hyst_multistage": {"en": "Mean hysteresis loss across cycles (-)", "de": "Mittlerer Hystereseverlust über die Zyklen (-)"},
+    "mean_hyst_multistage_note": {
+        "en": "  └ not a single physical value: multi-stage cycles span "
+              "different stress levels; compare per-cycle instead",
+        "de": "  └ kein einzelner physikalischer Wert: die Zyklen einer "
+              "mehrstufigen Prüfung umfassen unterschiedliche "
+              "Spannungsniveaus; stattdessen je Zyklus vergleichen"},
+    "mean_hyst": {"en": "Mean hysteresis loss (-)", "de": "Mittlerer Hystereseverlust (-)"},
+    "total_hold_disp": {"en": "Total hold displacement (mm)", "de": "Gesamter Haltewegzuwachs (mm)"},
+    "strain_basis": {"en": "Strain basis", "de": "Dehnungsbasis"},
+    "gauge_length_h0": {"en": "Gauge length h0 (mm)", "de": "Messlänge h0 (mm)"},
+    "measured_by_channel": {"en": "Measured by channel", "de": "Gemessen über Kanal"},
+    "gauge_length_confirmed": {"en": "Gauge length confirmed", "de": "Messlänge bestätigt"},
+    "strain_status": {"en": "Strain / modulus status", "de": "Status Dehnung / Modul"},
+    "validated": {"en": "validated", "de": "bestätigt"},
+    "provisional": {"en": "PROVISIONAL - gauge length unconfirmed", "de": "VORLÄUFIG - Messlänge nicht bestätigt"},
+    "read_before_quoting": {"en": "Read this before quoting the numbers", "de": "Vor dem Zitieren der Zahlen lesen"},
+    "specimen": {"en": "Specimen", "de": "Probe"},
+    "cycles_sheet": {"en": "Cycles", "de": "Zyklen"},
+    "dictionary_sheet": {"en": "Data dictionary", "de": "Datenwörterbuch"},
+    "dictionary_title": {"en": "What each column means", "de": "Was jede Spalte bedeutet"},
+    "column": {"en": "Column", "de": "Spalte"},
+    "unit": {"en": "Unit", "de": "Einheit"},
+    "definition": {"en": "Definition", "de": "Definition"},
+    "per_cycle_columns": {"en": "Per-cycle columns", "de": "Spalten je Zyklus"},
+    "summary_fields": {"en": "Summary fields", "de": "Felder der Zusammenfassung"},
+    "config_sheet": {"en": "Config", "de": "Konfiguration"},
+    "config_title": {"en": "Analysis settings used", "de": "Verwendete Analyseeinstellungen"},
+    "setting": {"en": "Setting", "de": "Einstellung"},
+    "value": {"en": "Value", "de": "Wert"},
+    "auto": {"en": "auto", "de": "automatisch"},
+    "differing_settings_warning": {
+        "en": "Warning: specimens in this workbook were analysed with different settings.",
+        "de": "Achtung: Proben in dieser Arbeitsmappe wurden mit unterschiedlichen Einstellungen analysiert."},
+    "derived_reference_levels": {"en": "Derived reference levels", "de": "Abgeleitete Referenzwerte"},
+    "reference_stress_for": {"en": "{label}: reference stress (MPa)", "de": "{label}: Referenzspannung (MPa)"},
+    "statistics_sheet": {"en": "Statistics", "de": "Statistik"},
+    "cross_specimen_stats": {"en": "Cross-specimen statistics", "de": "Probenübergreifende Statistik"},
+    "n_specimens": {"en": "n = {n} specimens", "de": "n = {n} Proben"},
+    "col_cycle": {"en": "Cycle", "de": "Zyklus"},
+    "col_mean": {"en": "Mean", "de": "Mittelwert"},
+    "col_std": {"en": "Std dev", "de": "Standardabw."},
+    "col_cov": {"en": "CoV (%)", "de": "VK (%)"},
+}
+
+
+def _t(key: str, lang: str, **kw) -> str:
+    s = _EXCEL_T[key][lang]
+    return s.format(**kw) if kw else s
+
+
+def _col_label(col: Column, lang: str) -> str:
+    return column_label_de(col) if lang == "de" else col.label
+
+
+def _col_header(col: Column, lang: str) -> str:
+    return column_header_de(col) if lang == "de" else col.header
+
+
+def _col_desc(col: Column, lang: str) -> str:
+    return column_description_de(col) if lang == "de" else col.description
+
+
+def _field_label(field: Field, lang: str) -> str:
+    return specimen_label_de(field) if lang == "de" else field.label
+
+
+def _field_desc(field: Field, lang: str) -> str:
+    return specimen_description_de(field) if lang == "de" else field.description
+
+
+def _warning_message(w: dict, lang: str) -> str:
+    if lang == "de":
+        return w.get("message_de") or w["message"]
+    return w["message"]
 
 
 # ----------------------------------------------------------------------------
@@ -51,10 +156,10 @@ def _cell(value: Any) -> Any:
     return value
 
 
-def _width_for(col: Column, values: Sequence[Any]) -> float:
+def _width_for(label: str, values: Sequence[Any]) -> float:
     longest = max((len(str(_cell(v))) for v in values if v is not None), default=0)
     # Headers wrap over two lines, so half the header length is enough.
-    return max(MIN_COL_WIDTH, min(MAX_COL_WIDTH, max(longest + 2, len(col.label) / 2 + 4)))
+    return max(MIN_COL_WIDTH, min(MAX_COL_WIDTH, max(longest + 2, len(label) / 2 + 4)))
 
 
 def _write_value(sheet, row: int, col: int, value: Any, text_fmt, num_fmt) -> None:
@@ -96,7 +201,7 @@ def row_values(row: dict, cols: Sequence[Column]) -> list[Any]:
 # ----------------------------------------------------------------------------
 
 
-def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
+def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
     """Specimen identity and provenance, plus the few whole-test aggregates
     that answer 'what happened here' without opening the cycle table."""
     spec, analysis = payload.get("specimen", {}), payload.get("analysis", {})
@@ -109,7 +214,9 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
             value = merged[field.key]
             if field.key == "multi_stage":
                 value = bool(value)
-            pairs.append((field.header, value))
+            label = _field_label(field, lang)
+            header = f"{label} ({field.unit})" if field.unit else label
+            pairs.append((header, value))
 
     def last_present(key: str) -> Optional[float]:
         vals = [c.get(key) for c in cycles if c.get(key) is not None]
@@ -127,14 +234,14 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
     holds = sum(1 for c in cycles if c.get("HoldDetected"))
 
     pairs.append(("", ""))
-    pairs.append(("Test summary", ""))
+    pairs.append((_t("test_summary", lang), ""))
     if peaks:
-        pairs.append(("First cycle peak stress (MPa)", peaks[0]))
-        pairs.append(("Last cycle peak stress (MPa)", peaks[-1]))
-    pairs.append(("Cycles with a detected hold", f"{holds} of {len(cycles)}"))
-    pairs.append(("Total permanent deformation (mm)", last_present("PermDef_cumulative_mm")))
+        pairs.append((_t("first_cycle_peak", lang), peaks[0]))
+        pairs.append((_t("last_cycle_peak", lang), peaks[-1]))
+    pairs.append((_t("cycles_with_hold", lang), _t("cycles_of", lang, held=holds, total=len(cycles))))
+    pairs.append((_t("total_permdef_mm", lang), last_present("PermDef_cumulative_mm")))
     if analysis.get("has_strain"):
-        pairs.append(("Total permanent deformation (%)", last_present("PermDef_cumulative_pct")))
+        pairs.append((_t("total_permdef_pct", lang), last_present("PermDef_cumulative_pct")))
 
     # Multi-stage cycles span different stress levels, and hysteresis loss is
     # not flat across a stress range (it climbed from 0.55 to 0.93 across the
@@ -143,28 +250,24 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
     # rather than let it read as a single material constant.
     if bool(analysis.get("multi_stage")):
         pairs.append((
-            "Mean hysteresis loss across cycles (-)",
+            _t("mean_hyst_multistage", lang),
             mean_present("HysteresisLoss_rel"),
         ))
-        pairs.append((
-            "  └ not a single physical value: multi-stage cycles span "
-            "different stress levels; compare per-cycle instead",
-            "",
-        ))
+        pairs.append((_t("mean_hyst_multistage_note", lang), ""))
     else:
-        pairs.append(("Mean hysteresis loss (-)", mean_present("HysteresisLoss_rel")))
-    pairs.append(("Total hold displacement (mm)", total_present("Creep_during_hold_mm")))
+        pairs.append((_t("mean_hyst", lang), mean_present("HysteresisLoss_rel")))
+    pairs.append((_t("total_hold_disp", lang), total_present("Creep_during_hold_mm")))
 
     basis = analysis.get("strain_basis") or {}
     if analysis.get("has_strain"):
         pairs.append(("", ""))
-        pairs.append(("Strain basis", ""))
-        pairs.append(("Gauge length h0 (mm)", basis.get("h0_mm")))
-        pairs.append(("Measured by channel", basis.get("displacement_channel")))
-        pairs.append(("Gauge length confirmed", bool(basis.get("gauge_length_confirmed"))))
+        pairs.append((_t("strain_basis", lang), ""))
+        pairs.append((_t("gauge_length_h0", lang), basis.get("h0_mm")))
+        pairs.append((_t("measured_by_channel", lang), basis.get("displacement_channel")))
+        pairs.append((_t("gauge_length_confirmed", lang), bool(basis.get("gauge_length_confirmed"))))
         pairs.append((
-            "Strain / modulus status",
-            "validated" if basis.get("strain_valid") else "PROVISIONAL - gauge length unconfirmed",
+            _t("strain_status", lang),
+            _t("validated", lang) if basis.get("strain_valid") else _t("provisional", lang),
         ))
     # Warnings are NOT appended here: with more than one specimen they would
     # repeat the same paragraph once per column. _write_summary() writes them
@@ -177,11 +280,18 @@ def summary_pairs(payload: dict) -> list[tuple[str, Any]]:
 # ----------------------------------------------------------------------------
 
 
-def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
+def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en") -> Path:
     """Write one workbook covering one or more specimens.
 
     Sheets: Summary, Cycles, Statistics (only with >1 specimen), Data
     dictionary, Config.
+
+    `lang`: "en" or "de". Every header/label/description in the workbook is
+    picked for that language (schema.py's *_de lookups and this module's own
+    _EXCEL_T); the underlying numbers never change. material_export.py calls
+    this twice, once per language, into two separate files -- Excel has no
+    runtime to switch language inside one workbook the way the HTML
+    dashboard's own buttons do.
 
     Written atomically (a `.partial` file, then `os.replace`): xlsxwriter
     writes progressively into the file as sheets are built, so a plain
@@ -225,29 +335,29 @@ def write_workbook(payloads: Sequence[dict], path: str | Path) -> Path:
             num_formats[fmt] = book.add_format({"num_format": fmt})
         return num_formats[fmt]
 
-    _write_summary(book, f, payloads)
-    _write_cycles(book, f, numfmt, payloads)
-    _write_statistics(book, f, numfmt, payloads)
-    _write_dictionary(book, f, payloads)
-    _write_config(book, f, payloads)
+    _write_summary(book, f, payloads, lang)
+    _write_cycles(book, f, numfmt, payloads, lang)
+    _write_statistics(book, f, numfmt, payloads, lang)
+    _write_dictionary(book, f, payloads, lang)
+    _write_config(book, f, payloads, lang)
 
     book.close()
     os.replace(tmp, path)
     return path
 
 
-def _write_summary(book, f, payloads: Sequence[dict]) -> None:
+def _write_summary(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
     """Fields down the page, specimens across it: readable for one specimen,
     directly comparable for the two that a series export produces."""
-    sheet = book.add_worksheet("Summary")
-    sheet.write(0, 0, "Compression test summary", f["title"])
+    sheet = book.add_worksheet(_t("summary_sheet", lang))
+    sheet.write(0, 0, _t("summary_title", lang), f["title"])
 
-    columns = [summary_pairs(p) for p in payloads]
-    labels = [p.get("specimen", {}).get("label", f"Specimen {i + 1}")
+    columns = [summary_pairs(p, lang) for p in payloads]
+    labels = [p.get("specimen", {}).get("label", _t("specimen_n", lang, n=i + 1))
               for i, p in enumerate(payloads)]
 
     row0 = 2
-    sheet.write(row0, 0, "Field", f["head"])
+    sheet.write(row0, 0, _t("field", lang), f["head"])
     for i, label in enumerate(labels):
         sheet.write(row0, 1 + i, label, f["head"])
 
@@ -268,17 +378,18 @@ def _write_summary(book, f, payloads: Sequence[dict]) -> None:
     warnings = diagnostics.distinct(payloads)
     if warnings:
         r += 2
-        sheet.write(r, 0, "Read this before quoting the numbers", f["section"])
+        sheet.write(r, 0, _t("read_before_quoting", lang), f["section"])
         last_col = max(1, len(labels))
         for w in warnings:
             r += 1
             style = f["bad"] if w["severity"] == "critical" else (
                 f["warn"] if w["severity"] == "caution" else f["text"])
             sheet.write(r, 0, w["severity"].upper(), style)
+            message = _warning_message(w, lang)
             if last_col > 1:
-                sheet.merge_range(r, 1, r, last_col, w["message"], f["wrap"])
+                sheet.merge_range(r, 1, r, last_col, message, f["wrap"])
             else:
-                sheet.write(r, 1, w["message"], f["wrap"])
+                sheet.write(r, 1, message, f["wrap"])
 
     sheet.set_column(0, 0, 34)
     sheet.set_column(1, len(labels), 34)
@@ -292,18 +403,18 @@ def _has_value(columns: Sequence[list[tuple[str, Any]]], idx: int) -> bool:
     return False
 
 
-def _write_cycles(book, f, numfmt, payloads: Sequence[dict]) -> None:
-    sheet = book.add_worksheet("Cycles")
+def _write_cycles(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -> None:
+    sheet = book.add_worksheet(_t("cycles_sheet", lang))
     multi = len(payloads) > 1
     has_strain = any(p.get("analysis", {}).get("has_strain") for p in payloads)
     cols = user_facing_cycle_columns(has_strain)
 
     col0 = 1 if multi else 0
     if multi:
-        sheet.write(0, 0, "Specimen", f["head"])
+        sheet.write(0, 0, _t("specimen", lang), f["head"])
 
     for i, col in enumerate(cols):
-        sheet.write(0, col0 + i, col.header, f["head"])
+        sheet.write(0, col0 + i, _col_header(col, lang), f["head"])
 
     r = 1
     widths: dict[int, list[Any]] = {i: [] for i in range(len(cols))}
@@ -331,7 +442,7 @@ def _write_cycles(book, f, numfmt, payloads: Sequence[dict]) -> None:
         longest = max((len(p.get("specimen", {}).get("label", "")) for p in payloads), default=10)
         sheet.set_column(0, 0, max(MIN_COL_WIDTH, min(MAX_COL_WIDTH, longest + 2)))
     for i, col in enumerate(cols):
-        sheet.set_column(col0 + i, col0 + i, _width_for(col, widths[i]))
+        sheet.set_column(col0 + i, col0 + i, _width_for(_col_header(col, lang), widths[i]))
 
     sheet.set_row(0, 46)
     sheet.freeze_panes(1, col0 + 1)
@@ -339,31 +450,32 @@ def _write_cycles(book, f, numfmt, payloads: Sequence[dict]) -> None:
         sheet.autofilter(0, 0, r - 1, col0 + len(cols) - 1)
 
 
-def _write_dictionary(book, f, payloads: Sequence[dict]) -> None:
-    sheet = book.add_worksheet("Data dictionary")
+def _write_dictionary(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
+    sheet = book.add_worksheet(_t("dictionary_sheet", lang))
     has_strain = any(p.get("analysis", {}).get("has_strain") for p in payloads)
 
-    sheet.write(0, 0, "What each column means", f["title"])
+    sheet.write(0, 0, _t("dictionary_title", lang), f["title"])
     r = 2
-    for header in ("Column", "Unit", "Definition"):
-        sheet.write(r, ("Column", "Unit", "Definition").index(header), header, f["head"])
+    headers = (_t("column", lang), _t("unit", lang), _t("definition", lang))
+    for i, header in enumerate(headers):
+        sheet.write(r, i, header, f["head"])
     r += 1
 
-    sheet.write(r, 0, "Per-cycle columns", f["section"])
+    sheet.write(r, 0, _t("per_cycle_columns", lang), f["section"])
     r += 1
     for col in user_facing_cycle_columns(has_strain):
-        sheet.write(r, 0, col.label, f["text"])
+        sheet.write(r, 0, _col_label(col, lang), f["text"])
         sheet.write(r, 1, col.unit or "-", f["unit"])
-        sheet.write(r, 2, col.description, f["wrap"])
+        sheet.write(r, 2, _col_desc(col, lang), f["wrap"])
         r += 1
 
     r += 1
-    sheet.write(r, 0, "Summary fields", f["section"])
+    sheet.write(r, 0, _t("summary_fields", lang), f["section"])
     r += 1
     for field in SPECIMEN_FIELDS:
-        sheet.write(r, 0, field.label, f["text"])
+        sheet.write(r, 0, _field_label(field, lang), f["text"])
         sheet.write(r, 1, field.unit or "-", f["unit"])
-        sheet.write(r, 2, field.description, f["wrap"])
+        sheet.write(r, 2, _field_desc(field, lang), f["wrap"])
         r += 1
 
     sheet.set_column(0, 0, 38)
@@ -372,13 +484,13 @@ def _write_dictionary(book, f, payloads: Sequence[dict]) -> None:
     sheet.freeze_panes(3, 0)
 
 
-def _write_config(book, f, payloads: Sequence[dict]) -> None:
+def _write_config(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
     """The settings behind the numbers, so a result can be reproduced or
     challenged without hunting for the script that produced it."""
-    sheet = book.add_worksheet("Config")
-    sheet.write(0, 0, "Analysis settings used", f["title"])
-    sheet.write(2, 0, "Setting", f["head"])
-    sheet.write(2, 1, "Value", f["head"])
+    sheet = book.add_worksheet(_t("config_sheet", lang))
+    sheet.write(0, 0, _t("config_title", lang), f["title"])
+    sheet.write(2, 0, _t("setting", lang), f["head"])
+    sheet.write(2, 1, _t("value", lang), f["head"])
 
     cfg = payloads[0].get("config", {})
     r = 3
@@ -387,7 +499,7 @@ def _write_config(book, f, payloads: Sequence[dict]) -> None:
         if value is None:
             # A None knob is not missing data: it means the engine derives the
             # level from the test itself.
-            sheet.write_string(r, 1, "auto", f["text"])
+            sheet.write_string(r, 1, _t("auto", lang), f["text"])
         else:
             _write_value(sheet, r, 1, value, f["text"], f["num"])
         r += 1
@@ -395,16 +507,15 @@ def _write_config(book, f, payloads: Sequence[dict]) -> None:
     differing = [p for p in payloads[1:] if p.get("config") != cfg]
     if differing:
         r += 1
-        sheet.write(r, 0, "Warning: specimens in this workbook were analysed "
-                          "with different settings.", f["section"])
+        sheet.write(r, 0, _t("differing_settings_warning", lang), f["section"])
 
     r += 2
-    sheet.write(r, 0, "Derived reference levels", f["section"])
+    sheet.write(r, 0, _t("derived_reference_levels", lang), f["section"])
     r += 1
     for payload in payloads:
         analysis = payload.get("analysis", {})
         label = payload.get("specimen", {}).get("label", "")
-        sheet.write(r, 0, f"{label}: reference stress (MPa)", f["key"])
+        sheet.write(r, 0, _t("reference_stress_for", lang, label=label), f["key"])
         _write_value(sheet, r, 1, analysis.get("residual_stress_mpa"), f["text"], f["num"])
         r += 1
 
@@ -431,7 +542,7 @@ STATS_COLUMNS: tuple[str, ...] = (
 STATS_COLUMNS_STRAIN: tuple[str, ...] = ("PermDef_cumulative_pct",)
 
 
-def cross_specimen_stats(payloads: Sequence[dict]) -> list[dict]:
+def cross_specimen_stats(payloads: Sequence[dict], lang: str = "en") -> list[dict]:
     """Mean / std / coefficient of variation per cycle, across specimens.
 
     Only meaningful with more than one specimen -- with one there is nothing
@@ -455,7 +566,7 @@ def cross_specimen_stats(payloads: Sequence[dict]) -> list[dict]:
         col = CYCLE_BY_KEY.get(key)
         entry: dict[str, Any] = {
             "key": key,
-            "label": col.label if col else key,
+            "label": (_col_label(col, lang) if col else key),
             "unit": col.unit if col else "",
             "rows": [],
         }
@@ -475,25 +586,25 @@ def cross_specimen_stats(payloads: Sequence[dict]) -> list[dict]:
     return out
 
 
-def _write_statistics(book, f, numfmt, payloads: Sequence[dict]) -> None:
+def _write_statistics(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -> None:
     """Mean / std / CoV per cycle across specimens -- the same shape as the
     source export's own Statistik sheet (x / s / n[%]), extended to every
     cycle rather than a single Fmax reading."""
-    stats = cross_specimen_stats(payloads)
+    stats = cross_specimen_stats(payloads, lang)
     if not stats:
         return
     n_specimens = len({p.get("specimen", {}).get("label", "") for p in payloads})
 
-    sheet = book.add_worksheet("Statistics")
-    sheet.write(0, 0, "Cross-specimen statistics", f["title"])
-    sheet.write(1, 0, f"n = {n_specimens} specimens", f["text"])
+    sheet = book.add_worksheet(_t("statistics_sheet", lang))
+    sheet.write(0, 0, _t("cross_specimen_stats", lang), f["title"])
+    sheet.write(1, 0, _t("n_specimens", lang, n=n_specimens), f["text"])
 
     r = 3
     for entry in stats:
         header = entry["label"] + (f" ({entry['unit']})" if entry["unit"] else "")
         sheet.write(r, 0, header, f["section"])
         r += 1
-        for i, h in enumerate(("Cycle", "Mean", "Std dev", "CoV (%)")):
+        for i, h in enumerate((_t("col_cycle", lang), _t("col_mean", lang), _t("col_std", lang), _t("col_cov", lang))):
             sheet.write(r, i, h, f["head"])
         r += 1
         for row in entry["rows"]:
@@ -517,7 +628,7 @@ def _write_statistics(book, f, numfmt, payloads: Sequence[dict]) -> None:
 # ----------------------------------------------------------------------------
 
 
-def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False):
+def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False, lang: str = "en"):
     """Per-cycle table with the workbook's headers, as a DataFrame."""
     import pandas as pd
 
@@ -530,18 +641,20 @@ def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False):
         for row in payload.get("cycles", []):
             record = {}
             if with_specimen:
-                record["Specimen"] = label
+                record[_t("specimen", lang)] = label
             for col, value in zip(cols, row_values(row, cols)):
-                record[col.header] = value
+                record[_col_header(col, lang)] = value
             rows.append(record)
     return pd.DataFrame(rows)
 
 
-def write_csv(payloads: Sequence[dict], path: str | Path, *, with_specimen: bool = False) -> Path:
+def write_csv(
+    payloads: Sequence[dict], path: str | Path, *, with_specimen: bool = False, lang: str = "en",
+) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".partial")
-    cycles_dataframe(payloads, with_specimen=with_specimen).to_csv(tmp, index=False)
+    cycles_dataframe(payloads, with_specimen=with_specimen, lang=lang).to_csv(tmp, index=False)
     os.replace(tmp, path)
     return path
 

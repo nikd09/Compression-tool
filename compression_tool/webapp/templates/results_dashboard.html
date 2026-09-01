@@ -1408,7 +1408,9 @@ function renderWarnings(){
     `</button>`
   ).join("");
   const cards = ORDER.flatMap(sev => bySev[sev].map(w =>
-    `<div class="warncard ${sev}"><span class="pill">${PILL[sev]}</span><span>${w.message}</span></div>`
+    `<div class="warncard ${sev}"><span class="pill">${PILL[sev]}</span><span>${
+      (LANG==="de" && w.message_de) ? w.message_de : w.message
+    }</span></div>`
   )).join("");
 
   el.innerHTML =

@@ -90,6 +90,18 @@ NAV_ITEMS = [item for _, items in NAV_SECTIONS for item in items]
 # silently changing what a fresh session opens on.
 _DEFAULT_NAV_VIEW = "Overview"
 
+# DISPLAYED text only -- the English names above stay the stable internal
+# identity (session_state["nav_view"], the NAV_ITEMS dispatch key, the
+# widget key, _DEFAULT_NAV_VIEW's own comparison), so switching language
+# never resets which page is open or breaks a bookmarked nav_view value.
+# See common.language_picker()'s docstring for the one shared toggle this
+# reads from.
+_SECTION_LABELS_DE = {"Workflow": "Arbeitsablauf", "Library": "Bibliothek", "System": "System"}
+_NAV_LABELS_DE = {
+    "Ingest": "Einlesen", "Results": "Ergebnisse", "Compare": "Vergleich",
+    "Overview": "Übersicht", "Materials": "Materialien", "Config": "Konfiguration",
+}
+
 _NAV_CSS = """
 <style>
   /* The sidebar header (the logo + the collapse chevron): flat, not the
@@ -214,10 +226,11 @@ def main() -> None:
         # same reasoning a language switcher is conventionally the first
         # thing on a page: it should be seen and set before anything else
         # here is read.
-        language_picker()
+        nav_lang = language_picker()
         st.divider()
         for section_name, items in NAV_SECTIONS:
-            st.markdown(f'<div class="ct-nav-section">{section_name}</div>', unsafe_allow_html=True)
+            section_label = _SECTION_LABELS_DE[section_name] if nav_lang == "de" else section_name
+            st.markdown(f'<div class="ct-nav-section">{section_label}</div>', unsafe_allow_html=True)
             for name, icon, _ in items:
                 # active is read BEFORE this button's own click is known, so
                 # the button just clicked always paints with its OLD state on
@@ -228,8 +241,9 @@ def main() -> None:
                 # already-updated session_state; only the sidebar's own paint
                 # of ITSELF lags. Fixed below.
                 active = st.session_state["nav_view"] == name
+                nav_label = _NAV_LABELS_DE[name] if nav_lang == "de" else name
                 if st.button(
-                    f"{name}", icon=icon, key=f"nav_{name}",
+                    nav_label, icon=icon, key=f"nav_{name}",
                     use_container_width=True,
                     type="primary" if active else "tertiary",
                 ):
