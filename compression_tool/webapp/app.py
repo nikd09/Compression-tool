@@ -227,9 +227,17 @@ _NAV_CSS = """
      one flat list of source files. */
   .ct-nav-section{
     font-size:.68rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
-    opacity:.5; margin:.9rem 0 .15rem .7rem;
+    opacity:.5; margin:.9rem 0 .4rem .7rem;
   }
   .ct-nav-section:first-child{ margin-top:.15rem; }
+  /* nav_menu's own flex `gap` (.1rem, above) is uniform between EVERY
+     adjacent pair of children -- section headings and buttons alike -- so
+     it can't give the heading-to-first-button gap its own larger value on
+     its own; only this margin can, since it's additive on top of that
+     shared gap. .15rem here read as basically none once the active
+     (primary-colored) button's solid blue fill sat right under it with no
+     border of its own -- reported live, with a screenshot, as the blue
+     looking like it "covers" the heading above it. */
   /* [theme.dark]'s own brighter blue step, same pair as everywhere else
      in this file that reads var(--primary-color) -- see common.py. */
   @media (prefers-color-scheme: dark){
