@@ -33,18 +33,30 @@ _SESSION_KEY = "_ct_authenticated"
 _LOGO_SVG = (Path(__file__).parent / "static" / "logo-icon.svg").read_text(encoding="utf-8")
 
 _T = {
-    "eyebrow": {"en": "Multi-stage compression test analysis",
+    "subtitle": {"en": "Compression Test Analysis",
         "de": "Analyse mehrstufiger Druckversuche"},
-    "protected": {
-        "en": "This deployment is password-protected. Ask whoever "
-              "administers it for the password if you do not have it.",
-        "de": "Dieser Zugang ist passwortgeschützt. Bei der zuständigen "
-              "Administration nach dem Passwort fragen, falls es nicht "
-              "bekannt ist."},
+    "intro": {
+        "en": "Enter your access password to continue.",
+        "de": "Bitte das Zugangspasswort eingeben, um fortzufahren."},
     "password": {"en": "Password", "de": "Passwort"},
-    "enter": {"en": "Enter", "de": "Anmelden"},
+    "enter": {"en": "Continue", "de": "Weiter"},
     "incorrect": {"en": "Incorrect password.", "de": "Falsches Passwort."},
 }
+
+# A thin, static line-art motif of a loading/unloading hysteresis loop --
+# exactly the shape this tool's own dashboards plot for every cycle -- used
+# as a restrained engineering cue instead of a generic icon or illustration.
+# No animation, no fill, low-opacity single-colour strokes: it reads as a
+# small schematic, not as decoration competing with the text around it.
+_LOOP_MOTIF_SVG = """
+<svg class="ct-gate-motif" viewBox="0 0 160 40" xmlns="http://www.w3.org/2000/svg"
+     preserveAspectRatio="xMidYMid meet">
+  <path d="M10,30 C55,6 105,4 150,8"
+        fill="none" stroke="currentColor" stroke-width="1.4" opacity=".6"/>
+  <path d="M150,8 C105,32 55,34 10,26"
+        fill="none" stroke="currentColor" stroke-width="1.4" opacity=".3"/>
+</svg>
+"""
 
 # Scoped to render only while the gate itself is on screen -- require_password()
 # calls st.stop() right after, so nothing else in this run ever has to share
@@ -52,52 +64,87 @@ _T = {
 # reaches this function again once _SESSION_KEY is set.
 _GATE_CSS = """
 <style>
+  /* This deployment's Streamlit toolbar (Deploy button, the three-dot
+     "..." menu) has no function a first-time, unauthenticated visitor
+     needs -- scoped to disappear only while the gate itself is showing,
+     the same way everything else in this block is: once _SESSION_KEY is
+     set this whole style block is never emitted again. */
+  header[data-testid="stHeader"]{ display:none!important; }
   .block-container{
-    max-width:440px!important;
-    margin:7vh auto 0!important;
-    padding:2.5rem 2.35rem 2.2rem!important;
-    background:var(--background-color,#fcfcfb);
-    border:1px solid var(--border-color,#e1e0d9);
-    border-radius:1.1rem;
-    box-shadow:0 24px 64px rgba(11,11,11,.10), 0 2px 10px rgba(11,11,11,.06);
-    position:relative; overflow:hidden;
-    animation:ctGateIn .6s cubic-bezier(.22,.61,.36,1) both;
-  }
-  .block-container::before{
-    content:""; position:absolute; top:0; left:0; right:0; height:3px;
-    background:linear-gradient(90deg,#2a78d6,#7ab3f2,#2a78d6);
-    background-size:220% 100%; animation:ctGateShimmer 3.4s linear infinite;
+    max-width:480px!important;
+    margin:9vh auto 0!important;
+    padding:2.35rem 2.4rem 2.1rem!important;
+    background:var(--background-color,#fff);
+    border:1px solid var(--border-color,#e6e5e0);
+    border-radius:.85rem;
+    box-shadow:0 1px 2px rgba(15,15,15,.04), 0 12px 32px rgba(15,15,15,.06);
+    animation:ctGateIn .35s ease-out both;
   }
   @keyframes ctGateIn{
-    from{opacity:0; transform:translateY(16px) scale(.97);}
+    from{opacity:0; transform:translateY(6px);}
     to{opacity:1; transform:none;}
-  }
-  @keyframes ctGateShimmer{
-    from{background-position:0% 0;} to{background-position:220% 0;}
   }
   @media (prefers-reduced-motion:reduce){
     .block-container{animation:none;}
-    .block-container::before{animation:none;}
   }
   @media (prefers-color-scheme:dark){
     .block-container{
-      background:#1a1a19; border-color:#2c2c2a;
-      box-shadow:0 24px 64px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.35);
+      background:#1c1c1b; border-color:#302f2c;
+      box-shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.4);
     }
   }
-  .ct-gate-lang{display:flex; justify-content:flex-end; margin:-.6rem 0 .8rem;}
-  .ct-gate-logo{display:flex; justify-content:center; margin-bottom:.9rem;}
-  .ct-gate-logo svg{
-    width:60px; height:60px;
-    filter:drop-shadow(0 6px 16px rgba(42,120,214,.35));
+  /* Streamlit's radio option markup, inspected live (this version): each
+     option is a <label data-testid="stRadioOption"> containing a visually-
+     hidden <input>, then a circle indicator div, then the option's own
+     stMarkdownContainer -- as SIBLING divs, not nested one inside the
+     other. The circle has no testid or stable class of its own, only an
+     auto-generated one that is not safe to depend on, so it's targeted by
+     position instead: "the div immediately before the text container",
+     the same :has()-based relative-targeting this codebase already uses
+     in compare_view.py. data-selected="true" (Streamlit's own attribute
+     for the active option) drives the pill styling, not :checked --
+     confirmed live to be what's actually set here. */
+  /* Targeted via the key="ct_gate_lang" container's own st-key-* class
+     (see require_password() below), not a hand-opened/closed <div> spanning
+     two separate st.markdown() calls -- each st.markdown() call is its own
+     sibling node in Streamlit's DOM, so a "<div>" opened in one and closed
+     in another never actually wraps the widget rendered in between; the
+     first version of this looked unstyled and left-aligned because of
+     exactly that (confirmed live). */
+  [class*="st-key-ct_gate_lang"]{ display:flex; justify-content:flex-end; margin:0 0 1.5rem; }
+  [class*="st-key-ct_gate_lang"] div[data-testid="stRadioGroup"]{ gap:.15rem; }
+  [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"]{
+    padding:.1rem .55rem; border-radius:999px; margin:0; cursor:pointer;
+    font-size:.72rem; font-weight:600; color:var(--secondary-text-color,#8a8a86);
   }
-  .ct-gate-eyebrow{
-    text-align:center; font-size:.68rem; font-weight:700; letter-spacing:.11em;
-    text-transform:uppercase; color:var(--secondary-text-color,#898781);
-    margin:0 0 1.3rem;
+  [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"][data-selected="true"]{
+    background:rgba(42,120,214,.10); color:#2a78d6;
+  }
+  [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"] div:has(+ div[data-testid="stMarkdownContainer"]){
+    display:none;
+  }
+  .ct-gate-logo{display:flex; justify-content:center; margin-bottom:.85rem;}
+  .ct-gate-logo svg{
+    width:44px; height:44px;
+    filter:drop-shadow(0 2px 5px rgba(15,15,15,.14));
   }
   .ct-gate-title{
-    text-align:center; margin:0 0 .15rem!important;
+    text-align:center; margin:0 0 .2rem!important;
+  }
+  .ct-gate-subtitle{
+    text-align:center; font-size:.9rem; font-weight:450;
+    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.1rem;
+  }
+  .ct-gate-motif{
+    display:block; width:100%; height:32px; margin:0 0 1.3rem;
+    color:#2a78d6;
+  }
+  @media (prefers-color-scheme:dark){
+    .ct-gate-motif{ color:#5b9ce6; }
+  }
+  .ct-gate-intro{
+    text-align:center; font-size:.86rem;
+    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.3rem;
   }
   div[data-testid="stForm"]{border:none!important; padding:0!important;}
   div[data-testid="stForm"] .stButton>button{width:100%;}
@@ -121,9 +168,8 @@ def require_password() -> None:
     polish()
     st.markdown(_GATE_CSS, unsafe_allow_html=True)
 
-    st.markdown('<div class="ct-gate-lang">', unsafe_allow_html=True)
-    language_picker()
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(key="ct_gate_lang"):
+        language_picker()
     lang = dashboard_lang()
 
     def L(key: str) -> str:
@@ -131,8 +177,9 @@ def require_password() -> None:
 
     st.markdown(f'<div class="ct-gate-logo">{_LOGO_SVG}</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="ct-gate-title">CompressLab</h1>', unsafe_allow_html=True)
-    st.markdown(f'<p class="ct-gate-eyebrow">{L("eyebrow")}</p>', unsafe_allow_html=True)
-    st.caption(L("protected"))
+    st.markdown(f'<p class="ct-gate-subtitle">{L("subtitle")}</p>', unsafe_allow_html=True)
+    st.markdown(_LOOP_MOTIF_SVG, unsafe_allow_html=True)
+    st.markdown(f'<p class="ct-gate-intro">{L("intro")}</p>', unsafe_allow_html=True)
 
     # st.form, not a bare text_input + button: a form submits on Enter from
     # within any of its own text inputs, which a standalone st.text_input
