@@ -128,6 +128,9 @@ _T = {
     "step3_sub": {"en": "Check the files parse, then open the full interactive dashboard in a new tab, before anything is written.",
         "de": "Prüfen, ob die Dateien sich einlesen lassen, dann das vollständige interaktive Dashboard in einem neuen Tab öffnen, bevor etwas geschrieben wird."},
     "run_preview": {"en": "Run preview", "de": "Vorschau ausführen"},
+    "preview_stale": {
+        "en": "Upload or setting changed since this preview -- run it again to see the current file(s).",
+        "de": "Upload oder Einstellung seit dieser Vorschau geändert -- erneut ausführen, um die aktuelle(n) Datei(en) zu sehen."},
     "analysing": {"en": "Analysing…", "de": "Wird analysiert…"},
     "skipped": {"en": "Skipped {name}: {why}", "de": "{name} übersprungen: {why}"},
     "nothing_to_chart": {"en": "Nothing to chart: every file failed to analyse, or had no cycles.",
@@ -283,6 +286,31 @@ def _resolve_material_groups(
         mat = overrides.get(i, default_material).strip()
         groups.setdefault(mat, []).append(p)
     return groups
+
+
+def _preview_fingerprint(
+    paths: list[Path], material_groups: dict[str, list[Path]], cfg: Config, gauge_confirmed: bool,
+) -> tuple:
+    """What Preview's own output actually depends on: the attached files
+    (by resolved path -- _save_uploads gives a stable path per (name, size)
+    upload, so this changes exactly when the attachment does), how they
+    are split into materials, the thresholds and the gauge-length flag.
+
+    The bug this exists to fix: the cached preview rows and "Open dashboard"
+    button used to just sit in session_state until Preview was clicked
+    again, so swapping in a DIFFERENT file (or a different material split,
+    or a changed threshold) without re-running Preview left last time's
+    dashboard on screen -- confirmed live, a second material's specimens
+    uploaded after previewing a first still showed the first's dashboard
+    and button, nothing about the page said it was stale. render() compares
+    this against what was cached at the last successful Preview and only
+    renders the cached result when they still match.
+    """
+    groups = tuple(sorted(
+        (mat, tuple(str(p) for p in group_paths))
+        for mat, group_paths in material_groups.items()
+    ))
+    return (tuple(str(p) for p in paths), groups, cfg, gauge_confirmed)
 
 
 def _looks_like_a_filename(material: str, uploaded) -> bool:
@@ -522,6 +550,7 @@ def render(ws: Workspace) -> None:
         return
     paths = _save_uploads(uploaded)
     material_groups = _resolve_material_groups(paths, material.strip(), per_file_material)
+    preview_fp = _preview_fingerprint(paths, material_groups, cfg, gauge_confirmed)
 
     st.divider()
     _step(3, L("step3"), L("step3_sub"))
@@ -553,13 +582,21 @@ def render(ws: Workspace) -> None:
         rows, dashboard_state = with_utm_animation(L("analysing"), _preview_and_build_dashboard)
         st.session_state["ingest_preview_rows"] = rows
         st.session_state["ingest_preview_dashboard"] = dashboard_state
+        st.session_state["ingest_preview_fingerprint"] = preview_fp
 
-    rows = st.session_state.get("ingest_preview_rows")
-    if rows:
-        _render_preview_errors(rows)
-    dashboard_state = st.session_state.get("ingest_preview_dashboard")
-    if dashboard_state:
-        _render_dashboard_preview(dashboard_state, L)
+    # Only rendered when the cached preview still describes what is
+    # actually attached right now -- see _preview_fingerprint's own
+    # docstring for the stale-dashboard bug this stops.
+    cached_fp = st.session_state.get("ingest_preview_fingerprint")
+    if cached_fp == preview_fp:
+        rows = st.session_state.get("ingest_preview_rows")
+        if rows:
+            _render_preview_errors(rows)
+        dashboard_state = st.session_state.get("ingest_preview_dashboard")
+        if dashboard_state:
+            _render_dashboard_preview(dashboard_state, L)
+    elif cached_fp is not None:
+        st.caption(L("preview_stale"))
 
     st.divider()
     _step(4, L("step4"), L("step4_sub"))

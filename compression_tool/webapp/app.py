@@ -87,8 +87,11 @@ NAV_SECTIONS = [
 NAV_ITEMS = [item for _, items in NAV_SECTIONS for item in items]
 # The landing page on first load -- pinned by name, not by NAV_ITEMS[0], so
 # Overview's own position within Workflow (see above) can move without
-# silently changing what a fresh session opens on.
-_DEFAULT_NAV_VIEW = "Overview"
+# silently changing what a fresh session opens on. Ingest, not Overview: a
+# fresh session most often means "bring in a new test", and Overview is one
+# click away in the same section for whoever wants the orientation view
+# first.
+_DEFAULT_NAV_VIEW = "Ingest"
 
 # DISPLAYED text only -- the English names above stay the stable internal
 # identity (session_state["nav_view"], the NAV_ITEMS dispatch key, the
@@ -182,6 +185,17 @@ _NAV_CSS = """
   section[data-testid="stSidebar"] div.stButton > button:hover p{
     transform:translateX(1px);
   }
+  /* Tightens the nav list itself, scoped to the key="nav_menu" container
+     around it in main() below -- Streamlit's own default packs every
+     stacked element (button, divider, section caption alike) with about
+     1rem of gap, which reads as visible empty air between five or six
+     single-line menu entries. `display:flex` is set explicitly here, not
+     assumed already present, so this `gap` is guaranteed to take effect
+     regardless of which internal layout mechanism the installed Streamlit
+     version otherwise uses for a plain block. */
+  [class*="st-key-nav_menu"]{
+    display:flex!important; flex-direction:column!important; gap:.1rem!important;
+  }
   /* Section captions above each nav group -- Workflow / Library / System --
      quiet enough not to compete with the buttons themselves, just enough
      of a label that the five items read as three grouped tasks rather than
@@ -228,27 +242,35 @@ def main() -> None:
         # here is read.
         nav_lang = language_picker()
         st.divider()
-        for section_name, items in NAV_SECTIONS:
-            section_label = _SECTION_LABELS_DE[section_name] if nav_lang == "de" else section_name
-            st.markdown(f'<div class="ct-nav-section">{section_label}</div>', unsafe_allow_html=True)
-            for name, icon, _ in items:
-                # active is read BEFORE this button's own click is known, so
-                # the button just clicked always paints with its OLD state on
-                # this exact run -- a real, confirmed one-click highlight lag,
-                # not a hover artifact (reproduced with the mouse moved off
-                # the sidebar entirely). Content is correct immediately
-                # either way, since `view(ws)` below reads the
-                # already-updated session_state; only the sidebar's own paint
-                # of ITSELF lags. Fixed below.
-                active = st.session_state["nav_view"] == name
-                nav_label = _NAV_LABELS_DE[name] if nav_lang == "de" else name
-                if st.button(
-                    nav_label, icon=icon, key=f"nav_{name}",
-                    use_container_width=True,
-                    type="primary" if active else "tertiary",
-                ):
-                    # No st.rerun() here -- see the note above.
-                    st.session_state["nav_view"] = name
+        # Scoped container (key="nav_menu") so the tightened-gap CSS below
+        # only ever touches this one block -- Streamlit lays every direct
+        # child of the sidebar's own top-level block out with one shared
+        # `gap`, so without this boundary the same rule would also squeeze
+        # the language toggle, both dividers and the workspace expander
+        # below, not just the button list a tighter menu was actually
+        # asked for.
+        with st.container(key="nav_menu"):
+            for section_name, items in NAV_SECTIONS:
+                section_label = _SECTION_LABELS_DE[section_name] if nav_lang == "de" else section_name
+                st.markdown(f'<div class="ct-nav-section">{section_label}</div>', unsafe_allow_html=True)
+                for name, icon, _ in items:
+                    # active is read BEFORE this button's own click is known, so
+                    # the button just clicked always paints with its OLD state on
+                    # this exact run -- a real, confirmed one-click highlight lag,
+                    # not a hover artifact (reproduced with the mouse moved off
+                    # the sidebar entirely). Content is correct immediately
+                    # either way, since `view(ws)` below reads the
+                    # already-updated session_state; only the sidebar's own paint
+                    # of ITSELF lags. Fixed below.
+                    active = st.session_state["nav_view"] == name
+                    nav_label = _NAV_LABELS_DE[name] if nav_lang == "de" else name
+                    if st.button(
+                        nav_label, icon=icon, key=f"nav_{name}",
+                        use_container_width=True,
+                        type="primary" if active else "tertiary",
+                    ):
+                        # No st.rerun() here -- see the note above.
+                        st.session_state["nav_view"] = name
         st.divider()
         # The one and only call site for this widget -- see the note above.
         ws = workspace_picker()
