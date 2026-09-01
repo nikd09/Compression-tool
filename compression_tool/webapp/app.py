@@ -185,6 +185,24 @@ _NAV_CSS = """
   section[data-testid="stSidebar"] div.stButton > button:hover p{
     transform:translateX(1px);
   }
+  /* The sidebar's own TOP-LEVEL stack -- the language toggle, both
+     st.divider() calls, the nav_menu block, and the workspace picker below
+     it -- is a separate flex container from nav_menu's own internal one,
+     laid out with Streamlit's default ~1rem gap PLUS each <hr>'s own
+     ~1.5rem margin on top of that. The nav_menu rule below only ever
+     reached the button list *inside* that one container, so the biggest
+     gap on the page -- language toggle down to "WORKFLOW" -- was never
+     touched by it (confirmed live: everything below the first divider
+     tightened, that one gap didn't). Placed BEFORE the nav_menu rule so,
+     at equal specificity with both !important, the later, more specific
+     nav_menu rule still wins there and stays at its own tighter .1rem.
+  */
+  section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{
+    gap:.4rem!important;
+  }
+  section[data-testid="stSidebar"] hr{
+    margin:.4rem 0!important;
+  }
   /* Tightens the nav list itself, scoped to the key="nav_menu" container
      around it in main() below -- Streamlit's own default packs every
      stacked element (button, divider, section caption alike) with about
@@ -193,7 +211,14 @@ _NAV_CSS = """
      assumed already present, so this `gap` is guaranteed to take effect
      regardless of which internal layout mechanism the installed Streamlit
      version otherwise uses for a plain block. */
-  [class*="st-key-nav_menu"]{
+  /* Matched on `section[data-testid="stSidebar"] [class*=...]`, not the
+     bare class selector -- the general stVerticalBlock rule just above
+     carries two attribute selectors, so at equal specificity + !important
+     the LATER rule wins on source order alone; that briefly left this
+     container at .4rem instead of .1rem (confirmed live: nav item spacing
+     visibly grew back). Matching its selector shape keeps this one
+     unambiguously the more specific of the two regardless of order. */
+  section[data-testid="stSidebar"] [class*="st-key-nav_menu"]{
     display:flex!important; flex-direction:column!important; gap:.1rem!important;
   }
   /* Section captions above each nav group -- Workflow / Library / System --
