@@ -100,7 +100,10 @@ def _backdrop_svg() -> str:
     rows = 26
     grouped: list[list[str]] = [[] for _ in range(6)]
     for i in range(rows):
-        y = 18 + i * 21
+        # Deliberately NOT evenly ruled: a small deterministic wobble on the
+        # spacing is the difference between "a field" and "a chart with the
+        # axes taken off", which is the one thing this must not look like.
+        y = 18 + i * 21 + 4.0 * math.sin(i * 2.3)
         # Golden-angle-ish stride: decorrelates the traces' phases so no two
         # neighbours start in step, without needing a random seed.
         phase = ((i * 137) % int(_PERIOD)) - _PERIOD / 2
@@ -109,7 +112,7 @@ def _backdrop_svg() -> str:
         # and it keeps the densest part of the field behind the card.
         opacity = 0.45 + 0.55 * math.sin(math.pi * (i + 0.5) / rows)
         grouped[i % 6].append(
-            f'<g transform="translate({phase:.0f} {y}) scale(1 {amp:.2f})">'
+            f'<g transform="translate({phase:.0f} {y:.1f}) scale(1 {amp:.2f})">'
             f'<path d="{d}" fill="none" stroke="currentColor" stroke-width="1"'
             f' stroke-opacity="{opacity:.2f}" vector-effect="non-scaling-stroke"/>'
             "</g>"
@@ -173,14 +176,26 @@ _GATE_CSS = """
   /* The backdrop field. Pinned to the viewport and below the card's own
      z-index:1, so it fills the page behind it without being clipped by the
      centring column; pointer-events:none keeps every click going to the
-     form. Masked to an ellipse so the traces dissolve well before the
-     window edges rather than ending at them. */
+     form. The mask is an annulus, not a plain centre-bright ellipse: fully
+     clear through the middle where the card sits and immediately around
+     it, rising to full only out in the surrounding field, then dissolving
+     again by the window edges. So the card is never competing with
+     linework right at its border, and the page still reads as having
+     something quietly running on it.
+
+     The two ramps are deliberately long and the stops few: a tight ramp
+     makes the falloff itself legible as a ring, which is a decoration in
+     its own right and exactly the thing being avoided. The ellipse is
+     sized so the outer ramp finishes at the viewport edge rather than past
+     it -- an earlier, larger ellipse put the edges only ~60% of the way
+     down the ramp, so the traces ran right off the sides of the window
+     instead of dissolving before them (confirmed live). */
   .ct-gate-bg{
     position:fixed; inset:0; width:100vw; height:100vh;
     z-index:0; pointer-events:none;
-    color:#2a78d6; opacity:.3;
-    -webkit-mask-image:radial-gradient(ellipse 64% 64% at 50% 45%, #000 18%, rgba(0,0,0,0) 74%);
-    mask-image:radial-gradient(ellipse 64% 64% at 50% 45%, #000 18%, rgba(0,0,0,0) 74%);
+    color:#2a78d6; opacity:.28;
+    -webkit-mask-image:radial-gradient(ellipse 54% 54% at 50% 44%, rgba(0,0,0,0) 30%, rgba(0,0,0,.85) 72%, rgba(0,0,0,0) 100%);
+    mask-image:radial-gradient(ellipse 54% 54% at 50% 44%, rgba(0,0,0,0) 30%, rgba(0,0,0,.85) 72%, rgba(0,0,0,0) 100%);
   }
   .ct-bg-field{
     transform-box:view-box; transform-origin:50% 50%;
@@ -245,17 +260,29 @@ _GATE_CSS = """
   [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"] div:has(+ div[data-testid="stMarkdownContainer"]){
     display:none;
   }
-  .ct-gate-logo{display:flex; justify-content:center; margin-bottom:.85rem;}
+  /* Logo and wordmark are one group: the gap between them is deliberately
+     tighter than the gap below the subtitle, so the three lines read as
+     mark-then-name rather than as three evenly spaced items. */
+  .ct-gate-logo{display:flex; justify-content:center; margin-bottom:.55rem;}
   .ct-gate-logo svg{
-    width:44px; height:44px;
+    width:50px; height:50px;
     filter:drop-shadow(0 2px 5px rgba(15,15,15,.14));
   }
   .ct-gate-title{
-    text-align:center; margin:0 0 .2rem!important;
+    text-align:center; padding:0!important; margin:0 0 .3rem!important;
   }
+  /* Streamlit puts its own "link to heading" anchor INSIDE the <h1>, as an
+     inline-flex span after the text (16px icon + 8px gap, measured live).
+     It is part of the centred line box, so the visible wordmark was being
+     pushed 12px left of true centre -- confirmed by measuring the rendered
+     pixels: the logo tile and the subtitle both centred to within 0.5px
+     while the wordmark alone sat at -12.5px. That, not the logo, is what
+     made the group look off-centre. The anchor is of no use on a login
+     screen with nothing to link to, so it comes out of the flow entirely. */
+  .ct-gate-title [data-testid="stHeaderActionElements"]{ display:none!important; }
   .ct-gate-subtitle{
     text-align:center; font-size:.9rem; font-weight:450;
-    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.1rem;
+    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.35rem;
   }
   .ct-gate-intro{
     text-align:center; font-size:.86rem;
