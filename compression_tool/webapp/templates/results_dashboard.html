@@ -680,11 +680,16 @@ function barChart(host, spec, big=false, aspect=null){
   const hi=Math.max(...vals), lo=Math.min(0,Math.min(...vals));
   const yd=[lo, hi*(big?1.08:1.12) || 1];
   const Y=axes(root,m,W,H,yd,spec.f,L(UI.cycleAxis));
-  if(big){
-    const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
-      transform:`translate(13 ${(m.t+H-m.b)/2}) rotate(-90)`},root);
-    yl.textContent=spec.u2 || L(spec.t);
-  }
+  // Unconditional, not gated behind `big` -- it used to only draw in the
+  // expanded dialog, so a panel copied/downloaded straight from the small
+  // grid (chartToPng() clones whichever SVG is currently live, see
+  // renderCharts()) baked in an image with no Y-axis unit at all, only the
+  // header's plain-text unit line above the plot, which does not travel
+  // with the exported PNG. loopChart's own Y-axis label (below) was never
+  // gated like this, which is why only the bar-chart panels showed the gap.
+  const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
+    transform:`translate(13 ${(m.t+H-m.b)/2}) rotate(-90)`},root);
+  yl.textContent=spec.u2 || L(spec.t);
 
   const gw=(W-m.l-m.r)/NC, bw=Math.max(2.5,(gw-6*k)/ser.length-2*k);
   let bi=0;
