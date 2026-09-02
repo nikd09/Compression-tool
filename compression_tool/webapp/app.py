@@ -224,20 +224,55 @@ _NAV_CSS = """
   /* Section captions above each nav group -- Workflow / Library / System --
      quiet enough not to compete with the buttons themselves, just enough
      of a label that the five items read as three grouped tasks rather than
-     one flat list of source files. */
+     one flat list of source files.
+
+     The vertical gap lives on the st.container(key="nav_sec_head_N") that
+     wraps each heading (see main() below), NOT on .ct-nav-section itself --
+     .ct-nav-section keeps only its text styling here. Two real, confirmed
+     bugs ruled out putting the spacing directly on the markdown text:
+
+     1) MARGIN on .ct-nav-section did nothing: each heading is the sole
+        child of its own one-off st.markdown() wrapper, and that wrapper's
+        measured height was exactly the text's own height with zero
+        contribution from the child's margin, top or bottom.
+     2) PADDING on .ct-nav-section was silently discarded too, differently:
+        Streamlit wraps a single-line st.markdown() in an intermediate
+        row-flex div sized to that ONE line's natural height, and that div's
+        auto-sizing genuinely does not grow to fit a taller child -- proven
+        live by setting `height:auto!important` on it via an inline style
+        (maximum possible priority) and watching the computed height stay
+        exactly unchanged, while `min-height` on the SAME element took effect
+        immediately. Padding made .ct-nav-section itself taller, correctly,
+        but the ancestor box around it did not grow to match, so the text
+        just overflowed below its own flex item into the button beneath it --
+        a different-looking version of the same overlap this was meant to fix.
+     3) PADDING on the st.container(key=...) wrapper hit the SAME bug one
+        level up: wrapping the heading in its own container swaps the
+        markdown's immediate ancestor for a stVerticalBlock, but that
+        stVerticalBlock is STILL a flex column with a single small-text
+        child, and its computed height stayed pinned to Streamlit's own
+        apparent default (~22px) regardless of the padding value -- also
+        confirmed live, padding computed correctly on the element, box
+        height unmoved.
+
+     What DOES reliably work, confirmed live both times: MARGIN and
+     MIN-HEIGHT applied directly to the container -- i.e. to the flex ITEM
+     itself, as nav_menu's flex layout sees it, not to anything nested
+     inside it. A flex item's own margin is never subject to the parent/
+     child collapsing that broke approach 1, and min-height overrides
+     whatever default height approach 3 was silently falling back to. */
   .ct-nav-section{
     font-size:.68rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
-    opacity:.5; margin:.9rem 0 .4rem .7rem;
+    opacity:.5; margin:0; padding-left:.7rem;
   }
-  .ct-nav-section:first-child{ margin-top:.15rem; }
-  /* nav_menu's own flex `gap` (.1rem, above) is uniform between EVERY
-     adjacent pair of children -- section headings and buttons alike -- so
-     it can't give the heading-to-first-button gap its own larger value on
-     its own; only this margin can, since it's additive on top of that
-     shared gap. .15rem here read as basically none once the active
-     (primary-colored) button's solid blue fill sat right under it with no
-     border of its own -- reported live, with a screenshot, as the blue
-     looking like it "covers" the heading above it. */
+  [class*="st-key-nav_sec_head_"]{ margin-top:.9rem; min-height:1.7rem; }
+  /* Same-specificity override, placed after the general rule so it wins by
+     source order (the established pattern elsewhere in this file) --
+     "nav_sec_head_0" is also matched by the general "nav_sec_head_"
+     prefix rule above, so this narrows just the first section's top gap
+     back down, the same way ":first-child" was meant to before it turned
+     out to match every heading instead of only the first. */
+  [class*="st-key-nav_sec_head_0"]{ margin-top:.15rem; min-height:1.4rem; }
   /* [theme.dark]'s own brighter blue step, same pair as everywhere else
      in this file that reads var(--primary-color) -- see common.py. */
   @media (prefers-color-scheme: dark){
@@ -283,9 +318,17 @@ def main() -> None:
         # below, not just the button list a tighter menu was actually
         # asked for.
         with st.container(key="nav_menu"):
-            for section_name, items in NAV_SECTIONS:
+            for section_index, (section_name, items) in enumerate(NAV_SECTIONS):
                 section_label = _SECTION_LABELS_DE[section_name] if nav_lang == "de" else section_name
-                st.markdown(f'<div class="ct-nav-section">{section_label}</div>', unsafe_allow_html=True)
+                # Heading wrapped in its own keyed container, not a bare
+                # st.markdown() -- see the CSS comment above nav_sec_head_
+                # for why: padding on the markdown text itself gets silently
+                # discarded by a Streamlit-internal single-line height lock,
+                # confirmed live, while a container's own stVerticalBlock
+                # sizes correctly.
+                with st.container(key=f"nav_sec_head_{section_index}"):
+                    st.markdown(f'<div class="ct-nav-section">{section_label}</div>',
+                                unsafe_allow_html=True)
                 for name, icon, _ in items:
                     # active is read BEFORE this button's own click is known, so
                     # the button just clicked always paints with its OLD state on
