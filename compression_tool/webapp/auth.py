@@ -131,11 +131,103 @@ def _backdrop_svg() -> str:
 
 _BACKDROP_SVG = _backdrop_svg()
 
+# Both palettes, keyed by Streamlit's OWN active theme (see _active_theme()).
+#
+# Every colour the gate paints is named here and substituted into the template
+# below, rather than left to `var(--some-streamlit-var, fallback)`: measured
+# live, Streamlit 1.62 exposes NONE of --background-color, --text-color,
+# --primary-color, --border-color or --secondary-text-color on :root, so every
+# one of those vars was silently resolving to its hardcoded fallback. That is
+# what made the gate's own surfaces stay light while Streamlit's components
+# went dark. The values are the app's own palette, straight out of
+# .streamlit/config.toml ([theme] and [theme.dark]), so the gate matches the
+# app it is standing in front of.
+_PALETTES = {
+    "light": {
+        "CARD_BG": "#ffffff",
+        "CARD_BORDER": "#e6e5e0",
+        "CARD_SHADOW": "0 1px 2px rgba(15,15,15,.04), 0 12px 32px rgba(15,15,15,.06)",
+        "TITLE_TEXT": "#14140f",
+        "ACCENT": "#2a78d6",
+        "ACCENT_SOFT": "rgba(42,120,214,.10)",
+        "MUTED_TEXT": "#7c7b76",
+        "PILL_TEXT": "#8a8a86",
+        "LABEL_TEXT": "#0b0b0b",
+        "INPUT_BG": "#f2f1ed",
+        "INPUT_BORDER": "#e1e0d9",
+        "INPUT_TEXT": "#0b0b0b",
+        "ICON": "#6f6e69",
+        "TRACE": "#2a78d6",
+        "TRACE_OPACITY": ".28",
+        "LOGO_SHADOW": "0 2px 5px rgba(15,15,15,.14)",
+    },
+    "dark": {
+        # A step lighter than the page (#0d0d0d) so the card lifts off it,
+        # which is the same relationship [theme.dark]'s secondaryBackgroundColor
+        # already has to its backgroundColor elsewhere in the app.
+        "CARD_BG": "#1a1a19",
+        "CARD_BORDER": "#2c2c2a",
+        "CARD_SHADOW": "0 1px 2px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.45)",
+        "TITLE_TEXT": "#ffffff",
+        "ACCENT": "#3987e5",
+        "ACCENT_SOFT": "rgba(57,135,229,.18)",
+        "MUTED_TEXT": "#a8a7a1",
+        "PILL_TEXT": "#a8a7a1",
+        "LABEL_TEXT": "#ffffff",
+        # One step lighter again, so the field reads as an input against the
+        # card rather than as a hole punched in it.
+        "INPUT_BG": "#232322",
+        "INPUT_BORDER": "#3a3a37",
+        "INPUT_TEXT": "#ffffff",
+        "ICON": "#a8a7a1",
+        "TRACE": "#5f9fe4",
+        "TRACE_OPACITY": ".22",
+        "LOGO_SHADOW": "0 2px 6px rgba(0,0,0,.5)",
+    },
+}
+
+
+def _active_theme() -> str:
+    """'light' or 'dark' -- whichever Streamlit is ACTUALLY painting in.
+
+    This used to key off `@media (prefers-color-scheme: dark)`, which is the
+    BROWSER's preference. Streamlit's theme does not have to agree with it,
+    and when it did not -- Streamlit dark, browser light -- the media query
+    never fired, so the gate kept a white card and dark title text while
+    Streamlit painted the page and every widget it owns dark. That is the
+    reported "login screen breaks after refreshing in dark mode", reproduced
+    by forcing `--theme.base dark` against a light browser.
+
+    Note that `st.context.theme` does NOT solve it on its own: measured on
+    Streamlit 1.62, it reports the browser preference, so on that same forced
+    -dark server it still answers "light". Two signals are needed, and either
+    one being dark means dark is what gets painted:
+
+      * theme.base -- the configured theme. 'dark' here (config.toml or
+        --theme.base) means dark regardless of the browser.
+      * context.theme.type -- the browser preference, which is what selects
+        the [theme.dark] palette this app declares when the config itself is
+        light.
+
+    Both are re-read every run, including the one after a full refresh.
+    """
+    base = browser = None
+    try:
+        base = st.get_option("theme.base")
+    except Exception:
+        pass
+    try:
+        browser = getattr(st.context.theme, "type", None)
+    except Exception:
+        pass
+    return "dark" if "dark" in (base, browser) else "light"
+
+
 # Scoped to render only while the gate itself is on screen -- require_password()
 # calls st.stop() right after, so nothing else in this run ever has to share
 # the page with .block-container pinned to this width, and no later page load
 # reaches this function again once _SESSION_KEY is set.
-_GATE_CSS = """
+_GATE_CSS_TEMPLATE = """
 <style>
   /* This deployment's Streamlit toolbar (Deploy button, the three-dot
      "..." menu) has no function a first-time, unauthenticated visitor
@@ -157,21 +249,15 @@ _GATE_CSS = """
   [class*="st-key-ct_gate_card"]{
     position:relative; z-index:1;
     padding:2.35rem 2.4rem 2.1rem;
-    background:var(--background-color,#fff);
-    border:1px solid var(--border-color,#e6e5e0);
+    background:__CARD_BG__;
+    border:1px solid __CARD_BORDER__;
     border-radius:.85rem;
-    box-shadow:0 1px 2px rgba(15,15,15,.04), 0 12px 32px rgba(15,15,15,.06);
+    box-shadow:__CARD_SHADOW__;
     animation:ctGateIn .35s ease-out both;
   }
   @keyframes ctGateIn{
     from{opacity:0; transform:translateY(6px);}
     to{opacity:1; transform:none;}
-  }
-  @media (prefers-color-scheme:dark){
-    [class*="st-key-ct_gate_card"]{
-      background:#1c1c1b; border-color:#302f2c;
-      box-shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.4);
-    }
   }
   /* The backdrop field. Pinned to the viewport and below the card's own
      z-index:1, so it fills the page behind it without being clipped by the
@@ -193,7 +279,7 @@ _GATE_CSS = """
   .ct-gate-bg{
     position:fixed; inset:0; width:100vw; height:100vh;
     z-index:0; pointer-events:none;
-    color:#2a78d6; opacity:.28;
+    color:__TRACE__; opacity:__TRACE_OPACITY__;
     -webkit-mask-image:radial-gradient(ellipse 54% 54% at 50% 44%, rgba(0,0,0,0) 30%, rgba(0,0,0,.85) 72%, rgba(0,0,0,0) 100%);
     mask-image:radial-gradient(ellipse 54% 54% at 50% 44%, rgba(0,0,0,0) 30%, rgba(0,0,0,.85) 72%, rgba(0,0,0,0) 100%);
   }
@@ -221,9 +307,6 @@ _GATE_CSS = """
     0%,100%{ transform:scaleY(1); }
     50%{ transform:scaleY(.945); }
   }
-  @media (prefers-color-scheme:dark){
-    .ct-gate-bg{ color:#5f9fe4; opacity:.22; }
-  }
   /* Static fallback: the field is still there and still composed, it just
      stops moving -- nothing disappears or reflows. */
   @media (prefers-reduced-motion:reduce){
@@ -250,12 +333,21 @@ _GATE_CSS = """
      exactly that (confirmed live). */
   [class*="st-key-ct_gate_lang"]{ display:flex; justify-content:flex-end; margin:0 0 1.5rem; }
   [class*="st-key-ct_gate_lang"] div[data-testid="stRadioGroup"]{ gap:.15rem; }
+  /* Both states get an explicit colour: the unselected one used to inherit
+     Streamlit's secondary text colour, which is how "DE" ended up invisible
+     on the dark card. */
   [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"]{
     padding:.1rem .55rem; border-radius:999px; margin:0; cursor:pointer;
-    font-size:.72rem; font-weight:600; color:var(--secondary-text-color,#8a8a86);
+    font-size:.72rem; font-weight:600;
+  }
+  [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"] p{
+    color:__PILL_TEXT__!important;
   }
   [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"][data-selected="true"]{
-    background:rgba(42,120,214,.10); color:#2a78d6;
+    background:__ACCENT_SOFT__;
+  }
+  [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"][data-selected="true"] p{
+    color:__ACCENT__!important;
   }
   [class*="st-key-ct_gate_lang"] label[data-testid="stRadioOption"] div:has(+ div[data-testid="stMarkdownContainer"]){
     display:none;
@@ -266,11 +358,18 @@ _GATE_CSS = """
   .ct-gate-logo{display:flex; justify-content:center; margin-bottom:.55rem;}
   .ct-gate-logo svg{
     width:50px; height:50px;
-    filter:drop-shadow(0 2px 5px rgba(15,15,15,.14));
+    filter:drop-shadow(__LOGO_SHADOW__);
   }
   .ct-gate-title{
     text-align:center; padding:0!important; margin:0 0 .3rem!important;
+    color:__TITLE_TEXT__!important;
   }
+  /* Compress + Lab, the same split the sidebar wordmark (logo.svg) uses,
+     with "Lab" in the app's own brand blue -- #2a78d6, exactly the fill
+     logo.svg gives it, and its [theme.dark] counterpart #3987e5 on the dark
+     card, which is the light/dark blue pair used everywhere else in this
+     app (see app.py's nav CSS). */
+  .ct-gate-title .ct-gate-lab{ color:__ACCENT__; }
   /* Streamlit puts its own "link to heading" anchor INSIDE the <h1>, as an
      inline-flex span after the text (16px icon + 8px gap, measured live).
      It is part of the centred line box, so the visible wordmark was being
@@ -282,16 +381,53 @@ _GATE_CSS = """
   .ct-gate-title [data-testid="stHeaderActionElements"]{ display:none!important; }
   .ct-gate-subtitle{
     text-align:center; font-size:.9rem; font-weight:450;
-    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.35rem;
+    color:__MUTED_TEXT__; margin:0 0 1.35rem;
   }
   .ct-gate-intro{
     text-align:center; font-size:.86rem;
-    color:var(--secondary-text-color,#7c7b76); margin:0 0 1.3rem;
+    color:__MUTED_TEXT__; margin:0 0 1.3rem;
   }
   div[data-testid="stForm"]{border:none!important; padding:0!important;}
   div[data-testid="stForm"] .stButton>button{width:100%;}
+  /* The password field, its label, and the show/hide eye, all painted
+     explicitly rather than inherited. Selectors taken from the live DOM:
+     the bordered box is stTextInputRootElement, the field itself is
+     stTextInputField, and the eye is a plain <button aria-label="Show
+     password"> inside the box whose icon draws in currentColor. */
+  div[data-testid="stForm"] label[data-testid="stWidgetLabel"] p{
+    color:__LABEL_TEXT__!important;
+  }
+  div[data-testid="stTextInputRootElement"]{
+    background:__INPUT_BG__!important;
+    border:1px solid __INPUT_BORDER__!important;
+  }
+  div[data-testid="stTextInputRootElement"]:focus-within{
+    border-color:__ACCENT__!important;
+  }
+  input[data-testid="stTextInputField"]{
+    background:transparent!important; color:__INPUT_TEXT__!important;
+    -webkit-text-fill-color:__INPUT_TEXT__!important;
+  }
+  div[data-testid="stTextInputRootElement"] button{
+    color:__ICON__!important; background:transparent!important;
+  }
+  div[data-testid="stTextInputRootElement"] button svg{ fill:currentColor; }
+  /* The submit button is the app's primary blue in both themes; stated here
+     so it does not depend on Streamlit's primaryColor resolving. */
+  div[data-testid="stForm"] .stButton>button[kind="primaryFormSubmit"]{
+    background:__ACCENT__!important; border-color:__ACCENT__!important;
+    color:#ffffff!important;
+  }
 </style>
 """.replace("__PERIOD__", f"{_PERIOD:.0f}")
+
+
+def _gate_css(theme: str) -> str:
+    """The gate's stylesheet, with the active theme's palette substituted in."""
+    css = _GATE_CSS_TEMPLATE
+    for token, value in _PALETTES[theme].items():
+        css = css.replace(f"__{token}__", value)
+    return css
 
 
 def require_password() -> None:
@@ -308,7 +444,7 @@ def require_password() -> None:
         return
 
     polish()
-    st.markdown(_GATE_CSS, unsafe_allow_html=True)
+    st.markdown(_gate_css(_active_theme()), unsafe_allow_html=True)
     # Rendered before the card, and a sibling of it rather than a child, so
     # the card paints over a field that fills the whole window.
     st.markdown(_BACKDROP_SVG, unsafe_allow_html=True)
@@ -322,7 +458,9 @@ def require_password() -> None:
             return _T[key][lang]
 
         st.markdown(f'<div class="ct-gate-logo">{_LOGO_SVG}</div>', unsafe_allow_html=True)
-        st.markdown('<h1 class="ct-gate-title">CompressLab</h1>', unsafe_allow_html=True)
+        st.markdown(
+            '<h1 class="ct-gate-title">Compress<span class="ct-gate-lab">Lab</span></h1>',
+            unsafe_allow_html=True)
         st.markdown(f'<p class="ct-gate-subtitle">{L("subtitle")}</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="ct-gate-intro">{L("intro")}</p>', unsafe_allow_html=True)
 
