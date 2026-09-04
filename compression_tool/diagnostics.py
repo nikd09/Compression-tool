@@ -293,7 +293,7 @@ def _cycles_discarded(test: TestData, cfg: Config) -> Optional[Warning_]:
 
 
 def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
-    """Unequal dwell lengths make hold displacement non-comparable."""
+    """Unequal dwell lengths make creep at peak load non-comparable."""
     if df.empty or "HoldPoints" not in df:
         return None
     held = pd.to_numeric(df["HoldPoints"], errors="coerce")
@@ -308,16 +308,16 @@ def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
         severity="caution",
         message=(
             f"Dwell length varies from {lo:.0f} to {hi:.0f} samples ({hi / lo:.1f}x) "
-            "across the cycles, so hold displacement is NOT comparable between "
+            "across the cycles, so creep at peak load is NOT comparable between "
             "them as a raw total -- a longer dwell accumulates more at identical "
             "material behaviour. Compare the per-1000-samples column instead, "
             "and note that it is a normalisation, not a creep rate."
         ),
         message_de=(
             f"Die Haltedauer variiert zwischen {lo:.0f} und {hi:.0f} Messpunkten "
-            f"({hi / lo:.1f}-fach) über die Zyklen, daher ist der Haltewegzuwachs "
-            "zwischen ihnen als Rohsumme NICHT vergleichbar -- eine längere "
-            "Haltezeit sammelt bei identischem Materialverhalten mehr an. "
+            f"({hi / lo:.1f}-fach) über die Zyklen, daher ist der Kriechweg am "
+            "Spitzenwert zwischen ihnen als Rohsumme NICHT vergleichbar -- eine "
+            "längere Haltezeit sammelt bei identischem Materialverhalten mehr an. "
             "Stattdessen die Spalte je 1000 Messpunkte vergleichen, und "
             "beachten, dass dies eine Normierung ist, keine Kriechrate."
         ),

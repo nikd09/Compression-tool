@@ -138,9 +138,8 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
         parts.append(
             "<div class='note'>Multi-stage test: peak stress differs between "
             "cycles, so the cycles are stages rather than repeats. Compare them "
-            "on the common-band stiffness and the relative hysteresis loss; the "
-            "relative-band stiffness and absolute energies are not comparable "
-            "across stages.</div>"
+            "on the common-band stiffness; the relative-band stiffness and "
+            "absolute energies are not comparable across stages.</div>"
         )
     if not has_strain:
         parts.append(

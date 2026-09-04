@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 
-from compression_tool import Config, diagnostics, ingest
+from compression_tool import diagnostics, ingest
 from compression_tool.excel_export import (
     cross_specimen_stats,
     cycles_dataframe,
@@ -29,8 +29,6 @@ from compression_tool.schema import (
     stiffness_quality,
     user_facing_cycle_columns,
 )
-
-from conftest import multistage_signal, write_single_workbook
 
 
 @pytest.fixture
@@ -60,10 +58,11 @@ def test_cycle_headers_carry_units(tmp_path, single_payload):
     path = write_workbook([single_payload], tmp_path / "out.xlsx")
     headers = [c.value for c in load_workbook(path)["Cycles"][1]]
 
-    assert "Peak stress (MPa)" in headers
+    # Peak stress is a deleted per-cycle field -- no longer a user-facing column.
+    assert "Peak stress (MPa)" not in headers
     assert "Stiffness (common band) (MPa/mm)" in headers
     assert "Stiffness (relative band) (MPa/mm)" in headers
-    assert "Hold displacement (mm)" in headers
+    assert "Creep at peak load (mm)" in headers
     assert "Maximum displacement (mm)" in headers
     assert "Displacement at peak stress (mm)" in headers
     # Internal bookkeeping stays out of the user-facing table.
@@ -71,7 +70,7 @@ def test_cycle_headers_carry_units(tmp_path, single_payload):
 
 
 def test_hold_displacement_is_never_separated_from_hold_length(tmp_path, single_payload):
-    """Hold displacement without hold length invites reading a longer dwell as
+    """Creep at peak load without hold length invites reading a longer dwell as
     more movement, which is the exact misreading the pair exists to prevent."""
     from compression_tool.schema import INSEPARABLE_PAIRS
 
@@ -83,7 +82,7 @@ def test_hold_displacement_is_never_separated_from_hold_length(tmp_path, single_
         assert keys.index(right) == keys.index(left) + 1, f"{left} / {right} split"
 
     assert "Hold length (samples)" in headers
-    assert headers.index("Hold displacement (mm)") == headers.index("Hold length (samples)") + 1
+    assert headers.index("Creep at peak load (mm)") == headers.index("Hold length (samples)") + 1
 
 
 def test_per_sample_column_is_not_called_a_rate(tmp_path, single_payload):
@@ -94,7 +93,7 @@ def test_per_sample_column_is_not_called_a_rate(tmp_path, single_payload):
     path = write_workbook([single_payload], tmp_path / "out.xlsx")
     headers = [str(c.value) for c in load_workbook(path)["Cycles"][1] if c.value]
 
-    assert "Hold displacement per 1000 samples (mm)" in headers
+    assert "Creep at peak load per 1000 samples (mm)" in headers
     assert not any("rate" in h.lower() for h in headers)
     assert "NOT a creep rate" in HOLD_DISP_RATE.description
 
@@ -106,9 +105,10 @@ def test_cycle_rows_match_the_record(tmp_path, single_payload):
     rows = list(sheet.iter_rows(min_row=2, values_only=True))
 
     assert len(rows) == len(single_payload["cycles"])
-    peak_col = headers.index("Peak stress (MPa)")
+    # Peak stress is deleted from the user-facing table; use Total deformation instead.
+    permdef_col = headers.index("Total deformation (mm)")
     for row, cycle in zip(rows, single_payload["cycles"]):
-        assert row[peak_col] == pytest.approx(cycle["PeakStress_MPa"])
+        assert row[permdef_col] == pytest.approx(cycle["PermDef_cumulative_mm"])
 
 
 def test_multi_specimen_workbook_labels_each_row(tmp_path, payloads):
@@ -132,7 +132,7 @@ def test_summary_compares_specimens_side_by_side(tmp_path, payloads):
     fields = {sheet.cell(row=r, column=1).value for r in range(4, sheet.max_row + 1)}
     assert "Specimen height h0 (mm)" in fields
     assert "Cycles" in fields
-    assert "Total permanent deformation (mm)" in fields
+    assert "Total deformation (mm)" in fields
 
 
 def test_data_dictionary_explains_the_traps(tmp_path, single_payload):
@@ -297,34 +297,18 @@ def test_workbook_labels_filename_and_path_separately(tmp_path, single_payload):
 
 
 # ----------------------------------------------------------------------------
-# Hysteresis loss: multi-stage scoping
+# Hysteresis loss is a deleted per-cycle field (kept computed/stored, hidden
+# from every user-facing surface), so the summary sheet no longer carries a
+# "Mean hysteresis loss" row at all -- the scoping this section used to test
+# no longer applies to anything user-facing.
 # ----------------------------------------------------------------------------
 
 
-def test_mean_hysteresis_label_is_scoped_for_multi_stage(payloads):
-    """Multi-stage cycles span different stress levels, and hysteresis loss is
-    not flat across a stress range, so an unscoped 'Mean hysteresis loss'
-    would read as a single physical value when it is not one."""
-    from compression_tool.excel_export import summary_pairs
-
-    assert payloads[0]["analysis"]["multi_stage"] is True
+def test_mean_hysteresis_loss_is_not_in_the_summary(payloads):
+    """Hysteresis loss is deleted from every user-facing surface; the summary
+    sheet must not carry any 'Mean hysteresis loss' row, scoped or not."""
     keys = [k for k, _ in summary_pairs(payloads[0])]
-    assert any("Mean hysteresis loss across cycles" in k for k in keys)
-    assert not any(k == "Mean hysteresis loss (-)" for k in keys)
-
-
-def test_mean_hysteresis_label_is_plain_for_constant_amplitude(tmp_path):
-    """A constant-amplitude test has one stress level, so the mean IS a
-    single physical value and does not need the multi-stage caveat."""
-    stress, disp = multistage_signal(stages=(300.0, 300.0, 300.0))
-    path = write_single_workbook(tmp_path / "flat.xlsx", stress, disp, disp)
-    result = ingest([path], tmp_path / "ws", material="flat", cfg=Config())
-    payload = read_json(result.specimens[0].json_path)
-
-    assert payload["analysis"]["multi_stage"] is False
-    keys = [k for k, _ in summary_pairs(payload)]
-    assert "Mean hysteresis loss (-)" in keys
-    assert not any("across cycles" in k for k in keys)
+    assert not any("hysteresis" in k.lower() for k in keys)
 
 
 # ----------------------------------------------------------------------------
@@ -369,10 +353,9 @@ def test_cross_specimen_stats_needs_more_than_one_specimen(single_payload):
 def test_cross_specimen_stats_covers_every_cycle(payloads):
     stats = cross_specimen_stats(payloads)
     assert stats
-    peak_stress = next(e for e in stats if e["key"] == "PeakStress_MPa")
-    assert [r["cycle"] for r in peak_stress["rows"]] == list(range(1, 10))
-    # Both specimens carry the same commanded peak, so agreement is tight.
-    assert all(r["cov_pct"] is not None and r["cov_pct"] < 5 for r in peak_stress["rows"])
+    k_common = next(e for e in stats if e["key"] == "Stiffness_common_MPa_per_mm")
+    assert [r["cycle"] for r in k_common["rows"]] == list(range(1, 10))
+    assert all(r["cov_pct"] is not None for r in k_common["rows"])
 
 
 def test_statistics_sheet_only_appears_with_multiple_specimens(tmp_path, single_payload, payloads):
@@ -412,9 +395,9 @@ def test_four_specimens_all_reach_the_workbook(tmp_path, quad_payloads):
 
 def test_cross_specimen_stats_averages_over_all_four(quad_payloads):
     stats = cross_specimen_stats(quad_payloads)
-    peak = next(e for e in stats if e["key"] == "PeakStress_MPa")
-    assert [r["cycle"] for r in peak["rows"]] == list(range(1, 10))
-    assert all(r["n"] == 4 for r in peak["rows"])
+    k_common = next(e for e in stats if e["key"] == "Stiffness_common_MPa_per_mm")
+    assert [r["cycle"] for r in k_common["rows"]] == list(range(1, 10))
+    assert all(r["n"] == 4 for r in k_common["rows"])
 
 
 def test_four_specimen_csv_keeps_every_row(tmp_path, quad_payloads):

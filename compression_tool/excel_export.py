@@ -61,21 +61,16 @@ _EXCEL_T = {
     "field": {"en": "Field", "de": "Feld"},
     "specimen_n": {"en": "Specimen {n}", "de": "Probe {n}"},
     "test_summary": {"en": "Test summary", "de": "Zusammenfassung der Prüfung"},
-    "first_cycle_peak": {"en": "First cycle peak stress (MPa)", "de": "Spitzenspannung erster Zyklus (MPa)"},
-    "last_cycle_peak": {"en": "Last cycle peak stress (MPa)", "de": "Spitzenspannung letzter Zyklus (MPa)"},
     "cycles_with_hold": {"en": "Cycles with a detected hold", "de": "Zyklen mit erkanntem Halten"},
     "cycles_of": {"en": "{held} of {total}", "de": "{held} von {total}"},
-    "total_permdef_mm": {"en": "Total permanent deformation (mm)", "de": "Gesamte bleibende Verformung (mm)"},
-    "total_permdef_pct": {"en": "Total permanent deformation (%)", "de": "Gesamte bleibende Verformung (%)"},
-    "mean_hyst_multistage": {"en": "Mean hysteresis loss across cycles (-)", "de": "Mittlerer Hystereseverlust über die Zyklen (-)"},
-    "mean_hyst_multistage_note": {
-        "en": "  └ not a single physical value: multi-stage cycles span "
-              "different stress levels; compare per-cycle instead",
-        "de": "  └ kein einzelner physikalischer Wert: die Zyklen einer "
-              "mehrstufigen Prüfung umfassen unterschiedliche "
-              "Spannungsniveaus; stattdessen je Zyklus vergleichen"},
-    "mean_hyst": {"en": "Mean hysteresis loss (-)", "de": "Mittlerer Hystereseverlust (-)"},
-    "total_hold_disp": {"en": "Total hold displacement (mm)", "de": "Gesamter Haltewegzuwachs (mm)"},
+    # "Total permanent deformation" -> "Total deformation" and "Total hold
+    # displacement" -> "Total creep at peak load", matching the renamed
+    # fields (PermDef_cumulative_mm/Creep_during_hold_mm) everywhere else.
+    # First/last cycle peak stress and mean hysteresis loss rows, and their
+    # translation keys, were removed along with those two fields entirely.
+    "total_permdef_mm": {"en": "Total deformation (mm)", "de": "Gesamtverformung (mm)"},
+    "total_permdef_pct": {"en": "Total deformation (%)", "de": "Gesamtverformung (%)"},
+    "total_hold_disp": {"en": "Total creep at peak load (mm)", "de": "Gesamter Kriechweg am Spitzenwert (mm)"},
     "strain_basis": {"en": "Strain basis", "de": "Dehnungsbasis"},
     "gauge_length_h0": {"en": "Gauge length h0 (mm)", "de": "Messlänge h0 (mm)"},
     "measured_by_channel": {"en": "Measured by channel", "de": "Gemessen über Kanal"},
@@ -222,40 +217,22 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
         vals = [c.get(key) for c in cycles if c.get(key) is not None]
         return vals[-1] if vals else None
 
-    def mean_present(key: str) -> Optional[float]:
-        vals = [c.get(key) for c in cycles if c.get(key) is not None]
-        return sum(vals) / len(vals) if vals else None
-
     def total_present(key: str) -> Optional[float]:
         vals = [c.get(key) for c in cycles if c.get(key) is not None]
         return sum(vals) if vals else None
 
-    peaks = [c.get("PeakStress_MPa") for c in cycles if c.get("PeakStress_MPa") is not None]
     holds = sum(1 for c in cycles if c.get("HoldDetected"))
 
     pairs.append(("", ""))
     pairs.append((_t("test_summary", lang), ""))
-    if peaks:
-        pairs.append((_t("first_cycle_peak", lang), peaks[0]))
-        pairs.append((_t("last_cycle_peak", lang), peaks[-1]))
     pairs.append((_t("cycles_with_hold", lang), _t("cycles_of", lang, held=holds, total=len(cycles))))
     pairs.append((_t("total_permdef_mm", lang), last_present("PermDef_cumulative_mm")))
     if analysis.get("has_strain"):
         pairs.append((_t("total_permdef_pct", lang), last_present("PermDef_cumulative_pct")))
-
-    # Multi-stage cycles span different stress levels, and hysteresis loss is
-    # not flat across a stress range (it climbed from 0.55 to 0.93 across the
-    # nine T050E1 stages) -- so a mean across them is not one physical value
-    # the way it would be for a constant-amplitude test. Scope the label
-    # rather than let it read as a single material constant.
-    if bool(analysis.get("multi_stage")):
-        pairs.append((
-            _t("mean_hyst_multistage", lang),
-            mean_present("HysteresisLoss_rel"),
-        ))
-        pairs.append((_t("mean_hyst_multistage_note", lang), ""))
-    else:
-        pairs.append((_t("mean_hyst", lang), mean_present("HysteresisLoss_rel")))
+    # First/last cycle peak stress and mean hysteresis loss rows were removed
+    # along with Peak stress and Hysteresis loss as user-facing fields
+    # (deleted on request) -- both derived straight from those two columns
+    # and had no purpose left once the fields themselves were gone.
     pairs.append((_t("total_hold_disp", lang), total_present("Creep_during_hold_mm")))
 
     basis = analysis.get("strain_basis") or {}
@@ -529,15 +506,24 @@ def _write_config(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
 
 # Mirrors the source export's own "Statistik" sheet (x / s / n[%] per
 # quantity), extended across every cycle instead of a single Fmax reading.
+#
+# Ordered to match schema.HEADLINE_CYCLE_BLOCKS (the same six-field
+# sequence requested for the dashboard, Compare's picker, and the Cycles/
+# CSV export) followed by the remaining, non-headline detail columns this
+# sheet already carried. Peak stress and Hysteresis loss are gone --
+# deleted as user-facing fields on request, same as everywhere else --
+# and Stiffness (relative band) plus Energy dissipated were added: this
+# sheet is meant to be a full "dashboard replica," and both were missing
+# from it entirely even before this change.
 STATS_COLUMNS: tuple[str, ...] = (
-    "PeakStress_MPa",
-    "MaxDisp_mm",
-    "PeakDisp_mm",
-    "StressAtMaxDisp_MPa",
     "Stiffness_common_MPa_per_mm",
-    "HysteresisLoss_rel",
+    "Stiffness_relative_MPa_per_mm",
+    "MaxDisp_mm",
     "PermDef_cumulative_mm",
     "Creep_during_hold_mm",
+    "Energy_dissipated_MPa_mm",
+    "PeakDisp_mm",
+    "StressAtMaxDisp_MPa",
 )
 STATS_COLUMNS_STRAIN: tuple[str, ...] = ("PermDef_cumulative_pct",)
 

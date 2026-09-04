@@ -118,8 +118,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "PeakStress_MPa", "REAL", "Peak stress", "MPa",
         "Highest stress reached in this cycle. In a multi-stage test this "
         "rises from cycle to cycle, which is why several metrics below exist "
-        "in both a per-cycle and a common-reference form.",
-        fmt="0.00",
+        "in both a per-cycle and a common-reference form. Not shown as its "
+        "own user-facing column or chart -- the value stays computed and "
+        "stored, since UnloadYield_frac and other diagnostics still read it "
+        "-- but the per-cycle 'Peak stress' display was removed on request.",
+        fmt="0.00", internal=True,
     ),
     Column(
         "PeakDisp_mm", "REAL", "Displacement at peak stress", "mm",
@@ -170,10 +173,13 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "PermDef_incremental_mm.",
     ),
     Column(
-        "PermDef_cumulative_mm", "REAL", "Permanent deformation, cumulative", "mm",
+        "PermDef_cumulative_mm", "REAL", "Total deformation", "mm",
         "Running total of PermDef_incremental_mm. NOT compression set in the "
         "ASTM D395 / ISO 815 sense -- those are long-duration static tests. "
-        "Do not label this 'compression set' in reports.",
+        "Do not label this 'compression set' in reports. (Renamed from "
+        "'Permanent deformation, running total' on request -- the "
+        "underlying key, PermDef_cumulative_mm, is unchanged, so an "
+        "already-saved record still loads under it.)",
     ),
     Column(
         "PermDef_incremental_mm", "REAL", "Permanent deformation, incremental", "mm",
@@ -181,7 +187,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "displacement THIS cycle gained between being read on the way up and "
         "read again on the way down, at the identical reference stress both "
         "times. Well-defined for a single-cycle test -- it needs no other "
-        "cycle to compare against.",
+        "cycle to compare against. Not shown as its own user-facing column "
+        "or chart -- PermDef_cumulative_mm above is its running total and "
+        "still needs it computed -- but the per-cycle display was removed "
+        "on request.",
+        internal=True,
     ),
     Column(
         "Stiffness_common_MPa_per_mm", "REAL", "Stiffness (common band)", "MPa/mm",
@@ -273,8 +283,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "HysteresisLoss_rel", "REAL", "Hysteresis loss", "-",
         "Dissipated divided by input energy. This is the cross-test comparable "
         "form: absolute loss scales with stress amplitude, so a 50 MPa and a "
-        "450 MPa stage cannot be compared on the absolute number.",
-        fmt="0.0000",
+        "450 MPa stage cannot be compared on the absolute number. Deleted "
+        "entirely as a user-facing field on request -- kept computed and "
+        "stored (it costs nothing and a future record may want it back) but "
+        "hidden from every user-facing table, chart and selector.",
+        fmt="0.0000", internal=True,
     ),
     Column(
         "HoldDetected", "INTEGER", "Hold detected", "",
@@ -292,12 +305,15 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         fmt="0",
     ),
     Column(
-        "Creep_during_hold_mm", "REAL", "Hold displacement", "mm",
+        "Creep_during_hold_mm", "REAL", "Creep at peak load", "mm",
         "Displacement accumulated across the detected dwell -- a TOTAL, not a "
         "rate. Left blank, not zero, when the cycle has no dwell. Only "
         "comparable between cycles whose hold lengths match, which is why the "
         "hold length is always reported next to it; a longer dwell accumulates "
-        "more displacement at identical material behaviour.",
+        "more displacement at identical material behaviour. (Renamed from "
+        "'Hold displacement' on request -- the underlying key, "
+        "Creep_during_hold_mm, is unchanged, so an already-saved record "
+        "still loads under it.)",
     ),
     # --- strain-normalised variants, only when h0 is known -------------------
     Column(
@@ -311,24 +327,34 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "MaxStrain_pct", "REAL", "Maximum strain", "%",
         "Maximum displacement divided by h0 -- the largest strain the specimen "
-        "reached. PROVISIONAL unless the gauge length has been confirmed.",
-        fmt="0.000", strain=True,
+        "reached. PROVISIONAL unless the gauge length has been confirmed. "
+        "Deleted entirely as a user-facing field on request -- kept computed "
+        "and stored (Compare's own has_strain detection still reads whether "
+        "this column is populated) but hidden from every user-facing table, "
+        "chart and selector.",
+        fmt="0.000", strain=True, internal=True,
     ),
     Column(
-        "PermDef_cumulative_pct", "REAL", "Permanent deformation, cumulative", "%",
-        "Cumulative permanent deformation as a fraction of h0.",
+        "PermDef_cumulative_pct", "REAL", "Total deformation", "%",
+        "Cumulative permanent deformation as a fraction of h0. (Renamed from "
+        "'Permanent deformation, cumulative' on request -- the underlying "
+        "key is unchanged.)",
         fmt="0.000", strain=True,
     ),
     Column(
         "PermDef_incremental_pct", "REAL", "Permanent deformation, incremental", "%",
-        "Incremental permanent deformation as a fraction of h0.",
-        fmt="0.000", strain=True,
+        "Incremental permanent deformation as a fraction of h0. Not shown as "
+        "its own user-facing column or chart, same as PermDef_incremental_mm "
+        "-- the per-cycle display was removed on request.",
+        fmt="0.000", strain=True, internal=True,
     ),
     Column(
-        "Creep_pct", "REAL", "Hold displacement (of h0)", "%",
+        "Creep_pct", "REAL", "Creep at peak load (of h0)", "%",
         "Hold displacement as a fraction of h0. Still a total, not a rate, and "
         "still only comparable at matching hold lengths. PROVISIONAL unless "
-        "the gauge length has been confirmed.",
+        "the gauge length has been confirmed. (Renamed from 'Hold "
+        "displacement (of h0)' on request -- the underlying key, Creep_pct, "
+        "is unchanged.)",
         fmt="0.000", strain=True,
     ),
     # --- internal bookkeeping ------------------------------------------------
@@ -368,13 +394,15 @@ STIFFNESS_QUALITY = Column(
 
 HOLD_DISP_RATE = Column(
     "HoldDisp_per_1000_samples_mm", "REAL",
-    "Hold displacement per 1000 samples", "mm",
-    "Hold displacement divided by hold length. This exists ONLY to remove the "
-    "distortion of unequal dwell lengths so cycles can be ranked against each "
-    "other. It is NOT a creep rate and must never be labelled, plotted or "
-    "quoted as one: converting samples to time needs a constant sampling "
+    "Creep at peak load per 1000 samples", "mm",
+    "Creep at peak load divided by hold length. This exists ONLY to remove "
+    "the distortion of unequal dwell lengths so cycles can be ranked against "
+    "each other. It is NOT a creep rate and must never be labelled, plotted "
+    "or quoted as one: converting samples to time needs a constant sampling "
     "interval, which the export does not record and which testXpert does not "
-    "guarantee. A rate in mm/s requires a time channel enabled at export.",
+    "guarantee. A rate in mm/s requires a time channel enabled at export. "
+    "(Renamed from 'Hold displacement per 1000 samples' on request -- the "
+    "underlying key, HoldDisp_per_1000_samples_mm, is unchanged.)",
     fmt="0.000000",
 )
 
@@ -510,7 +538,7 @@ COLUMN_LABELS_DE: dict[str, str] = {
     "StressAtMaxDisp_MPa": "Spannung bei maximalem Weg",
     "ResidualDisp_mm": "Restweg (Belastung)",
     "ResidualDisp_unload_mm": "Restweg (Entlastung)",
-    "PermDef_cumulative_mm": "Bleibende Verformung, Summe",
+    "PermDef_cumulative_mm": "Gesamtverformung",
     "PermDef_incremental_mm": "Bleibende Verformung, dieser Zyklus",
     "Stiffness_common_MPa_per_mm": "Steifigkeit (gemeinsames Fenster)",
     "Stiffness_common_n": "Steifigkeit (gemeinsames Fenster), Punkte",
@@ -523,14 +551,14 @@ COLUMN_LABELS_DE: dict[str, str] = {
     "HysteresisLoss_rel": "Hystereseverlust",
     "HoldDetected": "Halten erkannt",
     "HoldPoints": "Haltedauer",
-    "Creep_during_hold_mm": "Haltewegzuwachs",
+    "Creep_during_hold_mm": "Kriechweg am Spitzenwert",
     "PeakStrain_pct": "Dehnung bei Spitzenspannung",
     "MaxStrain_pct": "Maximale Dehnung",
-    "PermDef_cumulative_pct": "Bleibende Verformung, Summe",
+    "PermDef_cumulative_pct": "Gesamtverformung",
     "PermDef_incremental_pct": "Bleibende Verformung, dieser Zyklus",
-    "Creep_pct": "Haltewegzuwachs (von h0)",
+    "Creep_pct": "Kriechweg am Spitzenwert (von h0)",
     "Stiffness_common_quality": "Steifigkeit (gemeinsames Fenster), Güte",
-    "HoldDisp_per_1000_samples_mm": "Haltewegzuwachs je 1000 Messpunkte",
+    "HoldDisp_per_1000_samples_mm": "Kriechweg am Spitzenwert je 1000 Messpunkte",
     "UnloadYield_frac": "Spannung bei max. Weg, Anteil der Spitze",
 }
 
@@ -630,7 +658,7 @@ COLUMN_DESCRIPTIONS_DE: dict[str, str] = {
     "HoldPoints": "Länge der erkannten Verweilzeit in MESSPUNKTEN, nicht "
         "Sekunden -- der Export enthält keinen Zeitkanal. Diese Spalte ist "
         "allein aussagelos und nur zusammen mit dem daneben stehenden "
-        "Haltewegzuwachs sinnvoll: ohne sie lässt sich eine Probe, die sich "
+        "Kriechweg am Spitzenwert sinnvoll: ohne sie lässt sich eine Probe, die sich "
         "weiter bewegt hat, nicht von einer unterscheiden, die einfach "
         "länger gehalten wurde.",
     "Creep_during_hold_mm": "Über die erkannte Verweilzeit aufsummierter "
@@ -651,7 +679,7 @@ COLUMN_DESCRIPTIONS_DE: dict[str, str] = {
         "von h0.",
     "PermDef_incremental_pct": "Bleibende Verformung dieses Zyklus als "
         "Anteil von h0.",
-    "Creep_pct": "Haltewegzuwachs als Anteil von h0. Weiterhin eine "
+    "Creep_pct": "Kriechweg am Spitzenwert als Anteil von h0. Weiterhin eine "
         "Gesamtsumme, keine Rate, und weiterhin nur bei übereinstimmender "
         "Haltedauer vergleichbar. VORLÄUFIG, sofern die Messlänge nicht "
         "bestätigt wurde.",
@@ -660,7 +688,7 @@ COLUMN_DESCRIPTIONS_DE: dict[str, str] = {
         f"„nichtlinear“ (R2 < {QUALITY_MIN_R2}), oder „keine“, wenn keine "
         "Anpassung möglich war. Aus den beiden vorangehenden Spalten "
         "abgeleitet.",
-    "HoldDisp_per_1000_samples_mm": "Haltewegzuwachs geteilt durch "
+    "HoldDisp_per_1000_samples_mm": "Kriechweg am Spitzenwert geteilt durch "
         "Haltedauer. Existiert NUR, um die Verzerrung durch "
         "unterschiedliche Haltedauern zu entfernen, damit Zyklen "
         "gegeneinander eingeordnet werden können. Dies ist KEINE "
@@ -769,9 +797,74 @@ def specimen_description_de(field: "Field") -> str:
     return SPECIMEN_DESCRIPTIONS_DE.get(field.key, field.description)
 
 
+# The "headline" cycle metrics -- the ones with their own dashboard chart
+# panel and Compare metric option. Pulled to the front of every user-facing
+# column list, in this fixed order, ahead of the supporting detail columns
+# (raw readings, fit-quality flags, window bounds) that keep their ordinary
+# declared position after them. Each entry is the metric's own key plus
+# whichever OTHER columns are inseparable from it (see INSEPARABLE_PAIRS
+# below) -- those travel with it as one block, not just the metric alone.
+#
+# This is what put the requested order -- Common-band stiffness,
+# Relative-band stiffness, Maximum displacement, Total deformation, Creep
+# at peak load, Energy dissipated -- into the Excel/CSV cycle table, the
+# data dictionary, and (via compare_view.py, which builds its metric
+# picker directly from user_facing_cycle_columns()) the Compare dropdown,
+# all from one place.
+#
+# Mirrored BY HAND in two places that cannot import this module and so
+# cannot share it directly: results_dashboard.html's own PANELS/COLS
+# arrays (the chart grid and the Method tab's values table) and
+# excel_export.STATS_COLUMNS (the cross-specimen Statistics sheet). Keep
+# all three in sync if this order ever changes again.
+HEADLINE_CYCLE_BLOCKS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Stiffness_common_MPa_per_mm", (
+        "Stiffness_common_MPa_per_mm", "Stiffness_common_n",
+        "Stiffness_common_r2", "Stiffness_common_quality",
+    )),
+    ("Stiffness_relative_MPa_per_mm", (
+        "Stiffness_relative_MPa_per_mm", "Stiffness_relative_n", "Stiffness_relative_r2",
+    )),
+    ("MaxDisp_mm", ("MaxDisp_mm",)),
+    ("PermDef_cumulative_mm", ("PermDef_cumulative_mm",)),
+    ("Creep_during_hold_mm", (
+        "HoldDetected", "HoldPoints", "Creep_during_hold_mm", "HoldDisp_per_1000_samples_mm",
+    )),
+    ("Energy_dissipated_MPa_mm", ("Energy_in_MPa_mm", "Energy_dissipated_MPa_mm")),
+)
+
+
+def _headline_first(cols: list[Column]) -> list[Column]:
+    """Reorders an already-filtered column list so the HEADLINE_CYCLE_BLOCKS
+    metrics (each with its own inseparable block riding along) come first,
+    in that fixed order, right after "Cycle". Every other column -- raw
+    supporting readings, the strain-normalised (%) twins of the headline
+    metrics, anything not part of a headline block -- keeps its original
+    relative order, appended after. A column simply absent from `cols`
+    (e.g. a strain-only column when has_strain is False) is silently
+    skipped rather than erroring."""
+    by_key = {c.key: c for c in cols}
+    used: set[str] = set()
+    out: list[Column] = []
+    if "Cycle" in by_key:
+        out.append(by_key["Cycle"])
+        used.add("Cycle")
+    for _headline_key, block_keys in HEADLINE_CYCLE_BLOCKS:
+        for k in block_keys:
+            if k in by_key and k not in used:
+                out.append(by_key[k])
+                used.add(k)
+    for c in cols:
+        if c.key not in used:
+            out.append(c)
+            used.add(c.key)
+    return out
+
+
 def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
-    """Columns shown in Excel / CSV / HTML, in spec order, with each derived
-    column inserted directly after the column it qualifies.
+    """Columns shown in Excel / CSV / HTML, headline metrics first (see
+    HEADLINE_CYCLE_BLOCKS), each derived column inserted directly after the
+    column it qualifies.
 
     Adjacency is not cosmetic here. The quality flag is meaningless away from
     the fit it describes, and the hold displacement is meaningless away from
@@ -791,7 +884,7 @@ def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
             out.append(UNLOAD_YIELD)
         if col.key == "Creep_during_hold_mm":
             out.append(HOLD_DISP_RATE)
-    return out
+    return _headline_first(out)
 
 
 # Pairs that must never be separated in any view. The UI is free to reorder or
