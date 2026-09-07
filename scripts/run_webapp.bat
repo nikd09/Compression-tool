@@ -49,18 +49,53 @@ REM A project-local ".venv" next to this script (created by VS Code, or by
 REM "python -m venv .venv") is therefore preferred whenever it exists --
 REM using it explicitly by path sidesteps both problems, since it does not
 REM depend on activation or on PATH order at all.
+REM
+REM A THIRD way this goes wrong, also confirmed live: this whole project
+REM folder (".venv" included) gets zipped up and copied to a colleague's PC
+REM instead of being freshly cloned/installed there. ".venv\Scripts\python.exe"
+REM is not a real, portable copy of Python -- on Windows it is a small
+REM launcher that reads ".venv\pyvenv.cfg" and re-launches whatever Python
+REM install it was originally created from, by that install's exact path on
+REM the ORIGINAL PC. That path almost never exists on a different machine, so
+REM the copied ".venv" fails immediately with something like: did not find
+REM executable at 'C:\Users\<original-user>\...\python.exe'. The fix is not
+REM to reuse that broken folder -- it is to delete it and create a fresh one
+REM local to THIS PC, which is what the check below does automatically.
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+    if errorlevel 1 (
+        echo [WARNING] Found a ".venv" here, but it does not work on this PC.
+        echo           This usually means the project folder was copied or
+        echo           zipped from another computer instead of being freshly
+        echo           installed on this one -- a Python virtual environment
+        echo           is tied to the exact PC and Python install that
+        echo           created it, and cannot just be copied elsewhere.
+        echo           Removing the broken ".venv" and creating a fresh one
+        echo           for this PC...
+        rmdir /s /q ".venv"
+    )
+)
 if exist ".venv\Scripts\python.exe" (
     set "PYTHON_EXE=.venv\Scripts\python.exe"
 ) else (
     where python >nul 2>nul
     if errorlevel 1 (
-        echo [ERROR] No ".venv" here and "python" was not found on PATH either.
-        echo         Install Python from python.org ^(check "Add python.exe to
-        echo         PATH" during install^), then run this script again.
+        echo [ERROR] No working ".venv" here and "python" was not found on
+        echo         PATH either. Install Python from python.org ^(check "Add
+        echo         python.exe to PATH" during install^), then run this
+        echo         script again.
         pause
         goto :eof
     )
-    set "PYTHON_EXE=python"
+    echo Creating a local virtual environment ^(.venv^) for this PC...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo [WARNING] Could not create ".venv" -- continuing with the system
+        echo           "python" on PATH instead.
+        set "PYTHON_EXE=python"
+    ) else (
+        set "PYTHON_EXE=.venv\Scripts\python.exe"
+    )
 )
 echo Using Python: %PYTHON_EXE%
 echo Checking the install -- this can take several seconds on the first run

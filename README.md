@@ -277,6 +277,40 @@ widget):
 | Materials | One card per material, searchable -- specimens, runs, mean peak stress, mean thickness (h0), date added -- click one to open its full combined dashboard in place. See "The Materials library" below. |
 | Config | What settings a run was actually ingested with -- read-only, traced back per run rather than showing the form's current defaults. |
 
+### Giving a colleague their own standalone copy
+
+If a colleague wants to run this on their own laptop instead of connecting
+to a PC that's already hosting it (see "Sharing the app with colleagues"
+below), zipping up this project folder and sending it to them works --
+with one thing to leave out: **do not include a `.venv` folder in the
+zip, if one exists here.** `.venv` is a Python virtual environment tied to
+this exact PC and this exact Python installation; on Windows, its
+`.venv\Scripts\python.exe` is a small launcher that points back at wherever
+Python was installed *on this machine* (e.g.
+`C:\Users\<you>\AppData\Local\Programs\Python\Python313\python.exe`), not a
+portable copy of Python itself. Zipped and copied to a different PC, that
+path doesn't exist there, and `run_webapp.bat` fails immediately with
+something like:
+
+```
+did not find executable at 'C:\Users\<you>\...\python.exe': The system cannot find the path specified.
+```
+
+`run_webapp.bat` now detects exactly this (a `.venv` that doesn't work on
+the PC it's running on) and automatically deletes and recreates it, so a
+zip that *does* include a stale `.venv` will now repair itself on first
+run rather than failing outright -- but the clean way to hand off a copy
+is still to exclude `.venv` from the zip in the first place (right-click →
+Send to → Compressed folder normally includes every subfolder, so exclude
+it explicitly, or zip from a fresh `git clone` instead of your working
+copy). Either way, the one thing your colleague needs *before* running
+`run_webapp.bat` for the first time is **Python 3.10+ installed from
+[python.org](https://www.python.org/downloads/), with "Add python.exe to
+PATH" checked during install** -- the script installs everything else
+(`compression_tool` itself and all its dependencies) automatically into a
+fresh `.venv` the first time it runs, which can take a minute or two and
+needs an internet connection that first time.
+
 ### Sharing the app with colleagues -- and the shared workspace
 
 `scripts/run_webapp.bat` starts the app bound to this PC's network address
