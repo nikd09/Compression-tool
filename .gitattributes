@@ -1,0 +1,9 @@
+# Windows .bat/.cmd files must always check out with CRLF line endings --
+# some Windows tools (and older cmd.exe behaviour) are picky about it, and
+# without this pinned explicitly, Git's own line-ending auto-detection can
+# disagree with itself between machines/checkouts. That mismatch is exactly
+# what produced a real "local changes would be overwritten by merge" error
+# on scripts/run_webapp.bat for a Windows user who never touched the file --
+# Git's autocrlf conversion on checkout looked like an uncommitted edit.
+*.bat text eol=crlf
+*.cmd text eol=crlf
