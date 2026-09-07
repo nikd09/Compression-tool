@@ -65,6 +65,36 @@ def test_switching_the_filter_repopulates_with_the_new_materials_specimens(
     assert len(specimens0.options) == 2
 
 
+def test_summary_table_shows_the_six_headline_metrics_per_group(
+    monkeypatch, workspace, single_file, series_file
+):
+    """The "Key properties by group" table added alongside the per-cycle
+    chart: one row per group, one column per headline metric -- the exact
+    six schema.py trims every other user-facing surface down to, not the
+    supporting/detail columns that were removed."""
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="MatA")
+    ingest([series_file], ws, material="MatB")
+
+    at = _run(monkeypatch, workspace)
+    assert not at.exception
+
+    table = at.dataframe[0].value
+    assert list(table["Group"]) == ["MatA", "MatB"]
+    assert list(table.columns) == [
+        "Group", "n",
+        "Stiffness (common band) (MPa/mm)",
+        "Stiffness (relative band) (MPa/mm)",
+        "Maximum displacement (mm)",
+        "Total deformation (mm)",
+        "Creep at peak load (mm)",
+        "Energy dissipated (MPa*mm)",
+    ]
+    # MatA is the single_file fixture: one specimen, so its row is that
+    # specimen's own last-cycle values, unaveraged -- n=1.
+    assert int(table.loc[table["Group"] == "MatA", "n"].iloc[0]) == 1
+
+
 def test_all_materials_starts_the_group_empty_not_the_whole_workspace(
     monkeypatch, workspace, single_file, series_file
 ):

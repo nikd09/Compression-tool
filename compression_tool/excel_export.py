@@ -98,13 +98,6 @@ _EXCEL_T = {
         "de": "Achtung: Proben in dieser Arbeitsmappe wurden mit unterschiedlichen Einstellungen analysiert."},
     "derived_reference_levels": {"en": "Derived reference levels", "de": "Abgeleitete Referenzwerte"},
     "reference_stress_for": {"en": "{label}: reference stress (MPa)", "de": "{label}: Referenzspannung (MPa)"},
-    "statistics_sheet": {"en": "Statistics", "de": "Statistik"},
-    "cross_specimen_stats": {"en": "Cross-specimen statistics", "de": "Probenübergreifende Statistik"},
-    "n_specimens": {"en": "n = {n} specimens", "de": "n = {n} Proben"},
-    "col_cycle": {"en": "Cycle", "de": "Zyklus"},
-    "col_mean": {"en": "Mean", "de": "Mittelwert"},
-    "col_std": {"en": "Std dev", "de": "Standardabw."},
-    "col_cov": {"en": "CoV (%)", "de": "VK (%)"},
 }
 
 
@@ -260,8 +253,12 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
 def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en") -> Path:
     """Write one workbook covering one or more specimens.
 
-    Sheets: Summary, Cycles, Statistics (only with >1 specimen), Data
-    dictionary, Config.
+    Sheets: Summary, Cycles, Data dictionary, Config. (A "Statistics"
+    cross-specimen sheet used to sit between Cycles and Data dictionary --
+    removed entirely on request, since it was covering the same headline
+    metrics per-cycle bar charts already show, one abstraction layer up.
+    cross_specimen_stats() itself stays -- html_report.py's own "Cross-
+    specimen statistics" section still uses it.)
 
     `lang`: "en" or "de". Every header/label/description in the workbook is
     picked for that language (schema.py's *_de lookups and this module's own
@@ -314,7 +311,6 @@ def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en")
 
     _write_summary(book, f, payloads, lang)
     _write_cycles(book, f, numfmt, payloads, lang)
-    _write_statistics(book, f, numfmt, payloads, lang)
     _write_dictionary(book, f, payloads, lang)
     _write_config(book, f, payloads, lang)
 
@@ -570,43 +566,6 @@ def cross_specimen_stats(payloads: Sequence[dict], lang: str = "en") -> list[dic
         if entry["rows"]:
             out.append(entry)
     return out
-
-
-def _write_statistics(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -> None:
-    """Mean / std / CoV per cycle across specimens -- the same shape as the
-    source export's own Statistik sheet (x / s / n[%]), extended to every
-    cycle rather than a single Fmax reading."""
-    stats = cross_specimen_stats(payloads, lang)
-    if not stats:
-        return
-    n_specimens = len({p.get("specimen", {}).get("label", "") for p in payloads})
-
-    sheet = book.add_worksheet(_t("statistics_sheet", lang))
-    sheet.write(0, 0, _t("cross_specimen_stats", lang), f["title"])
-    sheet.write(1, 0, _t("n_specimens", lang, n=n_specimens), f["text"])
-
-    r = 3
-    for entry in stats:
-        header = entry["label"] + (f" ({entry['unit']})" if entry["unit"] else "")
-        sheet.write(r, 0, header, f["section"])
-        r += 1
-        for i, h in enumerate((_t("col_cycle", lang), _t("col_mean", lang), _t("col_std", lang), _t("col_cov", lang))):
-            sheet.write(r, i, h, f["head"])
-        r += 1
-        for row in entry["rows"]:
-            sheet.write_number(r, 0, row["cycle"], numfmt("0"))
-            sheet.write_number(r, 1, row["mean"], numfmt("0.0000"))
-            sheet.write_number(r, 2, row["std"], numfmt("0.0000"))
-            if row["cov_pct"] is None:
-                sheet.write_blank(r, 3, None)
-            else:
-                sheet.write_number(r, 3, row["cov_pct"], numfmt("0.00"))
-            r += 1
-        r += 1
-
-    sheet.set_column(0, 0, 34)
-    sheet.set_column(1, 3, 16)
-    sheet.freeze_panes(3, 0)
 
 
 # ----------------------------------------------------------------------------

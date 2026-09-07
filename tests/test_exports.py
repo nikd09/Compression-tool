@@ -58,43 +58,45 @@ def test_cycle_headers_carry_units(tmp_path, single_payload):
     path = write_workbook([single_payload], tmp_path / "out.xlsx")
     headers = [c.value for c in load_workbook(path)["Cycles"][1]]
 
-    # Peak stress is a deleted per-cycle field -- no longer a user-facing column.
-    assert "Peak stress (MPa)" not in headers
-    assert "Stiffness (common band) (MPa/mm)" in headers
-    assert "Stiffness (relative band) (MPa/mm)" in headers
-    assert "Creep at peak load (mm)" in headers
-    assert "Maximum displacement (mm)" in headers
-    assert "Displacement at peak stress (mm)" in headers
+    # Exactly the six headline metrics (plus Cycle) are user-facing now --
+    # everything else (fit n/R2/quality, hold detected/length, the
+    # per-1000-samples creep rate, energy in, displacement/stress detail
+    # readings, the residual-displacement pair) was deleted on request.
+    assert headers == [
+        "Cycle",
+        "Stiffness (common band) (MPa/mm)",
+        "Stiffness (relative band) (MPa/mm)",
+        "Maximum displacement (mm)",
+        "Total deformation (mm)",
+        "Creep at peak load (mm)",
+        "Energy dissipated (MPa*mm)",
+    ]
     # Internal bookkeeping stays out of the user-facing table.
     assert not any(str(h).startswith("_") for h in headers if h)
 
 
-def test_hold_displacement_is_never_separated_from_hold_length(tmp_path, single_payload):
-    """Creep at peak load without hold length invites reading a longer dwell as
-    more movement, which is the exact misreading the pair exists to prevent."""
-    from compression_tool.schema import INSEPARABLE_PAIRS
-
+def test_detail_columns_are_gone_from_the_cycles_sheet(tmp_path, single_payload):
+    """The columns explicitly asked to be removed must not survive under
+    any header spelling, in either language."""
     path = write_workbook([single_payload], tmp_path / "out.xlsx")
-    headers = [c.value for c in load_workbook(path)["Cycles"][1] if c.value]
-    keys = [c.key for c in user_facing_cycle_columns(has_strain=False)]
+    headers = {str(c.value) for c in load_workbook(path)["Cycles"][1] if c.value}
 
-    for left, right in INSEPARABLE_PAIRS:
-        assert keys.index(right) == keys.index(left) + 1, f"{left} / {right} split"
+    removed_substrings = (
+        "points", "R2", "quality", "Hold detected", "Hold length",
+        "per 1000 samples", "Energy in", "Displacement at peak stress",
+        "Stress at maximum displacement", "of peak", "Residual displacement",
+        "Strain at peak stress",
+    )
+    for needle in removed_substrings:
+        assert not any(needle in h for h in headers), f"{needle!r} still present: {headers}"
 
-    assert "Hold length (samples)" in headers
-    assert headers.index("Creep at peak load (mm)") == headers.index("Hold length (samples)") + 1
 
-
-def test_per_sample_column_is_not_called_a_rate(tmp_path, single_payload):
+def test_per_sample_column_is_not_called_a_rate(single_payload):
     """Samples convert to time only under constant sampling, which the export
-    does not record. The column must never present itself as a creep rate."""
+    does not record. Even hidden from the user-facing table now, the
+    underlying column definition must never claim to be a creep rate."""
     from compression_tool.schema import HOLD_DISP_RATE
 
-    path = write_workbook([single_payload], tmp_path / "out.xlsx")
-    headers = [str(c.value) for c in load_workbook(path)["Cycles"][1] if c.value]
-
-    assert "Creep at peak load per 1000 samples (mm)" in headers
-    assert not any("rate" in h.lower() for h in headers)
     assert "NOT a creep rate" in HOLD_DISP_RATE.description
 
 
@@ -148,7 +150,7 @@ def test_data_dictionary_explains_the_traps(tmp_path, single_payload):
     assert "IDENTICAL stress window" in text
     assert "NOT comparable across cycles" in text
     assert "ASTM D395" in text
-    assert "not seconds" in text
+    assert "a TOTAL, not a rate" in text
 
 
 def test_config_sheet_records_the_settings(tmp_path, single_payload):
@@ -173,12 +175,16 @@ def test_strain_columns_are_absent_without_h0(tmp_path, single_payload):
     assert not any(str(h).endswith("(%)") for h in headers if h)
 
 
-def test_strain_columns_are_present_with_h0(tmp_path, payloads):
+def test_strain_columns_stay_absent_even_with_h0(tmp_path, payloads):
+    """All the strain-normalised (%) columns are the internal twins of the
+    six headline metrics now -- having h0 available no longer adds any
+    columns to the Cycles sheet, since none of the six headline metrics is
+    itself a percentage."""
     assert payloads[0]["analysis"]["has_strain"] is True
     path = write_workbook(payloads, tmp_path / "run.xlsx")
     headers = [c.value for c in load_workbook(path)["Cycles"][1]]
 
-    assert "Strain at peak stress (%)" in headers
+    assert not any(str(h).endswith("(%)") for h in headers if h)
 
 
 # ----------------------------------------------------------------------------
@@ -200,19 +206,14 @@ def test_stiffness_quality_flag(n, r2, expected):
     assert stiffness_quality(n, r2) == expected
 
 
-def test_quality_column_sits_next_to_the_fit_it_describes():
+def test_quality_column_is_not_user_facing():
+    """Stiffness_common_quality (and n/R2, the fit-quality supporting
+    columns) were deleted as user-facing columns on request -- the quality
+    flag itself (stiffness_quality()) still works, just isn't displayed."""
     cols = [c.key for c in user_facing_cycle_columns(has_strain=False)]
-    assert cols.index("Stiffness_common_quality") == cols.index("Stiffness_common_r2") + 1
-
-
-def test_workbook_carries_the_quality_column(tmp_path, single_payload):
-    path = write_workbook([single_payload], tmp_path / "out.xlsx")
-    sheet = load_workbook(path)["Cycles"]
-    headers = [c.value for c in sheet[1]]
-    col = headers.index("Stiffness (common band), quality") + 1
-
-    values = {sheet.cell(row=r, column=col).value for r in range(2, sheet.max_row + 1)}
-    assert values <= {"ok", "few points", "nonlinear", "none"}
+    assert "Stiffness_common_quality" not in cols
+    assert "Stiffness_common_n" not in cols
+    assert "Stiffness_common_r2" not in cols
 
 
 # ----------------------------------------------------------------------------
@@ -358,12 +359,17 @@ def test_cross_specimen_stats_covers_every_cycle(payloads):
     assert all(r["cov_pct"] is not None for r in k_common["rows"])
 
 
-def test_statistics_sheet_only_appears_with_multiple_specimens(tmp_path, single_payload, payloads):
+def test_statistics_sheet_is_gone(tmp_path, single_payload, payloads):
+    """The Excel "Statistics" (cross-specimen) sheet was removed entirely on
+    request, regardless of specimen count -- it duplicated what the
+    headline per-cycle bar charts already show, one layer up.
+    cross_specimen_stats() itself is untouched (html_report.py still uses
+    it for its own "Cross-specimen statistics" section)."""
     single_path = write_workbook([single_payload], tmp_path / "single.xlsx")
     assert "Statistics" not in load_workbook(single_path).sheetnames
 
     multi_path = write_workbook(payloads, tmp_path / "multi.xlsx")
-    assert "Statistics" in load_workbook(multi_path).sheetnames
+    assert "Statistics" not in load_workbook(multi_path).sheetnames
 
 
 def test_html_statistics_section_only_appears_with_multiple_specimens(single_payload, payloads):
@@ -386,7 +392,7 @@ def test_four_specimens_all_reach_the_workbook(tmp_path, quad_payloads):
     assert len(quad_payloads) == 4
     path = write_workbook(quad_payloads, tmp_path / "quad.xlsx")
     book = load_workbook(path)
-    assert "Statistics" in book.sheetnames
+    assert "Statistics" not in book.sheetnames
     # Summary lays specimens across the page: one label column plus one per
     # specimen, so a dropped specimen shows up as a missing column here.
     summary = book["Summary"]

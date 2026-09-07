@@ -132,7 +132,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "displacement goes on rising after stress has peaked. On a long dwell "
         "the maximum displacement can exceed this value by 20% or more. The "
         "energy integrals below split the loop at that later maximum, not "
-        "here.",
+        "here. Deleted as a user-facing column on request -- kept computed "
+        "and stored but hidden from every user-facing table, chart and "
+        "selector.",
+        internal=True,
     ),
     Column(
         "MaxDisp_mm", "REAL", "Maximum displacement", "mm",
@@ -152,8 +155,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "yielding on the unloading ramp. That is a damage signature that no "
         "other column here carries, and it appears as a step rather than a "
         "drift, so it dates the onset more sharply than the stiffness "
-        "rollover does.",
-        fmt="0.00",
+        "rollover does. Deleted as a user-facing column on request -- kept "
+        "computed and stored (UnloadYield_frac still needs it) but hidden "
+        "from every user-facing table, chart and selector.",
+        fmt="0.00", internal=True,
     ),
     Column(
         "ResidualDisp_mm", "REAL", "Residual displacement (loading)", "mm",
@@ -163,14 +168,21 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "few micrometres, which makes a zero-referenced permanent set "
         "meaningless. The same reference stress on every cycle, so this is "
         "also the column to plot cycle over cycle for a cross-test "
-        "comparison, not only within-cycle against ResidualDisp_unload_mm.",
+        "comparison, not only within-cycle against ResidualDisp_unload_mm. "
+        "Deleted as a user-facing column on request -- kept computed and "
+        "stored (PermDef_incremental_mm still needs it) but hidden from "
+        "every user-facing table, chart and selector.",
+        internal=True,
     ),
     Column(
         "ResidualDisp_unload_mm", "REAL", "Residual displacement (unloading)", "mm",
         "The SAME reference stress as ResidualDisp_mm, read on the UNLOADING "
         "branch of this cycle instead. The gap between the two, within one "
         "cycle, is the permanent set gained in that cycle -- see "
-        "PermDef_incremental_mm.",
+        "PermDef_incremental_mm. Deleted as a user-facing column on request "
+        "-- kept computed and stored (PermDef_incremental_mm still needs it) "
+        "but hidden from every user-facing table, chart and selector.",
+        internal=True,
     ),
     Column(
         "PermDef_cumulative_mm", "REAL", "Total deformation", "mm",
@@ -207,15 +219,20 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "Stiffness_common_n", "INTEGER", "Stiffness (common band), points", "",
         "Number of samples the common-band fit used. A slope from a handful of "
         "points on a fast machine ramp is not trustworthy; treat fits below "
-        "about 10 points as indicative only.",
-        fmt="0",
+        "about 10 points as indicative only. Deleted as a user-facing column "
+        "on request -- kept computed and stored (Stiffness_common_quality "
+        "still needs it) but hidden from every user-facing table, chart and "
+        "selector.",
+        fmt="0", internal=True,
     ),
     Column(
         "Stiffness_common_r2", "REAL", "Stiffness (common band), R2", "",
         "Coefficient of determination of the common-band fit. Low values mean "
         "the branch was curved over the window, so a single slope does not "
-        "describe it.",
-        fmt="0.000",
+        "describe it. Deleted as a user-facing column on request -- kept "
+        "computed and stored (Stiffness_common_quality still needs it) but "
+        "hidden from every user-facing table, chart and selector.",
+        fmt="0.000", internal=True,
     ),
     Column(
         "Stiffness_common_lo_MPa", "REAL", "Stiffness (common band), window low", "MPa",
@@ -243,13 +260,17 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Stiffness_relative_n", "INTEGER", "Stiffness (relative band), points", "",
-        "Number of samples the relative-band fit used.",
-        fmt="0",
+        "Number of samples the relative-band fit used. Deleted as a "
+        "user-facing column on request -- kept computed and stored but "
+        "hidden from every user-facing table, chart and selector.",
+        fmt="0", internal=True,
     ),
     Column(
         "Stiffness_relative_r2", "REAL", "Stiffness (relative band), R2", "",
-        "Coefficient of determination of the relative-band fit.",
-        fmt="0.000",
+        "Coefficient of determination of the relative-band fit. Deleted as a "
+        "user-facing column on request -- kept computed and stored but "
+        "hidden from every user-facing table, chart and selector.",
+        fmt="0.000", internal=True,
     ),
     Column(
         "Stiffness_relative_lo_MPa", "REAL", "Stiffness (relative band), window low", "MPa",
@@ -268,8 +289,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "Work put into the specimen along the loading path, per unit CROSS-"
         "SECTIONAL AREA -- integral of stress over displacement is work/area, "
         "not work/volume. Divide by h0 to get work per unit volume in MPa. "
-        "The loop is split at maximum DISPLACEMENT, not maximum stress.",
-        fmt="0.000",
+        "The loop is split at maximum DISPLACEMENT, not maximum stress. "
+        "Deleted as a user-facing column on request -- kept computed and "
+        "stored (Energy_dissipated_MPa_mm still needs it) but hidden from "
+        "every user-facing table, chart and selector.",
+        fmt="0.000", internal=True,
     ),
     Column(
         "Energy_dissipated_MPa_mm", "REAL", "Energy dissipated", "MPa*mm",
@@ -292,8 +316,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "HoldDetected", "INTEGER", "Hold detected", "",
         "Whether a dwell plateau was found at peak stress in this cycle. "
-        "Detected from the data, never asked about.",
-        fmt="0",
+        "Detected from the data, never asked about. Deleted as a "
+        "user-facing column on request -- kept computed and stored but "
+        "hidden from every user-facing table, chart and selector.",
+        fmt="0", internal=True,
     ),
     Column(
         "HoldPoints", "INTEGER", "Hold length", "samples",
@@ -301,8 +327,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "carries no time channel. This column is meaningless on its own and "
         "mandatory alongside the hold displacement beside it: without it there "
         "is no way to tell a specimen that moved further from one that was "
-        "simply held longer.",
-        fmt="0",
+        "simply held longer. Deleted as a user-facing column on request -- "
+        "kept computed and stored (HoldDisp_per_1000_samples_mm still needs "
+        "it) but hidden from every user-facing table, chart and selector.",
+        fmt="0", internal=True,
     ),
     Column(
         "Creep_during_hold_mm", "REAL", "Creep at peak load", "mm",
@@ -321,8 +349,10 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "Displacement at peak stress divided by the specimen height h0. "
         "PROVISIONAL unless the gauge length has been confirmed -- see the "
         "strain basis in the summary. Also taken at maximum stress rather than "
-        "maximum displacement, so it understates how far the specimen moved.",
-        fmt="0.000", strain=True,
+        "maximum displacement, so it understates how far the specimen moved. "
+        "Deleted as a user-facing column on request -- kept computed and "
+        "stored but hidden from every user-facing table, chart and selector.",
+        fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "MaxStrain_pct", "REAL", "Maximum strain", "%",
@@ -338,8 +368,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "PermDef_cumulative_pct", "REAL", "Total deformation", "%",
         "Cumulative permanent deformation as a fraction of h0. (Renamed from "
         "'Permanent deformation, cumulative' on request -- the underlying "
-        "key is unchanged.)",
-        fmt="0.000", strain=True,
+        "key is unchanged.) Deleted as a user-facing column on request -- "
+        "the mm form (PermDef_cumulative_mm) is the one headline column kept; "
+        "this percentage twin stays computed and stored but hidden from "
+        "every user-facing table, chart and selector.",
+        fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "PermDef_incremental_pct", "REAL", "Permanent deformation, incremental", "%",
@@ -354,8 +387,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "still only comparable at matching hold lengths. PROVISIONAL unless "
         "the gauge length has been confirmed. (Renamed from 'Hold "
         "displacement (of h0)' on request -- the underlying key, Creep_pct, "
-        "is unchanged.)",
-        fmt="0.000", strain=True,
+        "is unchanged.) Deleted as a user-facing column on request -- the mm "
+        "form (Creep_during_hold_mm) is the one headline column kept; this "
+        "percentage twin stays computed and stored but hidden from every "
+        "user-facing table, chart and selector.",
+        fmt="0.000", strain=True, internal=True,
     ),
     # --- internal bookkeeping ------------------------------------------------
     Column(
@@ -797,52 +833,56 @@ def specimen_description_de(field: "Field") -> str:
     return SPECIMEN_DESCRIPTIONS_DE.get(field.key, field.description)
 
 
-# The "headline" cycle metrics -- the ones with their own dashboard chart
-# panel and Compare metric option. Pulled to the front of every user-facing
-# column list, in this fixed order, ahead of the supporting detail columns
-# (raw readings, fit-quality flags, window bounds) that keep their ordinary
-# declared position after them. Each entry is the metric's own key plus
-# whichever OTHER columns are inseparable from it (see INSEPARABLE_PAIRS
-# below) -- those travel with it as one block, not just the metric alone.
+# The "headline" cycle metrics -- the six important, material-comparable
+# properties, each with its own dashboard chart panel and Compare metric
+# option: Common-band stiffness, Relative-band stiffness, Maximum
+# displacement, Total deformation, Creep at peak load, Energy dissipated.
 #
-# This is what put the requested order -- Common-band stiffness,
-# Relative-band stiffness, Maximum displacement, Total deformation, Creep
-# at peak load, Energy dissipated -- into the Excel/CSV cycle table, the
-# data dictionary, and (via compare_view.py, which builds its metric
-# picker directly from user_facing_cycle_columns()) the Compare dropdown,
-# all from one place.
+# Every OTHER cycle column -- fit-quality flags (n/R2/quality), window
+# bounds, hold detected/length, the per-1000-samples creep rate, energy in,
+# displacement/stress detail readings, the residual-displacement pair, and
+# the strain-normalised (%) twins of the headline metrics themselves -- is
+# marked `internal=True` on request: still computed and stored (several of
+# the headline metrics are built from them), but deliberately absent from
+# every user-facing table, chart and selector. This is what makes the
+# Excel Cycles sheet, the Excel data dictionary, the CSV export, and (via
+# compare_view.py, which builds its metric picker directly from
+# user_facing_cycle_columns()) the Compare dropdown all show EXACTLY these
+# six columns, all from one place.
 #
 # Mirrored BY HAND in two places that cannot import this module and so
-# cannot share it directly: results_dashboard.html's own PANELS/COLS
-# arrays (the chart grid and the Method tab's values table) and
-# excel_export.STATS_COLUMNS (the cross-specimen Statistics sheet). Keep
-# all three in sync if this order ever changes again.
+# cannot share it directly: results_dashboard.html's own PANELS/COLS/DEFS
+# arrays (the chart grid, and the Method tab's values table and glossary).
+# Keep both in sync if this set or order ever changes again. (The Excel
+# Statistics/cross-specimen sheet that used to need the same treatment was
+# removed entirely on request -- see excel_export.write_workbook.)
 HEADLINE_CYCLE_BLOCKS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Stiffness_common_MPa_per_mm", (
-        "Stiffness_common_MPa_per_mm", "Stiffness_common_n",
-        "Stiffness_common_r2", "Stiffness_common_quality",
-    )),
-    ("Stiffness_relative_MPa_per_mm", (
-        "Stiffness_relative_MPa_per_mm", "Stiffness_relative_n", "Stiffness_relative_r2",
-    )),
+    ("Stiffness_common_MPa_per_mm", ("Stiffness_common_MPa_per_mm",)),
+    ("Stiffness_relative_MPa_per_mm", ("Stiffness_relative_MPa_per_mm",)),
     ("MaxDisp_mm", ("MaxDisp_mm",)),
     ("PermDef_cumulative_mm", ("PermDef_cumulative_mm",)),
-    ("Creep_during_hold_mm", (
-        "HoldDetected", "HoldPoints", "Creep_during_hold_mm", "HoldDisp_per_1000_samples_mm",
-    )),
-    ("Energy_dissipated_MPa_mm", ("Energy_in_MPa_mm", "Energy_dissipated_MPa_mm")),
+    ("Creep_during_hold_mm", ("Creep_during_hold_mm",)),
+    ("Energy_dissipated_MPa_mm", ("Energy_dissipated_MPa_mm",)),
+)
+
+# The six headline metric keys alone, in the fixed display order above --
+# the exact set `user_facing_cycle_columns()` now reduces to, since every
+# other cycle column is internal. Used directly wherever code needs "just
+# the six" without re-deriving it from HEADLINE_CYCLE_BLOCKS' block shape
+# (e.g. the material/group comparison table in compare_view.py).
+HEADLINE_CYCLE_KEYS: tuple[str, ...] = tuple(
+    key for key, _block in HEADLINE_CYCLE_BLOCKS
 )
 
 
 def _headline_first(cols: list[Column]) -> list[Column]:
     """Reorders an already-filtered column list so the HEADLINE_CYCLE_BLOCKS
-    metrics (each with its own inseparable block riding along) come first,
-    in that fixed order, right after "Cycle". Every other column -- raw
-    supporting readings, the strain-normalised (%) twins of the headline
-    metrics, anything not part of a headline block -- keeps its original
-    relative order, appended after. A column simply absent from `cols`
-    (e.g. a strain-only column when has_strain is False) is silently
-    skipped rather than erroring."""
+    metrics come first, in that fixed order, right after "Cycle". Every
+    other column keeps its original relative order, appended after. A
+    column simply absent from `cols` (e.g. a strain-only column when
+    has_strain is False, or -- now that every non-headline cycle column is
+    internal -- effectively nothing) is silently skipped rather than
+    erroring."""
     by_key = {c.key: c for c in cols}
     used: set[str] = set()
     out: list[Column] = []
@@ -862,14 +902,11 @@ def _headline_first(cols: list[Column]) -> list[Column]:
 
 
 def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
-    """Columns shown in Excel / CSV / HTML, headline metrics first (see
-    HEADLINE_CYCLE_BLOCKS), each derived column inserted directly after the
-    column it qualifies.
-
-    Adjacency is not cosmetic here. The quality flag is meaningless away from
-    the fit it describes, and the hold displacement is meaningless away from
-    the hold length -- separating either pair invites exactly the misreading
-    it exists to prevent.
+    """Columns shown in Excel / CSV / HTML: "Cycle" plus the six headline
+    metrics (see HEADLINE_CYCLE_BLOCKS), in that fixed order. Every
+    supporting/detail column is `internal=True` and filtered out here --
+    STIFFNESS_QUALITY, HOLD_DISP_RATE and UNLOAD_YIELD are derived from
+    columns that are themselves internal now, so they are never inserted.
     """
     out: list[Column] = []
     for col in CYCLE_COLUMNS:
@@ -878,21 +915,4 @@ def user_facing_cycle_columns(has_strain: bool) -> list[Column]:
         if col.strain and not has_strain:
             continue
         out.append(col)
-        if col.key == "Stiffness_common_r2":
-            out.append(STIFFNESS_QUALITY)
-        if col.key == "StressAtMaxDisp_MPa":
-            out.append(UNLOAD_YIELD)
-        if col.key == "Creep_during_hold_mm":
-            out.append(HOLD_DISP_RATE)
     return _headline_first(out)
-
-
-# Pairs that must never be separated in any view. The UI is free to reorder or
-# hide columns, but splitting one of these pairs strips a number of the context
-# that makes it readable.
-INSEPARABLE_PAIRS: tuple[tuple[str, str], ...] = (
-    ("Stiffness_common_r2", "Stiffness_common_quality"),
-    ("StressAtMaxDisp_MPa", "UnloadYield_frac"),
-    ("HoldPoints", "Creep_during_hold_mm"),
-    ("Creep_during_hold_mm", "HoldDisp_per_1000_samples_mm"),
-)

@@ -126,11 +126,59 @@ _T = {
               "seinen genauen Wert überfahren."},
     "expander_title": {"en": "Group membership and underlying rows",
         "de": "Gruppenzugehörigkeit und zugrunde liegende Werte"},
+    "summary_heading": {"en": "Key properties by group", "de": "Kennwerte je Gruppe"},
+    "summary_caption": {
+        "en": "One row per group, every headline property side by side -- not just "
+              "the one metric charted above. Each specimen contributes its OWN last "
+              "cycle (its final state), then those are averaged across the group; a "
+              "group of one specimen shows that specimen's own values, unaveraged.",
+        "de": "Eine Zeile je Gruppe, alle Kennwerte nebeneinander - nicht nur die oben "
+              "als Diagramm dargestellte Kennzahl. Jede Probe geht mit ihrem EIGENEN "
+              "letzten Zyklus (ihrem Endzustand) ein, diese werden dann über die Gruppe "
+              "gemittelt; eine Gruppe mit nur einer Probe zeigt deren eigene Werte, "
+              "ungemittelt."},
+    "col_group": {"en": "Group", "de": "Gruppe"},
+    "col_n": {"en": "n", "de": "n"},
 }
 
 
 def _default_group_count(n_materials: int) -> int:
     return max(2, min(n_materials, MAX_GROUPS))
+
+
+def _decimals(fmt: str) -> int:
+    return len(fmt.split(".")[1]) if "." in fmt else 0
+
+
+def _headline_summary_table(
+    df: pd.DataFrame, groups: list[dict], has_strain: bool, L,
+) -> pd.DataFrame:
+    """One row per group, every headline metric side by side, each specimen
+    contributing its OWN last cycle (final state) before the group's
+    specimens are averaged together -- so a group of one specimen is just
+    that specimen's own values, and a multi-specimen group is not thrown
+    off by specimens with different cycle counts (each is read at ITS OWN
+    end, not a shared cycle number that might not exist for all of them).
+
+    Deliberately the six headline metrics only (schema.HEADLINE_CYCLE_KEYS)
+    -- the same set the Cycles-sheet Excel export and this page's own
+    Metric dropdown are trimmed to; this table is not a way to bring back
+    the supporting/detail columns that were removed everywhere else.
+    """
+    headline = [c for c in user_facing_cycle_columns(has_strain) if c.key != "Cycle"]
+    rows: list[dict] = []
+    for g in groups:
+        sub = df[df["specimen_id"].isin(g["ids"])] if "specimen_id" in df.columns else df
+        if sub.empty:
+            continue
+        last = sub.loc[sub.groupby("specimen_id")["Cycle"].idxmax()]
+        row: dict = {L("col_group"): g["name"], L("col_n"): len(last)}
+        for col in headline:
+            vals = pd.to_numeric(last[col.key], errors="coerce").dropna()
+            header = col.label + (f" ({col.unit})" if col.unit else "")
+            row[header] = round(float(vals.mean()), _decimals(col.fmt)) if not vals.empty else None
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def render(ws: Workspace) -> None:
@@ -373,6 +421,13 @@ def render(ws: Workspace) -> None:
     st.markdown(_HIDE_SPEC_COPY_CSS, unsafe_allow_html=True)
     st.altair_chart(chart, use_container_width=False)
     st.caption(L("chart_caption"))
+
+    st.markdown(f"##### {L('summary_heading')}")
+    st.caption(L("summary_caption"))
+    st.dataframe(
+        _headline_summary_table(df, groups, has_strain, L),
+        use_container_width=True, hide_index=True,
+    )
 
     with st.expander(L("expander_title")):
         for i, g in enumerate(groups):

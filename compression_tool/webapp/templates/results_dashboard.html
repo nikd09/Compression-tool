@@ -1198,34 +1198,23 @@ $("#charts").addEventListener("keydown",ev=>{
 });
 
 /* the values table, on the Method tab.
-   Same four-deleted/two-renamed/six-reordered treatment as PANELS above --
-   see the comment there. Peak stress, Max strain, Permanent def (this
-   cycle) and Hysteresis loss columns are gone; "Permanent def, running
-   total" is now "Total deformation" and "Hold disp" is now "Creep at peak
-   load"; the headline six lead the table (right after Specimen/Cycle),
-   the remaining raw/detail columns follow in their previous order. */
+   Trimmed to EXACTLY the six headline metrics (plus Specimen/Cycle) on
+   request -- every supporting/detail column (fit n/R2, window bounds, hold
+   detected/length, the per-1000-samples creep rate, energy in, the
+   displacement/stress detail readings, the residual-displacement pair, the
+   strain % twins) is gone from here too, matching schema.py's
+   user_facing_cycle_columns() now returning only these six. See the
+   comment on PANELS above for the fuller history (four fields deleted,
+   two renamed, in an earlier pass). */
 const COLS=[
   [{en:"Specimen",de:"Probe"}, (c,s,i)=>`<span class="dot" style="background:${colourOf(i)}"></span>${s.short}`, "html"],
   [{en:"Cycle",de:"Zyklus"}, c=>c.n, 0],
   [{en:"Stiffness common (MPa/mm)",de:"Steifigkeit gemeinsam (MPa/mm)"}, c=>c.kCommon, 0],
-  ["n", c=>c.kCommonN, 0],
-  ["R²", c=>c.kCommonR2, 3],
   [{en:"Stiffness relative (MPa/mm)",de:"Steifigkeit eigen (MPa/mm)"}, c=>c.kRel, 0],
-  ["n", c=>c.kRelN, 0],
-  ["R²", c=>c.kRelR2, 3],
   [{en:"Max displacement (mm)",de:"Max. Weg (mm)"}, c=>c.maxDisp, 4],
   [{en:"Total deformation (mm)",de:"Gesamtverformung (mm)"}, c=>c.permCum, 4],
-  [{en:"Total deformation (%)",de:"Gesamtverformung (%)"}, c=>c.permCumPct, 3],
-  [{en:"Hold length (samples)",de:"Haltedauer (Messpunkte)"}, c=>c.holdPts, 0],
   [{en:"Creep at peak load (mm)",de:"Kriechweg am Spitzenwert (mm)"}, c=>c.holdDisp, 5],
-  [{en:"Creep at peak load / 1000 (µm)",de:"Kriechweg am Spitzenwert / 1000 (µm)"}, c=>c.holdPer1k, 2],
-  [{en:"Energy in (MPa·mm)",de:"Energie ein (MPa·mm)"}, c=>c.eIn, 3],
   [{en:"Energy dissipated (MPa·mm)",de:"Energie dissipiert (MPa·mm)"}, c=>c.eDiss, 3],
-  [{en:"Disp at peak stress (mm)",de:"Weg bei Spitzenspannung (mm)"}, c=>c.peakDisp, 4],
-  [{en:"Stress at max disp (MPa)",de:"Spannung bei max. Weg (MPa)"}, c=>c.stressAtMaxDisp, 1],
-  [{en:"… ÷ peak",de:"… ÷ Spitze"}, c=>c.unloadYield, 3],
-  [{en:"Residual disp, loading (mm)",de:"Restweg, Belastung (mm)"}, c=>c.residDisp, 4],
-  [{en:"Residual disp, unloading (mm)",de:"Restweg, Entlastung (mm)"}, c=>c.residDispUnload, 4],
 ];
 function renderTable(){
   const shown = visible();
@@ -1243,8 +1232,9 @@ function renderTable(){
 }
 
 /* method tab: every word below is static text from the Python source.
-   Same four-deleted/two-renamed/six-reordered treatment as PANELS and COLS
-   above -- see the comment on PANELS for the full explanation. */
+   Trimmed to the six headline metrics only, matching COLS above -- Hold
+   length, Creep at peak load/1000 samples, Energy in (kept only as
+   "dissipated"), and Stress at maximum displacement are gone. */
 const DEFS=[
   [{en:"Stiffness, common band",de:"Steifigkeit, gemeinsames Fenster"},"MPa/mm",
    {en:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25-75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials.",
@@ -1255,24 +1245,15 @@ const DEFS=[
   [{en:"Maximum displacement",de:"Maximaler Weg"},"mm",
    {en:"Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held.",
     de:"Größter in diesem Zyklus erreichter Weg, und der Punkt, an dem die Energieintegrale die Schleife teilen. Übersteigt den Weg bei Spitzenspannung um so viel, wie die Probe während des Haltens weiterkroch."}],
-  [{en:"Total deformation",de:"Gesamtverformung"},"mm / %",
+  [{en:"Total deformation",de:"Gesamtverformung"},"mm",
    {en:"Cycle-by-cycle running total: how much of the specimen's thickness has not sprung back by this point in the test, altogether. Always rises or holds flat, never falls. A single unusually large cycle can be hard to spot here since it only steepens one step among a run of already-rising bars.",
     de:"Zyklus für Zyklus aufsummierter Wert: wie viel von der Probendicke bis zu diesem Punkt insgesamt nicht zurückgefedert ist. Steigt immer oder bleibt gleich, fällt nie. Ein einzelner ungewöhnlich großer Zyklus ist hier schwer zu erkennen, da er nur eine Stufe unter bereits ansteigenden Balken etwas steiler macht."}],
-  [{en:"Hold length",de:"Haltedauer"},"samples",
-   {en:"Length of the detected dwell in SAMPLES, not seconds: the export carries no time channel. Meaningless on its own and mandatory alongside the creep at peak load beside it.",
-    de:"Länge der erkannten Verweilzeit in MESSPUNKTEN, nicht Sekunden: der Export enthält keinen Zeitkanal. Allein aussagelos und nur zusammen mit dem daneben stehenden Kriechweg am Spitzenwert sinnvoll."}],
   [{en:"Creep at peak load",de:"Kriechweg am Spitzenwert"},"mm",
-   {en:"Displacement accumulated across the dwell: a TOTAL, not a rate. Only comparable between cycles whose hold lengths match, which is why the hold length is always reported next to it.",
-    de:"Über die Verweilzeit aufsummierter Weg: eine GESAMTSUMME, keine Rate. Nur zwischen Zyklen mit gleicher Haltedauer vergleichbar, weshalb die Haltedauer stets daneben angegeben wird."}],
-  [{en:"Creep at peak load / 1000 samples",de:"Kriechweg am Spitzenwert / 1000 Messpunkte"},"µm",
-   {en:"Removes the distortion of unequal dwell lengths so cycles can be ranked. NOT a creep rate: converting samples to time needs a constant sampling interval, which the export does not record.",
-    de:"Entfernt die Verzerrung durch unterschiedliche Haltedauern, damit Zyklen eingeordnet werden können. KEINE Kriechrate: die Umrechnung von Messpunkten in Zeit erfordert ein konstantes Abtastintervall, das der Export nicht aufzeichnet."}],
-  [{en:"Energy in / dissipated",de:"Energie ein / dissipiert"},"MPa·mm",
-   {en:"Work per unit CROSS-SECTIONAL AREA: the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa. The loop is split at maximum displacement, not maximum stress.",
-    de:"Arbeit je QUERSCHNITTSFLÄCHE: das Integral der Spannung über den Weg ist Arbeit/Fläche, nicht Arbeit/Volumen. Durch h₀ teilen für Arbeit je Volumen in MPa. Die Schleife wird beim maximalen Weg geteilt, nicht bei der maximalen Spannung."}],
-  [{en:"Stress at maximum displacement",de:"Spannung bei maximalem Weg"},"MPa",
-   {en:"Stress at the instant the specimen was most compressed. On an intact specimen this equals the peak. When it falls below, the specimen went on compacting while the load was being REMOVED: a damage signature no other column carries.",
-    de:"Spannung im Moment der stärksten Verdichtung der Probe. Bei einer intakten Probe entspricht dies der Spitze. Fällt sie darunter, hat die Probe sich weiter verdichtet, während die Last bereits ABGEBAUT wurde: ein Schädigungsmerkmal, das keine andere Spalte zeigt."}],
+   {en:"Displacement accumulated across the dwell: a TOTAL, not a rate. Only comparable between cycles whose hold lengths match.",
+    de:"Über die Verweilzeit aufsummierter Weg: eine GESAMTSUMME, keine Rate. Nur zwischen Zyklen mit gleicher Haltedauer vergleichbar."}],
+  [{en:"Energy dissipated",de:"Energie dissipiert"},"MPa·mm",
+   {en:"Work per unit CROSS-SECTIONAL AREA not recovered on unloading: the integral of stress over displacement is work/area, not work/volume. Divide by h₀ for work per unit volume in MPa.",
+    de:"Nicht bei der Entlastung zurückgewonnene Arbeit je QUERSCHNITTSFLÄCHE: das Integral der Spannung über den Weg ist Arbeit/Fläche, nicht Arbeit/Volumen. Durch h₀ teilen für Arbeit je Volumen in MPa."}],
 ];
 function renderMethod(){
   const s = SPS[0], cfg = DATA.config;
