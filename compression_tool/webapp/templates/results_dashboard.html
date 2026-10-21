@@ -857,13 +857,12 @@ const PANELS=[
        "erkennen, da er nur eine Stufe unter bereits ansteigenden Balken etwas steiler macht."}},
   {k:"holdDisp", t:{en:"Creep at peak load",de:"Kriechweg am Spitzenwert"},
    u:{en:"mm, a total, not a rate",de:"mm, eine Gesamtsumme, keine Rate"}, f:v=>fmt(v,4), u2:"mm",
-   why:{en:"Displacement accumulated across the dwell at peak stress: a TOTAL, not a rate. Dwell "+
-       "length varies across the cycles of this test, so a longer dwell accumulates more at "+
-       "identical material behaviour. Read it against the hold length in the values table.",
+   why:{en:"Displacement accumulated across the dwell at peak stress: a TOTAL, not a rate. "+
+       "A longer dwell accumulates more at identical material behaviour, so compare it only "+
+       "between cycles or specimens held for a similar time.",
    de:"Über die Verweilzeit bei Spitzenspannung aufsummierter Weg: eine GESAMTSUMME, keine "+
-       "Rate. Die Haltedauer schwankt zwischen den Zyklen dieser Prüfung, daher sammelt eine "+
-       "längere Haltezeit bei identischem Materialverhalten mehr an. Zusammen mit der "+
-       "Haltedauer in der Werttabelle lesen."}},
+       "Rate. Eine längere Haltezeit sammelt bei identischem Materialverhalten mehr an, daher "+
+       "nur zwischen Zyklen oder Proben mit ähnlicher Haltedauer vergleichen."}},
   {k:"eDiss", t:{en:"Energy dissipated",de:"Dissipierte Energie"},
    u:{en:"MPa·mm, per unit area",de:"MPa·mm, je Flächeneinheit"}, f:v=>fmt(v,1), u2:"MPa·mm",
    why:{en:"The area enclosed by the loop: work that went into the specimen and did not come back "+

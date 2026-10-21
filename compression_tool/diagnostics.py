@@ -310,16 +310,16 @@ def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
             f"Dwell length varies from {lo:.0f} to {hi:.0f} samples ({hi / lo:.1f}x) "
             "across the cycles, so creep at peak load is NOT comparable between "
             "them as a raw total -- a longer dwell accumulates more at identical "
-            "material behaviour. Compare the per-1000-samples column instead, "
-            "and note that it is a normalisation, not a creep rate."
+            "material behaviour. Compare creep only between cycles (or "
+            "specimens) held for a similar time."
         ),
         message_de=(
             f"Die Haltedauer variiert zwischen {lo:.0f} und {hi:.0f} Messpunkten "
             f"({hi / lo:.1f}-fach) über die Zyklen, daher ist der Kriechweg am "
             "Spitzenwert zwischen ihnen als Rohsumme NICHT vergleichbar -- eine "
             "längere Haltezeit sammelt bei identischem Materialverhalten mehr an. "
-            "Stattdessen die Spalte je 1000 Messpunkte vergleichen, und "
-            "beachten, dass dies eine Normierung ist, keine Kriechrate."
+            "Den Kriechweg nur zwischen Zyklen (oder Proben) mit ähnlicher "
+            "Haltedauer vergleichen."
         ),
     )
 

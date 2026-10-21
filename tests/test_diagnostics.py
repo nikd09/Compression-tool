@@ -230,7 +230,11 @@ def test_unequal_dwells_are_flagged():
 
     warnings = [w for w in collect(test, df, Config()) if w["code"] == "variable_dwell_length"]
     assert warnings
-    assert "not a creep rate" in warnings[0]["message"].lower()
+    msg = warnings[0]["message"]
+    assert "NOT comparable" in msg
+    # The per-1000-samples column is no longer shown anywhere, so the
+    # warning must not send people looking for it.
+    assert "1000" not in msg and "1000" not in warnings[0]["message_de"]
 
 
 # ----------------------------------------------------------------------------
