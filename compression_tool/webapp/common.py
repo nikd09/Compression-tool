@@ -78,22 +78,14 @@ _POLISH = """
     }
   }
 
-  /* File uploader: a calmer dashed drop-zone instead of the default block.
-     var(--secondary-background-color) was confirmed (DOM inspection) to
-     resolve to nothing in this Streamlit build -- it is not defined as a
-     custom property anywhere in the page, despite being documented. The
-     fallback is this app's own [theme] secondaryBackgroundColor literal, so
-     the rule still does something instead of silently no-op'ing. The dark
-     variant below matches [theme.dark], since the app does follow the
-     browser's prefers-color-scheme regardless of [theme] base. */
+  /* File uploader: a calmer drop-zone instead of the default block. The tint
+     is a few percent of the current text colour, so it follows whichever
+     Streamlit theme is actually showing. (It used to switch on the BROWSER's
+     prefers-color-scheme instead: a PC set to dark mode but showing the light
+     theme got a dark-plum tint over a light page -- the muddy grey box.) */
   [data-testid="stFileUploaderDropzone"]{
     border-radius:.7rem!important;
-    background:color-mix(in srgb, var(--secondary-background-color, #f5eef1) 55%, transparent)!important;
-  }
-  @media (prefers-color-scheme: dark){
-    [data-testid="stFileUploaderDropzone"]{
-      background:color-mix(in srgb, var(--secondary-background-color, #241521) 55%, transparent)!important;
-    }
+    background:color-mix(in srgb, currentColor 6%, transparent)!important;
   }
 
   /* Buttons: consistent weight/radius everywhere, primary gets a touch of lift. */
@@ -526,7 +518,6 @@ _LIBRARY_T = {
         "de": "Wo Raw exports/, Records/ und reports/ liegen. Jeder beschreibbare "
               "Ordner funktioniert; er wird beim ersten Commit angelegt. Nur auf "
               "diesem PC gespeichert, jeder Benutzer stellt seinen eigenen ein."},
-    "index_note": {"en": "Index (this machine only)", "de": "Index (nur dieser Rechner)"},
 }
 
 
@@ -593,8 +584,6 @@ def workspace_picker() -> Workspace:
         # First time this library is opened from THIS machine (or the local
         # index cache was cleared): real data but nothing indexed yet.
         rebuild_index(ws)
-    st.caption(f"→ `{ws.root.resolve()}`")
-    st.caption(f"{L('index_note')} → `{ws.db_path.parent}`")
     return ws
 
 
