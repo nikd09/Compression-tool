@@ -550,11 +550,18 @@ def workspace_picker() -> Workspace:
     st.session_state.setdefault("library_local_path", saved["local_path"])
     st.session_state.setdefault("library_active", saved["active"])
 
+    # One widget key per language: the dropdown keeps showing the label it
+    # rendered first, so after an EN/DE switch it would still read "Shared
+    # library". A fresh key per language re-renders it in the new language,
+    # seeded from the plain (non-widget) "library_active" value.
+    widget_key = f"library_active_{lang}"
+    st.session_state.setdefault(widget_key, st.session_state["library_active"])
     labels = {user_settings.SHARED: L("shared"), user_settings.LOCAL: L("local")}
     active = st.selectbox(
         L("library"), [user_settings.SHARED, user_settings.LOCAL],
-        format_func=labels.get, key="library_active", help=L("library_help"),
+        format_func=labels.get, key=widget_key, help=L("library_help"),
     )
+    st.session_state["library_active"] = active
     with st.expander(L("locations"), expanded=False):
         st.text_input(L("shared_path"), key="library_shared_path", help=L("path_help"))
         st.text_input(L("local_path"), key="library_local_path", help=L("path_help"))

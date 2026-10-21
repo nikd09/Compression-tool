@@ -29,7 +29,7 @@ _T = {
     "caption": {"en": "Every material in this workspace, at a glance. Click one to open its full dashboard.",
         "de": "Jedes Material in diesem Workspace auf einen Blick. Anklicken, um sein vollständiges Dashboard zu öffnen."},
     "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Ingest“ eine Datei hinzufügen."},
+        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
     "no_match": {"en": "No materials match “{query}”.", "de": "Keine Materialien passen zu „{query}“."},
     "specimens": {"en": "Specimens", "de": "Proben"},
     "runs": {"en": "Runs", "de": "Läufe"},

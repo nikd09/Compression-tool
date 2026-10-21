@@ -49,7 +49,7 @@ _T = {
               "engine sees before anything is committed.",
         "de": "Eine Test-Exportdatei hinzufügen, um zu starten -- die Vorschau "
               "zeigt, was die Engine sieht, bevor etwas gespeichert wird."},
-    "go_to_ingest": {"en": "Go to Ingest", "de": "Zu Ingest"},
+    "go_to_ingest": {"en": "Go to Ingest", "de": "Zum Einlesen"},
     "needs_a_look": {"en": "Needs a look", "de": "Braucht einen Blick"},
     "no_open_warnings": {"en": "No open diagnostic warnings across the {n} most recently analysed specimen(s).",
         "de": "Keine offenen Diagnosehinweise unter den {n} zuletzt analysierten Proben."},

@@ -13,21 +13,69 @@ from .. import knowledge_base
 from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..dashboard_data import COMFORTABLE_SPECIMENS, MAX_SPECIMENS, build_dashboard_data
 from ..persistence import Workspace, read_json
-from .common import connect_readonly, inject_dashboard_lang, short_tag
+from .common import connect_readonly, dashboard_lang, inject_dashboard_lang, short_tag
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "results_dashboard.html"
 
+_T = {
+    "header": {"en": "Results", "de": "Ergebnisse"},
+    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
+        "de": "In diesem Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
+    "no_specimens": {"en": "No specimens indexed yet.", "de": "Noch keine Proben indiziert."},
+    "material": {"en": "Material", "de": "Material"},
+    "no_material_specimens": {"en": "No specimens for this material.", "de": "Keine Proben für dieses Material."},
+    "specimens": {"en": "Specimens (1-{n})", "de": "Proben (1-{n})"},
+    "specimens_help": {
+        "en": "Every specimen selected here gets its own colour (S1, S2, …) plus "
+              "a mean across them. Individual specimens can then be toggled on and "
+              "off inside the dashboard without reloading. The palette has "
+              "{n} distinct colours and will not reuse one; the charts "
+              "read most comfortably up to about {c}.",
+        "de": "Jede hier gewählte Probe bekommt eine eigene Farbe (S1, S2, …) plus "
+              "einen Mittelwert über alle. Einzelne Proben lassen sich danach im "
+              "Dashboard ohne Neuladen ein- und ausblenden. Die Palette hat {n} "
+              "unterscheidbare Farben und verwendet keine doppelt; am besten lesbar "
+              "sind die Diagramme bis etwa {c} Proben."},
+    "pick_one": {"en": "Pick at least one specimen.", "de": "Mindestens eine Probe auswählen."},
+    "many": {
+        "en": "{k} specimens selected: the panels widen and the grid drops to fewer "
+              "columns to keep the bars legible. Toggle specimens off inside the "
+              "dashboard to compact it again.",
+        "de": "{k} Proben gewählt: die Diagramme werden breiter und das Raster hat "
+              "weniger Spalten, damit die Balken lesbar bleiben. Proben im Dashboard "
+              "ausblenden, um es wieder kompakter zu machen."},
+    "missing_record": {
+        "en": "The index still lists {names} but its record no longer exists on disk - "
+              "it was likely deleted outside the app. Go to Config and use \"Reindex "
+              "from disk\" to bring the index back in line with what is actually there.",
+        "de": "Der Index führt noch {names}, aber der Datensatz existiert nicht mehr - "
+              "vermutlich außerhalb der App gelöscht. Unter Konfiguration „Von der "
+              "Festplatte neu indizieren“ ausführen, damit der Index wieder stimmt."},
+    "missing_curve": {
+        "en": "No curve cache found for: {names}. The stress-displacement panel will be "
+              "empty for it; re-ingest to generate one. Every other chart is unaffected.",
+        "de": "Kein Kurven-Cache gefunden für: {names}. Das Spannungs-Weg-Diagramm bleibt "
+              "dafür leer; zum Erzeugen erneut einlesen. Alle anderen Diagramme sind "
+              "nicht betroffen."},
+}
+
 
 def render(ws: Workspace) -> None:
-    st.header("Results")
+    lang = dashboard_lang()
+
+    def L(key: str, **kw) -> str:
+        text = _T[key][lang]
+        return text.format(**kw) if kw else text
+
+    st.header(L("header"))
     conn = connect_readonly(ws)
     if conn is None:
-        st.info("Nothing ingested into this workspace yet - use Ingest first.")
+        st.info(L("no_data"))
         return
 
     materials = knowledge_base.materials(conn)
     if not materials:
-        st.info("No specimens indexed yet.")
+        st.info(L("no_specimens"))
         return
     # Bound to the same "active_material" key Materials writes when a card
     # is clicked, so opening a material there and then switching to Results
@@ -38,11 +86,11 @@ def render(ws: Workspace) -> None:
     # not among `options`.
     if st.session_state.get("active_material") not in materials:
         st.session_state["active_material"] = materials[0]
-    material = st.selectbox("Material", materials, key="active_material")
+    material = st.selectbox(L("material"), materials, key="active_material")
 
     specimens = knowledge_base.list_specimens(conn, material)
     if specimens.empty:
-        st.info("No specimens for this material.")
+        st.info(L("no_material_specimens"))
         return
 
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
@@ -55,26 +103,18 @@ def render(ws: Workspace) -> None:
     }
     default = list(label_by_id)[:COMFORTABLE_SPECIMENS]
     chosen = st.multiselect(
-        f"Specimens (1-{MAX_SPECIMENS})",
+        L("specimens", n=MAX_SPECIMENS),
         options=list(label_by_id),
         default=default,
         format_func=lambda sid: f"{tag_by_id[sid]} - {label_by_id[sid]}",
         max_selections=MAX_SPECIMENS,
-        help="Every specimen selected here gets its own colour (S1, S2, …) plus "
-        "a mean across them. Individual specimens can then be toggled on and "
-        "off inside the dashboard without reloading. The palette has "
-        f"{MAX_SPECIMENS} distinct colours and will not reuse one; the charts "
-        f"read most comfortably up to about {COMFORTABLE_SPECIMENS}.",
+        help=L("specimens_help", n=MAX_SPECIMENS, c=COMFORTABLE_SPECIMENS),
     )
     if not chosen:
-        st.info("Pick at least one specimen.")
+        st.info(L("pick_one"))
         return
     if len(chosen) > COMFORTABLE_SPECIMENS:
-        st.caption(
-            f"{len(chosen)} specimens selected: the panels widen and the grid "
-            "drops to fewer columns to keep the bars legible. Toggle specimens "
-            "off inside the dashboard to compact it again."
-        )
+        st.caption(L("many", k=len(chosen)))
 
     row_by_id = specimens.set_index("specimen_id")
     payloads, curves, missing_curve, missing_record = [], [], [], []
@@ -99,18 +139,9 @@ def render(ws: Workspace) -> None:
             missing_curve.append(label_by_id[sid])
 
     if missing_record:
-        st.error(
-            "The index still lists " + ", ".join(missing_record) + " but its "
-            "record no longer exists on disk - it was likely deleted outside "
-            "the app. Go to Config and use \"Reindex from disk\" to bring the "
-            "index back in line with what is actually there."
-        )
+        st.error(L("missing_record", names=", ".join(missing_record)))
     if missing_curve:
-        st.warning(
-            "No curve cache found for: " + ", ".join(missing_curve) + ". "
-            "The stress-displacement panel will be empty for it; re-ingest "
-            "to generate one. Every other chart is unaffected."
-        )
+        st.warning(L("missing_curve", names=", ".join(missing_curve)))
     if not payloads:
         return
 

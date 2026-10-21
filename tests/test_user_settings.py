@@ -83,11 +83,24 @@ def test_switcher_uses_shared_by_default_and_switches_to_local(settings_home, tm
     assert not at.exception
     assert any(f"ROOT={shared.resolve()}" in m.value for m in at.markdown)
 
-    at.selectbox(key="library_active").set_value(user_settings.LOCAL).run()
+    at.selectbox(key="library_active_en").set_value(user_settings.LOCAL).run()
     assert not at.exception
     assert any(f"ROOT={local.resolve()}" in m.value for m in at.markdown)
     # The choice is remembered for next launch.
     assert user_settings.load()["active"] == user_settings.LOCAL
+
+
+def test_switching_language_keeps_the_library_and_relabels_it(settings_home, tmp_path):
+    user_settings.save({"shared_path": str(tmp_path / "s"), "local_path": str(tmp_path / "l"),
+                        "active": user_settings.SHARED})
+    at = AppTest.from_function(_app).run()
+    at.selectbox(key="library_active_en").set_value(user_settings.LOCAL).run()
+    at.session_state["app_lang"] = "de"
+    at.run()
+    assert not at.exception
+    box = at.selectbox(key="library_active_de")
+    assert box.value == user_settings.LOCAL
+    assert box.format_func(box.value) == "Meine lokale Bibliothek"
 
 
 def test_editing_a_path_is_remembered(settings_home, tmp_path):
@@ -108,5 +121,5 @@ def test_allowed_roots_still_apply_to_the_active_library(settings_home, tmp_path
     )
     at = AppTest.from_function(_app).run()
     assert at.error  # shared path is outside the allowed roots
-    at.selectbox(key="library_active").set_value(user_settings.LOCAL).run()
+    at.selectbox(key="library_active_en").set_value(user_settings.LOCAL).run()
     assert not at.error

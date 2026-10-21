@@ -14,7 +14,7 @@ import streamlit as st
 
 from .. import knowledge_base
 from ..persistence import Workspace
-from ..schema import user_facing_cycle_columns
+from ..schema import column_label_de, user_facing_cycle_columns
 from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot, short_tag
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
@@ -36,14 +36,12 @@ div[data-testid="stElementToolbarButton"]:has(button[aria-label="Copy Vega-Lite 
 # EN/DE strings for this page's own widgets/chart. The language ITSELF now
 # comes from the one shared sidebar toggle (common.dashboard_lang(), set by
 # common.language_picker() in app.py) rather than a separate widget here --
-# see that toggle's own docstring for why. Metric names/units
-# (metric.label/metric.unit, from schema.py) are left in English on purpose:
-# they are shared with every other view's values table and are out of this
-# page's own scope.
+# see that toggle's own docstring for why. Metric names come from schema.py
+# (column_label_de for German); units are not translated.
 _T = {
     "header": {"en": "Compare", "de": "Vergleich"},
     "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesem Workspace wurde noch nichts eingelesen - zuerst unter „Ingest“ eine Datei hinzufügen."},
+        "de": "In diesem Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
     "no_specimens": {"en": "No specimens indexed yet.", "de": "Noch keine Proben indiziert."},
     "groups_label": {"en": "Groups to compare", "de": "Zu vergleichende Gruppen"},
     "groups_help": {
@@ -138,6 +136,8 @@ _T = {
               "gemittelt; eine Gruppe mit nur einer Probe zeigt deren eigene Werte, "
               "ungemittelt."},
     "col_group": {"en": "Group", "de": "Gruppe"},
+    "col_material": {"en": "Material", "de": "Material"},
+    "col_specimen": {"en": "Specimen", "de": "Probe"},
     "col_n": {"en": "n", "de": "n"},
 }
 
@@ -150,8 +150,12 @@ def _decimals(fmt: str) -> int:
     return len(fmt.split(".")[1]) if "." in fmt else 0
 
 
+def _metric_label(col, lang: str) -> str:
+    return column_label_de(col) if lang == "de" else col.label
+
+
 def _headline_summary_table(
-    df: pd.DataFrame, groups: list[dict], has_strain: bool, L,
+    df: pd.DataFrame, groups: list[dict], has_strain: bool, L, lang: str = "en",
 ) -> pd.DataFrame:
     """One row per group, every headline metric side by side, each specimen
     contributing its OWN last cycle (final state) before the group's
@@ -175,7 +179,7 @@ def _headline_summary_table(
         row: dict = {L("col_group"): g["name"], L("col_n"): len(last)}
         for col in headline:
             vals = pd.to_numeric(last[col.key], errors="coerce").dropna()
-            header = col.label + (f" ({col.unit})" if col.unit else "")
+            header = _metric_label(col, lang) + (f" ({col.unit})" if col.unit else "")
             row[header] = round(float(vals.mean()), _decimals(col.fmt)) if not vals.empty else None
         rows.append(row)
     return pd.DataFrame(rows)
@@ -307,7 +311,7 @@ def render(ws: Workspace) -> None:
         if c.key in df.columns and c.key not in ("Cycle",)
     ]
     metric = st.selectbox(
-        L("metric_label"), options, format_func=lambda c: f"{c.label} ({c.unit})" if c.unit else c.label,
+        L("metric_label"), options, format_func=lambda c: f"{_metric_label(c, lang)} ({c.unit})" if c.unit else _metric_label(c, lang),
     )
 
     by_specimen = df.set_index("specimen_id") if "specimen_id" in df.columns else None
@@ -325,7 +329,7 @@ def render(ws: Workspace) -> None:
             })
     agg = pd.DataFrame(rows)
     if agg.empty:
-        st.info(L("no_values", label=metric.label))
+        st.info(L("no_values", label=_metric_label(metric, lang)))
         return
     agg["err_lo"] = agg["mean"] - agg["sd"]
     agg["err_hi"] = agg["mean"] + agg["sd"]
@@ -335,11 +339,12 @@ def render(ws: Workspace) -> None:
     )
 
     group_order = [g["name"] for g in groups]
-    y_title = metric.label + (f" ({metric.unit})" if metric.unit else "")
+    metric_name = _metric_label(metric, lang)
+    y_title = metric_name + (f" ({metric.unit})" if metric.unit else "")
     tooltip = [
         alt.Tooltip("group:N", title=L("tooltip_group")),
         alt.Tooltip("Cycle:O", title=L("tooltip_cycle")),
-        alt.Tooltip("mean:Q", title=metric.label, format=".4g"),
+        alt.Tooltip("mean:Q", title=metric_name, format=".4g"),
         alt.Tooltip("sd:Q", title=L("tooltip_sd"), format=".3g"),
         alt.Tooltip("n:Q", title=L("tooltip_specimens")),
     ]
@@ -406,7 +411,7 @@ def render(ws: Workspace) -> None:
         .properties(
             width=820, height=480,
             title=alt.TitleParams(
-                text=metric.label, subtitle=metric.unit or None,
+                text=metric_name, subtitle=metric.unit or None,
                 # Vega-Lite's fontWeight is a fixed enum (100-900 in steps of
                 # 100, or a named keyword) -- not an arbitrary CSS weight
                 # like the rest of this app's "650" convention uses.
@@ -425,7 +430,7 @@ def render(ws: Workspace) -> None:
     st.markdown(f"##### {L('summary_heading')}")
     st.caption(L("summary_caption"))
     st.dataframe(
-        _headline_summary_table(df, groups, has_strain, L),
+        _headline_summary_table(df, groups, has_strain, L, lang),
         use_container_width=True, hide_index=True,
     )
 
@@ -442,6 +447,9 @@ def render(ws: Workspace) -> None:
                 unsafe_allow_html=True,
             )
         st.dataframe(
-            df[["material", "label", "specimen_id", "Cycle", metric.key]],
+            df[["material", "label", "Cycle", metric.key]].rename(columns={
+                "material": L("col_material"), "label": L("col_specimen"),
+                "Cycle": L("tooltip_cycle"), metric.key: y_title,
+            }),
             use_container_width=True, hide_index=True,
         )

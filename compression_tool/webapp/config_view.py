@@ -39,7 +39,7 @@ _T = {
     "tab_activity": {"en": "Activity", "de": "Aktivität"},
     "tab_admin": {"en": "Maintenance", "de": "Wartung"},
     "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Ingest“ eine Datei hinzufügen."},
+        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
     # -- Run tab --
     "specimens": {"en": "Specimens", "de": "Proben"},
     "sources": {"en": "Sources", "de": "Quellen"},
@@ -61,7 +61,7 @@ _T = {
         "de": "Dies ist, womit der Lauf tatsächlich eingelesen wurde, nicht die "
               "aktuellen Formularvorgaben der App. Beides kann voneinander abweichen, "
               "sobald jemand für einen späteren Lauf einen Schwellenwert im "
-              "Ingest-Tab ändert."},
+              "Einlesen-Tab ändert."},
     # -- Exports tab --
     "combined_heading": {"en": "Combined across every run of this material",
         "de": "Zusammengeführt über alle Läufe dieses Materials"},
@@ -164,7 +164,7 @@ _T = {
               "disk to re-run this from.",
         "de": "Nicht verfügbar - keine der Quelldateien dieses Laufs wurde "
               "archiviert (eingelesen mit deaktiviertem „Eine Kopie der "
-              "hochgeladenen Datei archivieren“ im Ingest-Tab), daher gibt es "
+              "hochgeladenen Datei archivieren“ im Einlesen-Tab), daher gibt es "
               "nichts auf der Festplatte, worauf das aufbauen könnte."},
     "reanalyze_missing_warning": {
         "en": "{n} of {total} source file(s) for this run are missing from the "
