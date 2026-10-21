@@ -334,7 +334,9 @@ folder; any folder the user can write to works, and it is created on the first
 Commit. Both paths and the active choice are remembered **per user, on that
 PC** in `%LOCALAPPDATA%\CompressionTool\settings.json` (`user_settings.py`) --
 no code editing and no Windows variable needed. The Shared path defaults to
-`COMPRESSION_TOOL_WORKSPACE` if that is set, otherwise `./data`; the Local
+`COMPRESSION_TOOL_WORKSPACE` if that is set; otherwise `~/CompressLab shared library`,
+kept outside the tool folder so replacing the folder on update cannot delete
+data (an existing `./data` with records in it is still picked up); the Local
 path defaults to `~/CompressLab data`.
 
 The two libraries are never merged: each is an ordinary workspace with its own

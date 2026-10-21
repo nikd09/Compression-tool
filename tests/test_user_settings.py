@@ -30,6 +30,17 @@ def test_defaults_when_nothing_saved(settings_home, monkeypatch):
     assert s["active"] == user_settings.SHARED
 
 
+def test_default_shared_is_outside_the_tool_folder(settings_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # stands in for the tool folder
+    assert user_settings.load()["shared_path"].endswith("CompressLab shared library")
+
+
+def test_existing_data_folder_is_still_used(settings_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "Records").mkdir(parents=True)
+    assert user_settings.load()["shared_path"] == str((tmp_path / "data").resolve())
+
+
 def test_save_then_load_round_trips(settings_home):
     assert user_settings.save(
         {"shared_path": "/a", "local_path": "/b", "active": user_settings.LOCAL}
