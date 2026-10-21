@@ -325,6 +325,25 @@ it," not a substitute for it -- and never expose this via a public tunnel
 (ngrok or similar) regardless: this is proprietary test data, and a tunnel
 puts it on the open internet in front of, at best, one shared secret.
 
+### Two libraries: Shared and My local
+
+The sidebar has a **Library** switcher: *Shared library* (the team's common
+folder with every material) and *My local library* (the user's own folder for
+personal experiments). Open "Library locations" under it to type either
+folder; any folder the user can write to works, and it is created on the first
+Commit. Both paths and the active choice are remembered **per user, on that
+PC** in `%LOCALAPPDATA%\CompressionTool\settings.json` (`user_settings.py`) --
+no code editing and no Windows variable needed. The Shared path defaults to
+`COMPRESSION_TOOL_WORKSPACE` if that is set, otherwise `./data`; the Local
+path defaults to `~/CompressLab data`.
+
+The two libraries are never merged: each is an ordinary workspace with its own
+index, and nothing is copied between them. Team rule (no admin role exists --
+everyone can add, rename and delete materials): treat Shared as the place for
+finished, checked work, and use Local for experiments, because two people
+ingesting into the same material at the same moment can collide when the
+combined exports are rewritten.
+
 The workspace path is read from the `COMPRESSION_TOOL_WORKSPACE` environment
 variable if it is set (see the comment at the top of `run_webapp.bat` for
 how to set it), falling back to `./data` for local development. It is never
@@ -743,8 +762,8 @@ index/disk disagreement, rather than trying to hand-patch the database:
   copy), so a raw export is only ever removed if `delete_raw=True` is passed
   AND no other remaining specimen still references it.
 
-Both are gated in the webapp by `permissions.is_admin(ws)` -- see "Who may
-rename or delete a material" below -- and Delete requires typing the exact
+Both are open to every user (there is deliberately no admin gate, so the tool
+keeps working with nobody in charge) and Delete requires typing the exact
 material name to confirm before the button enables.
 
 **A stale index self-heals, but the app no longer crashes on it either way.**
@@ -755,38 +774,6 @@ now skip a specimen whose record is missing (with a visible error naming it)
 instead of raising `FileNotFoundError` out of the whole tab, and Config gained
 a plain "Reindex from disk" button (`knowledge_base.rebuild()`) next to the
 existing per-material and overview rebuilds, for exactly this case.
-
-### Who may rename or delete a material
-
-`permissions.py` gates Rename and Delete behind `<workspace>/admins.json` --
-a plain list of OS usernames, matched against `getpass.getuser()`
-case-insensitively, the same identity `audit.py` already attributes every
-ingest to. The same pattern as `materials.json`: a small, shared,
-hand-editable file at the workspace root, not a login system.
-
-Unrestricted -- every action allowed for everyone -- until `admins.json`
-exists. The first person to open Config's "Admin access" panel and click
-"Claim admin access for myself" seeds it with just their username; every
-visitor after that is restricted to whoever is listed, manageable from the
-same panel by an existing admin (or by hand-editing `admins.json` on the
-share). This still is not authentication (see the deployment notes above on
-`COMPRESSION_TOOL_PASSWORD`, and "Still to build") -- nothing here proves
-who is actually at the keyboard, only what the OS happens to report. It
-exists to keep an accidental click from a casual visitor from renaming or
-deleting a shared material -- not to stop someone deliberately editing the
-file or running as another account. Real per-person enforcement needs the
-app hosted behind corporate SSO.
-
-**Rename and Delete stay visible to everyone, restricted or not** --
-`permissions.is_admin(ws)` is checked at CLICK time in `materials_view.py`,
-not used to hide the buttons. A non-admin sees both buttons exactly like an
-admin does; clicking either shows an error explaining who can do this and
-where to ask, instead of opening the rename/delete dialog. Hiding the
-buttons entirely used to be the behaviour here -- changed on the reasoning
-that a control nobody but an admin even knows exists is worse than one that
-is visible and explains itself when it refuses: a non-admin colleague can
-now discover the admin workflow exists at all, and knows who to ask, rather
-than a capability quietly missing with no trace of why.
 
 ### Concurrent ingest: the filesystem decides who owns a run folder
 
@@ -825,15 +812,14 @@ the stale-lock failure mode a lock file brings (a crashed process leaving a
 lock nobody ever clears). See below for the one place that reasoning did
 not hold and a lock was added anyway.
 
-### materials.json and admins.json: a small, self-healing lock for a shared list
+### materials.json: a small, self-healing lock for a shared list
 
-`materials.json` and `admins.json` are a different shape of problem from
+`materials.json` is a different shape of problem from
 everything above: not an append-mostly set of per-run files, but ONE shared,
-mutable list that "add a material" or "add an admin" reads in full,
+mutable list that "add a material" reads in full,
 modifies, and writes back in full. Exclusive-create and atomic writes do not
 help here -- they make each individual WRITE safe, but not the
-read-modify-write around it. Two people adding different materials (or
-admins) around the same moment could each read the SAME list before either
+read-modify-write around it. Two people adding different materials around the same moment could each read the SAME list before either
 had written, each compute their own "existing + my one addition", and
 whichever wrote second would silently overwrite the first's addition
 instead of both surviving.
@@ -842,9 +828,8 @@ instead of both surviving.
 (`<path>.lock`, next to the JSON file it protects), acquired by exclusive
 create -- the same underlying primitive `resolve_run_dir()` already relies
 on, applied to a shared file instead of a new directory each time.
-`material_registry.add_material()`/`remove_material()` and
-`permissions.claim_admin()`/`add_admin()`/`remove_admin()` all wrap their
-read-modify-write in it now. Unlike the "no lock file" reasoning above, this
+`material_registry.add_material()`/`remove_material()` wrap their
+read-modify-write in it. Unlike the "no lock file" reasoning above, this
 one lock is self-healing against the exact failure mode that reasoning was
 avoiding: a lock older than 30 seconds is assumed abandoned by a crashed
 holder and is stolen rather than left to wedge every future writer forever

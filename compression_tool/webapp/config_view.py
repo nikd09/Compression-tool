@@ -6,7 +6,7 @@ result can always be traced back to the exact numbers behind it, per run.
 Organised as tabs, not one long scroll: "Run" (trace this run's numbers back
 to their source), "Re-analyse" (the one write action here), "Exports"
 (cross-run/cross-material output), "Activity" (the workspace-wide audit
-trail) and "Administration" (index/admin, neither of which depends on a run
+trail) and "Maintenance" (index rebuild, which does not depend on a run
 being selected at all). The run picker sits above the tabs, not inside one
 of them, so switching tabs never re-asks which run you meant."""
 
@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from .. import audit, knowledge_base, permissions
+from .. import audit, knowledge_base
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..pipeline import ingest
@@ -37,7 +37,7 @@ _T = {
     "tab_reanalyze": {"en": "Re-analyse", "de": "Neu analysieren"},
     "tab_exports": {"en": "Exports", "de": "Exporte"},
     "tab_activity": {"en": "Activity", "de": "Aktivität"},
-    "tab_admin": {"en": "Administration", "de": "Verwaltung"},
+    "tab_admin": {"en": "Maintenance", "de": "Wartung"},
     "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
         "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Ingest“ eine Datei hinzufügen."},
     # -- Run tab --
@@ -197,45 +197,6 @@ _T = {
     "reanalyzed_success": {"en": "Re-analysed into {run_dir} - {n} specimen(s).",
         "de": "Neu analysiert nach {run_dir} - {n} Probe(n)."},
     "skipped_warning": {"en": "Skipped {name}: {why}", "de": "{name} übersprungen: {why}"},
-    # -- Admin access --
-    "admin_access_heading": {"en": "Admin access", "de": "Admin-Zugriff"},
-    "admin_not_configured": {
-        "en": "Nobody has restricted this yet - every visitor, including "
-              "you ({me}), can currently rename or delete a material from "
-              "the Materials tab. Claim admin access to restrict Rename "
-              "and Delete to specific people from here on.",
-        "de": "Das wurde noch von niemandem eingeschränkt - jeder Besucher, "
-              "auch Sie ({me}), kann aktuell im Materials-Tab ein Material "
-              "umbenennen oder löschen. Admin-Zugriff beanspruchen, um "
-              "Umbenennen und Löschen ab jetzt auf bestimmte Personen zu "
-              "beschränken."},
-    "claim_admin": {"en": "Claim admin access for myself", "de": "Admin-Zugriff für mich beanspruchen"},
-    "admin_is_admin": {
-        "en": "Signed in as {me} - listed as an admin. Rename and Delete "
-              "are visible on the Materials tab. Add or remove people below; "
-              "this only checks the OS username the app is running under, "
-              "the same identity Config's audit log already records.",
-        "de": "Angemeldet als {me} - als Admin gelistet. Umbenennen und "
-              "Löschen sind im Materials-Tab sichtbar. Unten Personen "
-              "hinzufügen oder entfernen; dies prüft nur den "
-              "Betriebssystem-Benutzernamen, unter dem die App läuft, dieselbe "
-              "Identität, die das Aktivitätsprotokoll in Config bereits "
-              "erfasst."},
-    "col_admin": {"en": "Admin", "de": "Admin"},
-    "add_admin_placeholder": {"en": "Add admin (Windows/OS username)", "de": "Admin hinzufügen (Windows-/OS-Benutzername)"},
-    "add_admin_example": {"en": "e.g. n7215177", "de": "z. B. n7215177"},
-    "add": {"en": "Add", "de": "Hinzufügen"},
-    "remove_admin_label": {"en": "Remove an admin", "de": "Einen Admin entfernen"},
-    "remove": {"en": "Remove", "de": "Entfernen"},
-    "admin_not_admin": {
-        "en": "Signed in as {me} - not on the admin list ({admins}). "
-              "Rename and Delete are hidden on the Materials tab. Ask one of "
-              "them to add you above, or edit admins.json directly at the "
-              "workspace root.",
-        "de": "Angemeldet als {me} - nicht auf der Admin-Liste ({admins}). "
-              "Umbenennen und Löschen sind im Materials-Tab ausgeblendet. Eine "
-              "der gelisteten Personen bitten, Sie oben hinzuzufügen, oder "
-              "admins.json direkt im Workspace-Stammverzeichnis bearbeiten."},
 }
 
 
@@ -412,7 +373,6 @@ def _render_administration(ws: Workspace, L) -> None:
             count = with_utm_animation(L("reindexing"), lambda: knowledge_base.rebuild(ws))
             st.success(L("reindexed", n=count))
 
-    _render_admin_access(ws, L)
 
 
 def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[str]]:
@@ -521,47 +481,3 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
         for name, why in result.skipped:
             st.warning(L("skipped_warning", name=name, why=why))
         st.rerun()
-
-
-def _render_admin_access(ws: Workspace, L) -> None:
-    """Who may Rename or Delete a material from the Materials tab -- see
-    permissions.py for what this does and does not actually enforce (a
-    shared, hand-editable allowlist keyed on the OS username, not a login
-    system)."""
-    with st.container(border=True, key="card_admin_access"):
-        st.markdown(f"##### {L('admin_access_heading')}")
-        me = permissions.current_user()
-        if not permissions.admins_configured(ws):
-            st.caption(L("admin_not_configured", me=me))
-            if st.button(L("claim_admin"), icon=":material/shield:"):
-                permissions.claim_admin(ws)
-                st.rerun()
-            return
-
-        admins = permissions.load_admins(ws)
-        is_admin = permissions.is_admin(ws)
-        if is_admin:
-            st.caption(L("admin_is_admin", me=me))
-            st.dataframe(
-                pd.DataFrame({L("col_admin"): admins}), use_container_width=True, hide_index=True,
-            )
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                new_name = st.text_input(
-                    L("add_admin_placeholder"), key="cfg_add_admin",
-                    label_visibility="collapsed", placeholder=L("add_admin_example"),
-                )
-            with c2:
-                if st.button(L("add"), key="cfg_add_admin_btn") and new_name.strip():
-                    permissions.add_admin(ws, new_name.strip())
-                    st.rerun()
-            removable = [a for a in admins if a.casefold() != me.casefold()]
-            if removable:
-                to_remove = st.selectbox(
-                    L("remove_admin_label"), [""] + removable, key="cfg_remove_admin",
-                )
-                if to_remove and st.button(L("remove"), key="cfg_remove_admin_btn"):
-                    permissions.remove_admin(ws, to_remove)
-                    st.rerun()
-        else:
-            st.caption(L("admin_not_admin", me=me, admins=", ".join(admins)))

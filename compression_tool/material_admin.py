@@ -13,9 +13,8 @@ to hand-patch the database: whatever the JSON files now say on disk is
 what the index ends up holding, exactly as if the workspace had just been
 opened for the first time.
 
-Gated in the webapp by permissions.is_admin() -- neither function checks
-permissions itself, so a script or the CLI can always use them; the admin
-gate is a UI concern, not a data-safety one.
+Open to every user in the webapp (there is no admin gate); Delete still
+needs the material's exact name typed to confirm.
 """
 
 from __future__ import annotations

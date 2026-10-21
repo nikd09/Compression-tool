@@ -1,14 +1,9 @@
 """
 materials_view.py: the Rename/Delete buttons on a material card.
 
-Visible to every visitor regardless of admin status (a hidden feature is a
-feature nobody but an admin even knows exists); permissions.is_admin(ws) is
-instead checked at CLICK time, showing an error instead of opening the
-Rename/Delete dialog for anyone not on the admins.json list. permissions.py's
-own tests (test_permissions.py) already pin what is_admin() returns for a
-given admins.json; these pin that materials_view.render() actually acts on
-that return value at the right moment, not just computes it and ignores the
-result.
+Open to every user (the admin gate was removed deliberately: the project
+must keep working without any one person around). Delete still needs the
+material's exact name typed to confirm.
 
 Also covers the Download button: available to everyone unconditionally
 (a read, not a write), only once the combined dashboard already exists on
@@ -19,7 +14,7 @@ from __future__ import annotations
 
 from streamlit.testing.v1 import AppTest
 
-from compression_tool import Workspace, export_material, ingest, permissions
+from compression_tool import Workspace, export_material, ingest
 
 
 def _app() -> None:
@@ -41,7 +36,7 @@ def _button_keys(at) -> set[str]:
     return {b.key for b in at.button if b.key}
 
 
-def test_manage_buttons_are_visible_with_no_admin_restriction(monkeypatch, workspace, single_file):
+def test_manage_buttons_are_visible(monkeypatch, workspace, single_file):
     ws = Workspace.at(workspace).ensure()
     ingest([single_file], ws, material="TALCO50")
 
@@ -52,58 +47,10 @@ def test_manage_buttons_are_visible_with_no_admin_restriction(monkeypatch, works
     assert any(k.startswith("delete_material_") for k in keys)
 
 
-def test_manage_buttons_stay_visible_for_a_non_admin(monkeypatch, workspace, single_file):
-    """The behaviour this pins changed on purpose: the buttons used to be
-    hidden entirely for a non-admin. Now they stay visible -- see the
-    module docstring -- and it is the CLICK that is gated instead."""
+def test_clicking_rename_opens_the_dialog_for_everyone(monkeypatch, workspace, single_file):
+    """There is no admin gate any more: any user may rename a material."""
     ws = Workspace.at(workspace).ensure()
     ingest([single_file], ws, material="TALCO50")
-    permissions.add_admin(ws, "someone-else-entirely")
-
-    at = _run(monkeypatch, workspace)
-    assert not at.exception
-    keys = _button_keys(at)
-    assert any(k.startswith("rename_material_") for k in keys)
-    assert any(k.startswith("delete_material_") for k in keys)
-
-
-def test_clicking_rename_as_a_non_admin_shows_an_error_not_the_dialog(
-    monkeypatch, workspace, single_file
-):
-    ws = Workspace.at(workspace).ensure()
-    ingest([single_file], ws, material="TALCO50")
-    permissions.add_admin(ws, "someone-else-entirely")
-
-    at = _run(monkeypatch, workspace)
-    rename_btn = next(b for b in at.button if b.key and b.key.startswith("rename_material_"))
-    rename_btn.click().run()
-
-    assert not at.exception
-    assert at.error
-    assert "Only an admin" in at.error[0].value
-    assert not any(ti.label == "New name" for ti in at.text_input)
-
-
-def test_clicking_delete_as_a_non_admin_shows_an_error_not_the_dialog(
-    monkeypatch, workspace, single_file
-):
-    ws = Workspace.at(workspace).ensure()
-    ingest([single_file], ws, material="TALCO50")
-    permissions.add_admin(ws, "someone-else-entirely")
-
-    at = _run(monkeypatch, workspace)
-    delete_btn = next(b for b in at.button if b.key and b.key.startswith("delete_material_"))
-    delete_btn.click().run()
-
-    assert not at.exception
-    assert at.error
-    assert "Only an admin" in at.error[0].value
-
-
-def test_clicking_rename_as_an_admin_opens_the_dialog(monkeypatch, workspace, single_file):
-    ws = Workspace.at(workspace).ensure()
-    ingest([single_file], ws, material="TALCO50")
-    permissions.add_admin(ws, permissions.current_user())
 
     at = _run(monkeypatch, workspace)
     rename_btn = next(b for b in at.button if b.key and b.key.startswith("rename_material_"))
@@ -112,6 +59,20 @@ def test_clicking_rename_as_an_admin_opens_the_dialog(monkeypatch, workspace, si
     assert not at.exception
     assert not at.error
     assert any(ti.label == "New name" for ti in at.text_input)
+
+
+def test_clicking_delete_opens_the_type_the_name_dialog_for_everyone(
+    monkeypatch, workspace, single_file
+):
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="TALCO50")
+
+    at = _run(monkeypatch, workspace)
+    delete_btn = next(b for b in at.button if b.key and b.key.startswith("delete_material_"))
+    delete_btn.click().run()
+
+    assert not at.exception
+    assert any("Type" in (ti.label or "") for ti in at.text_input)
 
 
 def test_download_button_available_once_the_dashboard_exists(monkeypatch, workspace, single_file):

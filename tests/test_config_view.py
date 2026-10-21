@@ -163,7 +163,7 @@ def test_config_page_renders_as_tabs_with_the_run_picker_shared_above_them(
 ):
     """The reorganised Config page: one Run picker feeding every tab, not a
     long scroll mixing run inspection, the one write action (Re-analyse),
-    cross-run exports, the audit trail and workspace administration."""
+    cross-run exports, the audit trail and index maintenance."""
     ws = Workspace.at(workspace).ensure()
     ingest([single_file], ws, material="TALCO50")
 
@@ -176,18 +176,19 @@ def test_config_page_renders_as_tabs_with_the_run_picker_shared_above_them(
         ":material/refresh: Re-analyse",
         ":material/download: Exports",
         ":material/history: Activity",
-        ":material/admin_panel_settings: Administration",
+        ":material/admin_panel_settings: Maintenance",
     }
     assert any(sb.label == "Run" for sb in at.selectbox)
 
 
-def test_administration_tab_works_even_with_nothing_ingested(monkeypatch, workspace):
+def test_maintenance_tab_works_even_with_nothing_ingested(monkeypatch, workspace):
     Workspace.at(workspace).ensure()
 
     at = _run(monkeypatch, workspace)
 
     assert not at.exception
-    assert any(b.label == "Claim admin access for myself" for b in at.button)
+    assert any(b.label == "Reindex from disk" for b in at.button)
+    assert not any("admin" in (b.label or "").lower() for b in at.button)
 
 
 def test_reanalyze_button_is_disabled_until_the_confirm_checkbox_is_ticked(

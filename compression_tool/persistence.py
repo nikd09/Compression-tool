@@ -468,8 +468,8 @@ def locked_update(target: Path) -> Iterator[None]:
     """Serialises a read-modify-write cycle against `target` across
     processes (and threads) that might touch it at the same moment.
 
-    materials.json and admins.json are small, shared, hand-editable lists:
-    every "add a material" or "add an admin" call reads the whole file,
+    materials.json is a small, shared, hand-editable list:
+    every "add a material" call reads the whole file,
     computes old-list-plus-one-change, and writes the whole file back.
     write_json() alone makes each individual WRITE atomic, but not the
     read-modify-write as a whole -- two such calls racing each read the

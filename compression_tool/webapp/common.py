@@ -5,22 +5,15 @@ helpers every specimen picker uses so they read the same way everywhere."""
 from __future__ import annotations
 
 import json
-import os
 import re
 
 import streamlit as st
 
-from .. import knowledge_base
+from .. import knowledge_base, user_settings
 from ..core import Config
 from ..persistence import Workspace, WorkspacePathNotAllowed, check_workspace_allowed, workspace_index_root
 from ..pipeline import rebuild_index
 
-# Resolved once, at import time, from an environment variable set on the
-# HOST machine -- not hardcoded, so the same code works for whoever is
-# hosting the app today and for whoever it moves to later; only the launch
-# environment changes, never this file. Falls back to a plain relative
-# folder for local development when the variable is unset.
-DEFAULT_WORKSPACE = os.environ.get("COMPRESSION_TOOL_WORKSPACE", "./data")
 
 # The validated categorical slots (light mode; Streamlit widgets do not
 # follow the dashboard's dark-mode CSS variables, so these are the literal
@@ -511,79 +504,97 @@ def short_tag(label: str, fallback_index: int) -> str:
     return m.group(1).upper() if m else f"#{fallback_index}"
 
 
-def workspace_picker() -> Workspace:
-    """Render the ONE Workspace input for the whole app session.
+_LIBRARY_T = {
+    "library": {"en": "Library", "de": "Bibliothek"},
+    "shared": {"en": "Shared library", "de": "Gemeinsame Bibliothek"},
+    "local": {"en": "My local library", "de": "Meine lokale Bibliothek"},
+    "library_help": {
+        "en": "Shared = the team's common folder with all materials. Local = your "
+              "own folder for personal experiments. Switching only changes which "
+              "folder this app reads and writes; nothing is copied between them.",
+        "de": "Gemeinsam = der gemeinsame Teamordner mit allen Materialien. Lokal = "
+              "Ihr eigener Ordner für persönliche Versuche. Das Umschalten ändert "
+              "nur, welchen Ordner die App liest und beschreibt; es wird nichts "
+              "zwischen ihnen kopiert."},
+    "locations": {"en": "Library locations", "de": "Speicherorte der Bibliotheken"},
+    "shared_path": {"en": "Shared library folder", "de": "Ordner der gemeinsamen Bibliothek"},
+    "local_path": {"en": "My local library folder", "de": "Ordner meiner lokalen Bibliothek"},
+    "path_help": {
+        "en": "Where Raw exports/, Records/ and reports/ live. Any folder you can "
+              "write to works; it is created on the first Commit. Saved on this PC "
+              "only, so every user sets their own.",
+        "de": "Wo Raw exports/, Records/ und reports/ liegen. Jeder beschreibbare "
+              "Ordner funktioniert; er wird beim ersten Commit angelegt. Nur auf "
+              "diesem PC gespeichert, jeder Benutzer stellt seinen eigenen ein."},
+    "index_note": {"en": "Index (this machine only)", "de": "Index (nur dieser Rechner)"},
+}
 
-    Called exactly once, from app.py, never from inside a view. A
-    `key="workspace_root"` widget re-declared at a second call site (e.g. a
-    second `st.text_input(key="workspace_root")` inside a different view
-    function) is, to Streamlit, a *different* widget instance sharing that
-    key -- and switching to it drops the session_state value back to the
-    widget's own default instead of carrying it over. Confirmed with an
-    isolated repro: the same key at two call sites resets on every switch; a
-    single call site does not. Every view receives the resolved `Workspace`
-    as a plain argument instead of calling this again.
+
+def workspace_picker() -> Workspace:
+    """Render the ONE library switcher for the whole app session and return
+    the resolved Workspace of whichever library is active.
+
+    Two libraries, one switcher (see user_settings.py): "Shared library"
+    (the team folder, every material) and "My local library" (the user's own
+    folder). Both paths are editable here and remembered per user on this PC
+    -- in %LOCALAPPDATA%\\CompressionTool\\settings.json -- so nobody edits
+    code or Windows variables. Nothing is merged: each library is a normal,
+    self-contained workspace, exactly like the single workspace before.
+
+    Called exactly once, from app.py, never from inside a view: a keyed
+    widget re-declared at a second call site is, to Streamlit, a different
+    widget sharing that key, and its session_state value resets on every
+    switch (confirmed with an isolated repro). Every view receives the
+    resolved `Workspace` as a plain argument instead of calling this again.
     """
-    st.session_state.setdefault("workspace_root", DEFAULT_WORKSPACE)
-    # Plain st.text_input, not st.sidebar.text_input: this is always called
-    # from inside app.py's own `with st.sidebar:` block now, and mixing the
-    # explicit st.sidebar.* API with an ambient `with st.sidebar:` context
-    # was the remaining cause of the reset -- each re-enters the sidebar
-    # container by a slightly different path, which is exactly the kind of
-    # position-sensitivity a keyed widget's carried-over value turned out to
-    # be sensitive to. Nesting it one level deeper inside an expander below
-    # does not reintroduce that: the widget is still instantiated on every
-    # run regardless of whether the expander is visually open (Streamlit
-    # still executes a collapsed expander's body), and nothing about ITS
-    # position relative to the nav loop above changed -- confirmed live,
-    # switching tabs repeatedly still carries the value forward.
-    #
-    # Collapsed by default and labelled "Advanced": most people editing this
-    # form should never need to touch it (COMPRESSION_TOOL_WORKSPACE already
-    # sets where it opens), and a text box inviting an arbitrary path is
-    # exactly the thing worth NOT presenting as the first thing in the
-    # sidebar. check_workspace_allowed() below is the actual enforcement --
-    # this is only making the deliberate override read as deliberate.
-    with st.expander("Advanced: change workspace", expanded=False):
-        root = st.text_input(
-            "Workspace",
-            key="workspace_root",
-            help="Where Raw exports/, Records/ and reports/ live: every "
-            "specimen's JSON, CSV, Excel workbook and HTML report land here on "
-            "every Commit, nowhere else. The same path every time this app is "
-            "opened shows the same tests; pointing it elsewhere switches "
-            "workspaces, it does not copy anything between them. A relative path "
-            "like the default is resolved against wherever `streamlit run` was "
-            "launched from; see the resolved path below if that's unclear. "
-            "Everything here stays local: no network calls, nothing uploaded. "
-            "The search index is kept separately, on this machine only; see "
-            "the note below the resolved path.",
-        )
+    lang = dashboard_lang()
+
+    def L(key: str) -> str:
+        return _LIBRARY_T[key][lang]
+
+    saved = user_settings.load()
+    # Seeded from the settings file, which survives the session_state resets
+    # this app has seen on page switches (see app.py), not just from defaults.
+    st.session_state.setdefault("library_shared_path", saved["shared_path"])
+    st.session_state.setdefault("library_local_path", saved["local_path"])
+    st.session_state.setdefault("library_active", saved["active"])
+
+    labels = {user_settings.SHARED: L("shared"), user_settings.LOCAL: L("local")}
+    active = st.selectbox(
+        L("library"), [user_settings.SHARED, user_settings.LOCAL],
+        format_func=labels.get, key="library_active", help=L("library_help"),
+    )
+    with st.expander(L("locations"), expanded=False):
+        st.text_input(L("shared_path"), key="library_shared_path", help=L("path_help"))
+        st.text_input(L("local_path"), key="library_local_path", help=L("path_help"))
+
+    current = {
+        "shared_path": st.session_state["library_shared_path"].strip() or saved["shared_path"],
+        "local_path": st.session_state["library_local_path"].strip() or saved["local_path"],
+        "active": active,
+    }
+    if current != {k: saved[k] for k in current}:
+        user_settings.save(current)
+
+    root = current["shared_path"] if active == user_settings.SHARED else current["local_path"]
     try:
         check_workspace_allowed(root)
     except WorkspacePathNotAllowed as exc:
         st.error(str(exc))
         st.stop()
-    # The searchable index is deliberately NOT under `root`: `root` is
-    # expected to be a synced or shared folder (OneDrive, a network drive),
-    # and syncing a SQLite file while it is being written is a well-known
-    # way to corrupt it. The index is disposable and rebuilt from the JSON
-    # records under `root` -- moving it off the synced path costs nothing.
-    # Scoped per workspace (workspace_index_root, not the bare
-    # default_index_root() base) so switching this field to a different
-    # folder can never pick up a previous workspace's already-built index.
+    # The searchable index is deliberately NOT under `root`: `root` may be a
+    # synced or shared folder (OneDrive, a network drive), and syncing a
+    # SQLite file while it is being written is a well-known way to corrupt
+    # it. The index is disposable and rebuilt from the JSON records under
+    # `root`. Scoped per workspace (workspace_index_root) so the two
+    # libraries can never pick up each other's index.
     ws = Workspace.at(root, index_root=workspace_index_root(root))
     if not ws.db_path.exists() and ws.processed.exists() and any(ws.processed.iterdir()):
-        # First time this workspace has been opened from THIS machine (or
-        # the local index cache was cleared): there is real data under
-        # `root` but nothing indexed locally yet. Build it once now rather
-        # than showing an empty app in front of a non-empty workspace.
+        # First time this library is opened from THIS machine (or the local
+        # index cache was cleared): real data but nothing indexed yet.
         rebuild_index(ws)
-    # A relative path (the default, "./data") silently depends on the launch
-    # directory -- shown resolved so it is never ambiguous where a run
-    # actually landed on disk.
     st.caption(f"→ `{ws.root.resolve()}`")
-    st.caption(f"Index (this machine only) → `{ws.db_path.parent}`")
+    st.caption(f"{L('index_note')} → `{ws.db_path.parent}`")
     return ws
 
 

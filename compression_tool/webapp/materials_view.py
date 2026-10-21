@@ -14,7 +14,6 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
-from .. import permissions
 from ..material_admin import delete_material, rename_material
 from ..material_export import export_material
 from ..persistence import Workspace, slugify
@@ -41,10 +40,6 @@ _T = {
     "download_dashboard": {"en": "Download dashboard", "de": "Dashboard herunterladen"},
     "dashboard_not_built": {"en": "Dashboard not built yet - click the material name above to open (and generate) it first.",
         "de": "Dashboard noch nicht erstellt - zuerst oben auf den Materialnamen klicken, um es zu öffnen (und zu erzeugen)."},
-    "not_admin": {"en": "Only an admin can do this - see the \"Admin access\" card on the "
-        "Config tab to see who is listed, or to claim admin access yourself if nobody has yet.",
-        "de": "Das kann nur ein Admin. Auf der Karte „Admin-Zugriff“ im Config-Tab steht, wer "
-        "gelistet ist, oder dort selbst Admin-Zugriff beanspruchen, falls es noch niemand hat."},
     "rename_dialog_title": {"en": "Rename material", "de": "Material umbenennen"},
     "rename_dialog_caption": {
         "en": "Renames \"{material}\" everywhere it appears: every run folder, "
@@ -99,11 +94,8 @@ _T = {
         "de": "Für {material!r} konnte kein Dashboard erstellt werden: es hat möglicherweise keine indizierten Proben."},
 }
 
-# Rename/Delete are visible to every visitor, not hidden for a non-admin --
-# someone who cannot use them should still be able to see the option exists
-# and find out why it is blocked (this message, shown on click), rather than
-# a feature that only admins even know is there. permissions.is_admin() is
-# checked at CLICK time instead, inside render() below.
+# Rename/Delete are open to every user (there is no admin gate). Delete
+# still requires typing the material's exact name to confirm.
 
 # Scoped via st.container(key=...) -- a documented, stable Streamlit hook for
 # exactly this (style one specific container's contents without a fragile
@@ -239,7 +231,6 @@ def render(ws: Workspace) -> None:
         st.info(L("no_match", query=query))
         return
 
-    can_manage = permissions.is_admin(ws)
     st.markdown(_CARD_CSS, unsafe_allow_html=True)
     clicked_material = None
     with st.container(key="materials_grid"):
@@ -299,21 +290,14 @@ def render(ws: Workspace) -> None:
                     L("rename"), key=f"rename_material_{row['slug']}",
                     icon=":material/edit:", use_container_width=True,
                 ):
-                    if can_manage:
-                        st.dialog(L("rename_dialog_title"))(_rename_dialog_body)(ws, row["material"], L)
-                    else:
-                        st.error(L("not_admin"))
+                    st.dialog(L("rename_dialog_title"))(_rename_dialog_body)(ws, row["material"], L)
                 if st.button(
                     L("delete"), key=f"delete_material_{row['slug']}",
                     icon=":material/delete:", use_container_width=True,
                 ):
-                    if can_manage:
-                        st.dialog(L("delete_dialog_title"))(_delete_dialog_body)(ws, row["material"], L)
-                    else:
-                        st.error(L("not_admin"))
+                    st.dialog(L("delete_dialog_title"))(_delete_dialog_body)(ws, row["material"], L)
 
-                # Downloading a local copy of the dashboard needs no admin
-                # access -- it is a read, not a write, the same as opening
+                # Downloading a local copy of the dashboard is a read, not a write, the same as opening
                 # the material's dashboard by clicking its card. Only shown
                 # once the combined dashboard actually exists on disk:
                 # building it from here (export_material(), the same slow
