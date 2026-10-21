@@ -1236,15 +1236,15 @@ function renderTable(){
    "dissipated"), and Stress at maximum displacement are gone. */
 const DEFS=[
   [{en:"Stiffness, common band",de:"Steifigkeit, gemeinsames Fenster"},"MPa/mm",
-   {en:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle (25-75% of the smallest cycle peak). This is the form that may be compared across stages, specimens and materials.",
-    de:"Steigung des Belastungsastes über ein IDENTISCHES Spannungsfenster in jedem Zyklus (25-75% der kleinsten Zyklusspitze). Diese Form darf über Stufen, Proben und Materialien hinweg verglichen werden."}],
+   {en:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle, located once on the smallest-peak cycle's most linear region (see Settings above). This is the form that may be compared across stages, specimens and materials.",
+    de:"Steigung des Belastungsastes über ein IDENTISCHES Spannungsfenster in jedem Zyklus, einmalig im linearsten Bereich des Zyklus mit der kleinsten Spitze bestimmt (siehe Einstellungen oben). Diese Form darf über Stufen, Proben und Materialien hinweg verglichen werden."}],
   [{en:"Stiffness, relative band",de:"Steifigkeit, eigenes Fenster"},"MPa/mm",
    {en:"Slope over a window auto-located on THIS cycle's own loading branch (ASTM E111 toe compensation / chord modulus). Describes the cycle faithfully but is NOT comparable across cycles, since the window itself moves with each cycle's own peak.",
     de:"Steigung über ein Fenster, automatisch im Belastungsast DIESES Zyklus bestimmt (ASTM E111 Toe-Kompensation / Sehnenmodul). Beschreibt den Zyklus originalgetreu, ist aber NICHT über Zyklen vergleichbar, da sich das Fenster mit der jeweiligen Spitze verschiebt."}],
   [{en:"Maximum displacement",de:"Maximaler Weg"},"mm",
    {en:"Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held.",
     de:"Größter in diesem Zyklus erreichter Weg, und der Punkt, an dem die Energieintegrale die Schleife teilen. Übersteigt den Weg bei Spitzenspannung um so viel, wie die Probe während des Haltens weiterkroch."}],
-  [{en:"Total deformation",de:"Gesamtverformung"},"mm",
+  [{en:"Total deformation",de:"Gesamtverformung"},"mm / % h₀",
    {en:"Cycle-by-cycle running total: how much of the specimen's thickness has not sprung back by this point in the test, altogether. Always rises or holds flat, never falls. A single unusually large cycle can be hard to spot here since it only steepens one step among a run of already-rising bars.",
     de:"Zyklus für Zyklus aufsummierter Wert: wie viel von der Probendicke bis zu diesem Punkt insgesamt nicht zurückgefedert ist. Steigt immer oder bleibt gleich, fällt nie. Ein einzelner ungewöhnlich großer Zyklus ist hier schwer zu erkennen, da er nur eine Stufe unter bereits ansteigenden Balken etwas steiler macht."}],
   [{en:"Creep at peak load",de:"Kriechweg am Spitzenwert"},"mm",
@@ -1283,8 +1283,8 @@ function renderMethod(){
       <td>${L({en:"of that cycle's own peak -- used only when no auto-located window clears the minimum span",
         de:"der eigenen Spitze dieses Zyklus -- nur verwendet, wenn kein automatisch bestimmtes Fenster die Mindestspanne erreicht"})}</td></tr>
     <tr><td>${L({en:"Reference stress",de:"Referenzspannung"})}</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
-      <td>${L({en:`of global peak = ${s.residStress} MPa, above the contact-loss baseline -- the one reference stress, used both for permanent deformation and for cross-cycle comparison`,
-        de:`der globalen Spitze = ${s.residStress} MPa, oberhalb der Kontaktverlust-Grundlinie -- die eine Referenzspannung, verwendet sowohl für die bleibende Verformung als auch für den Zyklenvergleich`})}</td></tr>
+      <td>${L({en:`of global peak = ${fmt(s.residStress,1)} MPa, above the contact-loss baseline -- the one reference stress, used both for permanent deformation and for cross-cycle comparison`,
+        de:`der globalen Spitze = ${fmt(s.residStress,1)} MPa, oberhalb der Kontaktverlust-Grundlinie -- die eine Referenzspannung, verwendet sowohl für die bleibende Verformung als auch für den Zyklenvergleich`})}</td></tr>
     <tr><td>${L({en:"Dwell tolerance",de:"Haltetoleranz"})}</td><td>${(cfg.hold_tol_frac*100).toFixed(1)}%</td>
       <td>${L({en:"of cycle peak, stress within this band counts as held",
         de:"der Zyklusspitze, Spannung innerhalb dieses Bandes zählt als gehalten"})}</td></tr>
@@ -1305,8 +1305,8 @@ function renderMethod(){
       ${L({en:"The export carries no time channel, so the dwell is measured in samples. A rate in mm/s needs a time channel enabled at export, one setting on the machine.",
         de:"Der Export enthält keinen Zeitkanal, daher wird die Verweilzeit in Messpunkten gemessen. Eine Rate in mm/s erfordert einen beim Export aktivierten Zeitkanal, eine Einstellung an der Maschine."})}</li>
     <li><strong>${L({en:"Fit quality is not measurement accuracy.",de:"Anpassungsgüte ist keine Messgenauigkeit."})}</strong>
-      ${L({en:"The n and R² columns describe how well a straight line fitted the points. They say nothing about calibration, machine compliance or alignment.",
-        de:"Die Spalten n und R² beschreiben, wie gut eine Gerade an die Punkte angepasst wurde. Sie sagen nichts über Kalibrierung, Maschinennachgiebigkeit oder Ausrichtung aus."})}</li>
+      ${L({en:"A dimmed, hatched stiffness bar means the straight-line fit behind it was weak. That describes the fit only. It says nothing about calibration, machine compliance or alignment.",
+        de:"Ein blasser, schraffierter Steifigkeitsbalken bedeutet, dass die Geradenanpassung dahinter schwach war. Das beschreibt nur die Anpassung, nicht Kalibrierung, Maschinennachgiebigkeit oder Ausrichtung."})}</li>
   </ul>`;
 }
 
