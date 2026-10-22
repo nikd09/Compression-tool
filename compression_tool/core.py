@@ -116,7 +116,7 @@ class Config:
     # specimen loses contact with the platen and the signal returns to its
     # unloaded baseline, which makes a zero-referenced reading meaningless.
     residual_stress_mpa: Optional[float] = None
-    residual_stress_frac: float = 0.02  # of global peak, if not set explicitly
+    residual_stress_frac: float = 0.01  # of global peak, if not set explicitly
 
     # --- specimen -----------------------------------------------------------
     # Fallback only. Real value is read from the export's metadata sheet when
