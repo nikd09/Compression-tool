@@ -175,7 +175,7 @@ def test_residual_unreadable_cycles_are_flagged(signal):
 
 
 def test_no_residual_warning_when_cycle_1_is_reachable(signal):
-    """The default residual_stress_frac (0.02 -> 9 MPa) sits well inside
+    """The default residual_stress_frac (0.01 -> 4.5 MPa) sits well inside
     cycle 1's own 50 MPa peak, so no warning fires."""
     stress, disp = signal
     test = _test_data(stress, disp)

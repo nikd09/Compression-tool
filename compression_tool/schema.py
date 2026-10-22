@@ -116,25 +116,22 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "PeakStress_MPa", "REAL", "Peak stress", "MPa",
-        "Highest stress reached in this cycle. In a multi-stage test this "
-        "rises from cycle to cycle, which is why several metrics below exist "
-        "in both a per-cycle and a common-reference form. Not shown as its "
-        "own user-facing column or chart -- the value stays computed and "
-        "stored, since UnloadYield_frac and other diagnostics still read it "
-        "-- but the per-cycle 'Peak stress' display was removed on request.",
+        "Highest stress reached in this cycle. In a multi-stage test this rises "
+        "from cycle to cycle, which is why several metrics below exist in both a "
+        "per-cycle and a common-reference form. Not shown as a user-facing column "
+        "or chart. The value is still computed and stored, because "
+        "UnloadYield_frac and other diagnostics read it.",
         fmt="0.00", internal=True,
     ),
     Column(
         "PeakDisp_mm", "REAL", "Displacement at peak stress", "mm",
         "Displacement at the instant of MAXIMUM STRESS -- not the largest "
-        "displacement in the cycle. The two differ: the specimen keeps "
-        "creeping through the dwell while stress is already held constant, so "
-        "displacement goes on rising after stress has peaked. On a long dwell "
-        "the maximum displacement can exceed this value by 20% or more. The "
-        "energy integrals below split the loop at that later maximum, not "
-        "here. Deleted as a user-facing column on request -- kept computed "
-        "and stored but hidden from every user-facing table, chart and "
-        "selector.",
+        "displacement in the cycle. The two differ: the specimen keeps creeping "
+        "through the dwell while stress is already held constant, so displacement "
+        "goes on rising after stress has peaked. On a long dwell the maximum "
+        "displacement can exceed this value by 20% or more. The energy integrals "
+        "below split the loop at that later maximum, not here. Kept computed and "
+        "stored but hidden from every user-facing table, chart and selector.",
         internal=True,
     ),
     Column(
@@ -152,57 +149,50 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
         "specimen this equals the peak stress: displacement stops growing once "
         "the load stops being held. When it falls BELOW the peak, the specimen "
         "went on compacting while the load was being REMOVED -- it is still "
-        "yielding on the unloading ramp. That is a damage signature that no "
-        "other column here carries, and it appears as a step rather than a "
-        "drift, so it dates the onset more sharply than the stiffness "
-        "rollover does. Deleted as a user-facing column on request -- kept "
-        "computed and stored (UnloadYield_frac still needs it) but hidden "
-        "from every user-facing table, chart and selector.",
+        "yielding on the unloading ramp. That is a damage signature that no other "
+        "column here carries, and it appears as a step rather than a drift, so it "
+        "dates the onset more sharply than the stiffness rollover does. Kept "
+        "computed and stored (UnloadYield_frac still needs it) but hidden from "
+        "every user-facing table, chart and selector.",
         fmt="0.00", internal=True,
     ),
     Column(
         "ResidualDisp_mm", "REAL", "Residual displacement (loading)", "mm",
-        "Displacement on the LOADING branch at the low common reference "
-        "stress. Deliberately not read at zero stress: at zero the specimen "
-        "loses contact and the signal falls back to an unloaded baseline of a "
-        "few micrometres, which makes a zero-referenced permanent set "
-        "meaningless. The same reference stress on every cycle, so this is "
-        "also the column to plot cycle over cycle for a cross-test "
-        "comparison, not only within-cycle against ResidualDisp_unload_mm. "
-        "Deleted as a user-facing column on request -- kept computed and "
-        "stored (PermDef_incremental_mm still needs it) but hidden from "
-        "every user-facing table, chart and selector.",
+        "Displacement on the LOADING branch at the low common reference stress. "
+        "Deliberately not read at zero stress: at zero the specimen loses contact "
+        "and the signal falls back to an unloaded baseline of a few micrometres, "
+        "which makes a zero-referenced permanent set meaningless. The same "
+        "reference stress on every cycle, so this is also the column to plot "
+        "cycle over cycle for a cross-test comparison, not only within-cycle "
+        "against ResidualDisp_unload_mm. Kept computed and stored "
+        "(PermDef_incremental_mm still needs it) but hidden from every "
+        "user-facing table, chart and selector.",
         internal=True,
     ),
     Column(
         "ResidualDisp_unload_mm", "REAL", "Residual displacement (unloading)", "mm",
         "The SAME reference stress as ResidualDisp_mm, read on the UNLOADING "
-        "branch of this cycle instead. The gap between the two, within one "
-        "cycle, is the permanent set gained in that cycle -- see "
-        "PermDef_incremental_mm. Deleted as a user-facing column on request "
-        "-- kept computed and stored (PermDef_incremental_mm still needs it) "
-        "but hidden from every user-facing table, chart and selector.",
+        "branch of this cycle instead. The gap between the two, within one cycle, "
+        "is the permanent set gained in that cycle -- see PermDef_incremental_mm. "
+        "Kept computed and stored (PermDef_incremental_mm still needs it) but "
+        "hidden from every user-facing table, chart and selector.",
         internal=True,
     ),
     Column(
         "PermDef_cumulative_mm", "REAL", "Total deformation", "mm",
-        "Running total of PermDef_incremental_mm. NOT compression set in the "
-        "ASTM D395 / ISO 815 sense -- those are long-duration static tests. "
-        "Do not label this 'compression set' in reports. (Renamed from "
-        "'Permanent deformation, running total' on request -- the "
-        "underlying key, PermDef_cumulative_mm, is unchanged, so an "
-        "already-saved record still loads under it.)",
+        "Running total of PermDef_incremental_mm. NOT compression set in the ASTM "
+        "D395 / ISO 815 sense -- those are long-duration static tests. Do not "
+        "label this 'compression set' in reports.",
     ),
     Column(
         "PermDef_incremental_mm", "REAL", "Permanent deformation, incremental", "mm",
         "ResidualDisp_unload_mm minus ResidualDisp_mm: how much residual "
-        "displacement THIS cycle gained between being read on the way up and "
-        "read again on the way down, at the identical reference stress both "
-        "times. Well-defined for a single-cycle test -- it needs no other "
-        "cycle to compare against. Not shown as its own user-facing column "
-        "or chart -- PermDef_cumulative_mm above is its running total and "
-        "still needs it computed -- but the per-cycle display was removed "
-        "on request.",
+        "displacement THIS cycle gained between being read on the way up and read "
+        "again on the way down, at the identical reference stress both times. "
+        "Well-defined for a single-cycle test -- it needs no other cycle to "
+        "compare against. Not shown as its own user-facing column or chart -- "
+        "PermDef_cumulative_mm above is its running total and still needs it "
+        "computed.",
         internal=True,
     ),
     Column(
@@ -218,20 +208,18 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "Stiffness_common_n", "INTEGER", "Stiffness (common band), points", "",
         "Number of samples the common-band fit used. A slope from a handful of "
-        "points on a fast machine ramp is not trustworthy; treat fits below "
-        "about 10 points as indicative only. Deleted as a user-facing column "
-        "on request -- kept computed and stored (Stiffness_common_quality "
-        "still needs it) but hidden from every user-facing table, chart and "
-        "selector.",
+        "points on a fast machine ramp is not trustworthy; treat fits below about "
+        "10 points as indicative only. Kept computed and stored "
+        "(Stiffness_common_quality still needs it) but hidden from every "
+        "user-facing table, chart and selector.",
         fmt="0", internal=True,
     ),
     Column(
         "Stiffness_common_r2", "REAL", "Stiffness (common band), R2", "",
-        "Coefficient of determination of the common-band fit. Low values mean "
-        "the branch was curved over the window, so a single slope does not "
-        "describe it. Deleted as a user-facing column on request -- kept "
-        "computed and stored (Stiffness_common_quality still needs it) but "
-        "hidden from every user-facing table, chart and selector.",
+        "Coefficient of determination of the common-band fit. Low values mean the "
+        "branch was curved over the window, so a single slope does not describe "
+        "it. Kept computed and stored (Stiffness_common_quality still needs it) "
+        "but hidden from every user-facing table, chart and selector.",
         fmt="0.000", internal=True,
     ),
     Column(
@@ -260,16 +248,14 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Stiffness_relative_n", "INTEGER", "Stiffness (relative band), points", "",
-        "Number of samples the relative-band fit used. Deleted as a "
-        "user-facing column on request -- kept computed and stored but "
-        "hidden from every user-facing table, chart and selector.",
+        "Number of samples the relative-band fit used. Kept computed and stored "
+        "but hidden from every user-facing table, chart and selector.",
         fmt="0", internal=True,
     ),
     Column(
         "Stiffness_relative_r2", "REAL", "Stiffness (relative band), R2", "",
-        "Coefficient of determination of the relative-band fit. Deleted as a "
-        "user-facing column on request -- kept computed and stored but "
-        "hidden from every user-facing table, chart and selector.",
+        "Coefficient of determination of the relative-band fit. Kept computed and "
+        "stored but hidden from every user-facing table, chart and selector.",
         fmt="0.000", internal=True,
     ),
     Column(
@@ -286,13 +272,12 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Energy_in_MPa_mm", "REAL", "Energy in", "MPa*mm",
-        "Work put into the specimen along the loading path, per unit CROSS-"
-        "SECTIONAL AREA -- integral of stress over displacement is work/area, "
-        "not work/volume. Divide by h0 to get work per unit volume in MPa. "
-        "The loop is split at maximum DISPLACEMENT, not maximum stress. "
-        "Deleted as a user-facing column on request -- kept computed and "
-        "stored (Energy_dissipated_MPa_mm still needs it) but hidden from "
-        "every user-facing table, chart and selector.",
+        "Work put into the specimen along the loading path, per unit CROSS- "
+        "SECTIONAL AREA -- integral of stress over displacement is work/area, not "
+        "work/volume. Divide by h0 to get work per unit volume in MPa. The loop "
+        "is split at maximum DISPLACEMENT, not maximum stress. Kept computed and "
+        "stored (Energy_dissipated_MPa_mm still needs it) but hidden from every "
+        "user-facing table, chart and selector.",
         fmt="0.000", internal=True,
     ),
     Column(
@@ -306,91 +291,79 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "HysteresisLoss_rel", "REAL", "Hysteresis loss", "-",
         "Dissipated divided by input energy. This is the cross-test comparable "
-        "form: absolute loss scales with stress amplitude, so a 50 MPa and a "
-        "450 MPa stage cannot be compared on the absolute number. Deleted "
-        "entirely as a user-facing field on request -- kept computed and "
+        "form: absolute loss scales with stress amplitude, so a 50 MPa and a 450 "
+        "MPa stage cannot be compared on the absolute number. Kept computed and "
         "stored (it costs nothing and a future record may want it back) but "
         "hidden from every user-facing table, chart and selector.",
         fmt="0.0000", internal=True,
     ),
     Column(
         "HoldDetected", "INTEGER", "Hold detected", "",
-        "Whether a dwell plateau was found at peak stress in this cycle. "
-        "Detected from the data, never asked about. Deleted as a "
-        "user-facing column on request -- kept computed and stored but "
-        "hidden from every user-facing table, chart and selector.",
+        "Whether a dwell plateau was found at peak stress in this cycle. Detected "
+        "from the data, never asked about. Kept computed and stored but hidden "
+        "from every user-facing table, chart and selector.",
         fmt="0", internal=True,
     ),
     Column(
         "HoldPoints", "INTEGER", "Hold length", "samples",
         "Length of the detected dwell in SAMPLES, not seconds -- the export "
         "carries no time channel. This column is meaningless on its own and "
-        "mandatory alongside the hold displacement beside it: without it there "
-        "is no way to tell a specimen that moved further from one that was "
-        "simply held longer. Deleted as a user-facing column on request -- "
-        "kept computed and stored (HoldDisp_per_1000_samples_mm still needs "
-        "it) but hidden from every user-facing table, chart and selector.",
+        "mandatory alongside the hold displacement beside it: without it there is "
+        "no way to tell a specimen that moved further from one that was simply "
+        "held longer. Kept computed and stored (HoldDisp_per_1000_samples_mm "
+        "still needs it) but hidden from every user-facing table, chart and "
+        "selector.",
         fmt="0", internal=True,
     ),
     Column(
         "Creep_during_hold_mm", "REAL", "Creep at peak load", "mm",
         "Displacement accumulated across the detected dwell -- a TOTAL, not a "
-        "rate. Left blank, not zero, when the cycle has no dwell. Only "
-        "comparable between cycles whose hold lengths match, which is why the "
-        "hold length is always reported next to it; a longer dwell accumulates "
-        "more displacement at identical material behaviour. (Renamed from "
-        "'Hold displacement' on request -- the underlying key, "
-        "Creep_during_hold_mm, is unchanged, so an already-saved record "
-        "still loads under it.)",
+        "rate. Left blank, not zero, when the cycle has no dwell. Only comparable "
+        "between cycles whose hold lengths match, which is why the hold length is "
+        "always reported next to it; a longer dwell accumulates more displacement "
+        "at identical material behaviour.",
     ),
     # --- strain-normalised variants, only when h0 is known -------------------
     Column(
         "PeakStrain_pct", "REAL", "Strain at peak stress", "%",
         "Displacement at peak stress divided by the specimen height h0. "
-        "PROVISIONAL unless the gauge length has been confirmed -- see the "
-        "strain basis in the summary. Also taken at maximum stress rather than "
-        "maximum displacement, so it understates how far the specimen moved. "
-        "Deleted as a user-facing column on request -- kept computed and "
-        "stored but hidden from every user-facing table, chart and selector.",
+        "PROVISIONAL unless the gauge length has been confirmed -- see the strain "
+        "basis in the summary. Also taken at maximum stress rather than maximum "
+        "displacement, so it understates how far the specimen moved. Kept "
+        "computed and stored but hidden from every user-facing table, chart and "
+        "selector.",
         fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "MaxStrain_pct", "REAL", "Maximum strain", "%",
         "Maximum displacement divided by h0 -- the largest strain the specimen "
-        "reached. PROVISIONAL unless the gauge length has been confirmed. "
-        "Deleted entirely as a user-facing field on request -- kept computed "
-        "and stored (Compare's own has_strain detection still reads whether "
-        "this column is populated) but hidden from every user-facing table, "
-        "chart and selector.",
+        "reached. PROVISIONAL unless the gauge length has been confirmed. Kept "
+        "computed and stored (Compare's own has_strain detection still reads "
+        "whether this column is populated) but hidden from every user-facing "
+        "table, chart and selector.",
         fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "PermDef_cumulative_pct", "REAL", "Total deformation", "%",
-        "Cumulative permanent deformation as a fraction of h0. (Renamed from "
-        "'Permanent deformation, cumulative' on request -- the underlying "
-        "key is unchanged.) Deleted as a user-facing column on request -- "
-        "the mm form (PermDef_cumulative_mm) is the one headline column kept; "
-        "this percentage twin stays computed and stored but hidden from "
-        "every user-facing table, chart and selector.",
+        "Cumulative permanent deformation as a fraction of h0. The mm form "
+        "(PermDef_cumulative_mm) is the one headline column kept; this percentage "
+        "twin stays computed and stored but hidden from every user-facing table, "
+        "chart and selector.",
         fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "PermDef_incremental_pct", "REAL", "Permanent deformation, incremental", "%",
-        "Incremental permanent deformation as a fraction of h0. Not shown as "
-        "its own user-facing column or chart, same as PermDef_incremental_mm "
-        "-- the per-cycle display was removed on request.",
+        "Incremental permanent deformation as a fraction of h0. Not shown as its "
+        "own user-facing column or chart, same as PermDef_incremental_mm.",
         fmt="0.000", strain=True, internal=True,
     ),
     Column(
         "Creep_pct", "REAL", "Creep at peak load (of h0)", "%",
         "Hold displacement as a fraction of h0. Still a total, not a rate, and "
-        "still only comparable at matching hold lengths. PROVISIONAL unless "
-        "the gauge length has been confirmed. (Renamed from 'Hold "
-        "displacement (of h0)' on request -- the underlying key, Creep_pct, "
-        "is unchanged.) Deleted as a user-facing column on request -- the mm "
-        "form (Creep_during_hold_mm) is the one headline column kept; this "
-        "percentage twin stays computed and stored but hidden from every "
-        "user-facing table, chart and selector.",
+        "still only comparable at matching hold lengths. PROVISIONAL unless the "
+        "gauge length has been confirmed. The mm form (Creep_during_hold_mm) is "
+        "the one headline column kept; this percentage twin stays computed and "
+        "stored but hidden from every user-facing table, chart and selector.",
         fmt="0.000", strain=True, internal=True,
     ),
     # --- internal bookkeeping ------------------------------------------------
@@ -436,9 +409,7 @@ HOLD_DISP_RATE = Column(
     "each other. It is NOT a creep rate and must never be labelled, plotted "
     "or quoted as one: converting samples to time needs a constant sampling "
     "interval, which the export does not record and which testXpert does not "
-    "guarantee. A rate in mm/s requires a time channel enabled at export. "
-    "(Renamed from 'Hold displacement per 1000 samples' on request -- the "
-    "underlying key, HoldDisp_per_1000_samples_mm, is unchanged.)",
+    "guarantee. A rate in mm/s requires a time channel enabled at export.",
     fmt="0.000000",
 )
 
@@ -842,7 +813,7 @@ def specimen_description_de(field: "Field") -> str:
 # bounds, hold detected/length, the per-1000-samples creep rate, energy in,
 # displacement/stress detail readings, the residual-displacement pair, and
 # the strain-normalised (%) twins of the headline metrics themselves -- is
-# marked `internal=True` on request: still computed and stored (several of
+# marked `internal=True`: still computed and stored (several of
 # the headline metrics are built from them), but deliberately absent from
 # every user-facing table, chart and selector. This is what makes the
 # Excel Cycles sheet, the Excel data dictionary, the CSV export, and (via
@@ -855,7 +826,7 @@ def specimen_description_de(field: "Field") -> str:
 # arrays (the chart grid, and the Method tab's values table and glossary).
 # Keep both in sync if this set or order ever changes again. (The Excel
 # Statistics/cross-specimen sheet that used to need the same treatment was
-# removed entirely on request -- see excel_export.write_workbook.)
+# removed entirely -- see excel_export.write_workbook.)
 HEADLINE_CYCLE_BLOCKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Stiffness_common_MPa_per_mm", ("Stiffness_common_MPa_per_mm",)),
     ("Stiffness_relative_MPa_per_mm", ("Stiffness_relative_MPa_per_mm",)),

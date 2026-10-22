@@ -102,7 +102,7 @@ class Config:
     # Used for two different jobs -- permanent deformation (ResidualDisp_mm /
     # ResidualDisp_unload_mm, see analyse_test) and cross-cycle comparison
     # (the same two columns, read cycle over cycle) -- which used to be two
-    # separate constants (residual_stress at 0.02x global peak, ref_stress at
+    # separate constants (residual_stress at a small fraction of global peak, ref_stress at
     # 0.50x the smallest held cycle's peak). Merged into one: a SEPARATE
     # mid-range reference is unreachable on exactly the small/single-cycle
     # tests this engine is built to still get right (T050E1's own cycle 1,
@@ -110,7 +110,7 @@ class Config:
     # global peak keeps this one low enough to be reachable everywhere and
     # still clear of the low-stress contact-loss noise confirmed on real data
     # (MeshG_3mpa_10cyc_3's cycle 1: a non-monotonic plateau at 0.75-0.85 MPa,
-    # comfortably above 0.02x its 29.92 MPa global peak = 0.60 MPa).
+    # comfortably above 0.01x its 29.92 MPa global peak = 0.30 MPa).
     #
     # Measured on the loading branch, NOT at zero stress: at zero the
     # specimen loses contact with the platen and the signal returns to its
@@ -410,7 +410,7 @@ def load_tests(
     from whatever the file was named at the ORIGINAL ingest. Without this
     override, re-analysing produces a different label, therefore a different
     specimen ID, therefore a second, duplicate row in the index alongside
-    the original instead of updating it in place -- confirmed live: exactly
+    the original instead of updating it in place -- checked in the running app: exactly
     this, visible as two copies of the same specimen in the Results picker,
     one under the plain original name and one under
     "<hash>_Slugified-Original-Name_S1". Callers that already know the

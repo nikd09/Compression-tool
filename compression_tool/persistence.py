@@ -207,7 +207,7 @@ def workspace_index_root(root: str | os.PathLike) -> Path:
     workspace B, on a machine that had already built a local index for
     workspace A, would find A's index already sitting at that path and use
     it as-is -- silently showing A's materials and specimens under B's name,
-    with nothing in the UI to suggest anything was wrong. Confirmed live:
+    with nothing in the UI to suggest anything was wrong. checked in the running app:
     pointing the webapp at a second, unrelated workspace folder on the same
     machine did exactly that.
 

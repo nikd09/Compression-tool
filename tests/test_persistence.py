@@ -78,7 +78,7 @@ def test_two_workspaces_on_one_machine_do_not_share_an_index(
     """The bug this exists to prevent, reproduced directly: opening a
     second, different workspace from the same machine must never surface
     the first workspace's already-indexed materials under the second
-    workspace's name. Confirmed live before this fix -- switching the
+    workspace's name. checked in the running app before this fix -- switching the
     webapp's Workspace field between two real folders on one machine did
     exactly that, because index_root=default_index_root() alone resolves to
     one fixed path no matter which workspace passes it in."""

@@ -673,7 +673,7 @@ from data already on hand.
 every `st.container(border=True)` card turned out to have been a silent
 no-op the whole time: it targets `[data-testid="stVerticalBlockBorderWrapper"]`,
 a testid that does not exist anywhere in the installed Streamlit version's
-rendered DOM (confirmed live -- zero matches, on every tab). Streamlit
+rendered DOM (checked in the running app -- zero matches, on every tab). Streamlit
 now applies the border directly to the `stVerticalBlock` element itself, via
 an auto-generated class name that is identical across every bordered
 container on the page (and not something to hardcode -- it is a build
@@ -964,7 +964,7 @@ the whole sidebar header. The icon now carries its own subtle two-tone fill
 (a `linearGradient` def) and plays the exact same load-hold-unload press
 motion as the Ingest/Commit loading overlay (`common.py`'s
 `utm_press_html()`) at icon scale, continuously, via `@keyframes` declared
-inside the SVG's own `<style>` block — confirmed live that CSS keyframes
+inside the SVG's own `<style>` block — checked in the running app that CSS keyframes
 declared *inside* an SVG still animate when that SVG is loaded as an `<img>`
 source (which is how `st.logo()` renders it, as a `data:image/svg+xml`
 `<img>`), where an external stylesheet could never reach in and animate it.

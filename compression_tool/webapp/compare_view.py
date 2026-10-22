@@ -397,7 +397,7 @@ def render(ws: Workspace) -> None:
     # bar widths down to font sizes, is a function of one base width, so
     # scaling the SVG up for the expanded dialog or a PNG export scales
     # everything together and the proportions never change). Letting this
-    # chart stretch to the full page width -- confirmed live, a Vega-Lite
+    # chart stretch to the full page width -- checked in the running app, a Vega-Lite
     # spec copied out of this app at "width": 1340 -- grows the plot area
     # while the text stays the same absolute size, so it reads smaller as a
     # fraction of the chart the wider the window is, and the SAME width is

@@ -52,7 +52,7 @@ _POLISH = """
 
      This used to target [data-testid="stVerticalBlockBorderWrapper"], which
      turned out to not exist ANYWHERE in this Streamlit version's rendered
-     DOM (confirmed live) -- border=True now styles the stVerticalBlock
+     DOM (checked in the running app) -- border=True now styles the stVerticalBlock
      itself, via an auto-generated class shared identically by every bordered
      container, not a stable thing to select. `key=` is: Streamlit still
      guarantees a stable `st-key-<key>` class on that element regardless of

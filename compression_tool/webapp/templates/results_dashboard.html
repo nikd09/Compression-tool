@@ -781,7 +781,7 @@ function loopChart(host, _spec, big=false, aspect=null){
 }
 
 /* the panels, in the order they are read.
-   FOUR fields were deleted outright on request -- Peak stress (peakStress),
+   FOUR fields were deleted outright -- Peak stress (peakStress),
    Maximum strain (maxStrainPct), Hysteresis loss (loss), and the per-cycle
    Permanent deformation reading (permIncPct; its running total survives,
    renamed below). Their underlying data still flows through DATA (see
@@ -888,7 +888,7 @@ const PANELS=[
 // currently hidden/shown ones -- SPS, not series(), so toggling a specimen's
 // visibility never makes a panel appear or disappear) would otherwise still
 // render its title, unit and legend with a blank chart body underneath --
-// confirmed live on a test with no detected hold anywhere: an empty "Creep
+// checked in the running app on a test with no detected hold anywhere: an empty "Creep
 // at peak load" card. Filtered out entirely here, once, so `data-i` (the
 // expand/PNG/keyboard-nav index into this same array) never has to account
 // for a gap. __loop has no per-cycle key of its own (draw:loopChart reads
@@ -1089,7 +1089,7 @@ async function chartToPng(svgEl,title,sub,scale=2.5){
 }
 const slug=t=>t.replace(/[^\w]+/g,"-").replace(/^-|-$/g,"").toLowerCase();
 
-/* A sandboxed iframe without allow-same-origin (the Claude Artifact preview)
+/* A sandboxed iframe without allow-same-origin (an embedded preview)
    forces an opaque origin, and window.origin then reads the literal string
    "null" -- exactly the case where a script-started download is silently
    dropped. window.origin ONLY: a srcdoc document's location.origin reads

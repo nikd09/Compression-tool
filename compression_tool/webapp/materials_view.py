@@ -105,7 +105,7 @@ _T = {
 # Cards are targeted by [class*="st-key-mat_card_"], not
 # [data-testid="stVerticalBlockBorderWrapper"] -- that testid, which the
 # rest of this app's hover rule (webapp/common.py) still uses, no longer
-# exists in the installed Streamlit version (confirmed live: zero matches
+# exists in the installed Streamlit version (checked in the running app: zero matches
 # anywhere in the rendered DOM, on every tab). border=True now applies
 # directly to the stVerticalBlock itself; giving each card its own key is
 # what makes it addressable at all without relying on the auto-generated,
@@ -124,7 +124,7 @@ _CARD_CSS = """
 .st-key-materials_grid{
   display:grid!important;
   /* 230px is chosen so four equal-width cards fit at ~960px of content
-     width and up -- confirmed live at a 1440px browser window with the
+     width and up -- checked in the running app at a 1440px browser window with the
      sidebar open; the 300px this replaced only ever reached three columns
      at that size. auto-fill still grows to five, six... on a bigger
      monitor and drops to three, two, one on a narrower one, every card
@@ -284,7 +284,7 @@ def render(ws: Workspace) -> None:
                     )
                 # Stacked full-width, not side by side: at four-per-row
                 # card widths, "Rename"/"Delete" in a 2-column row wrapped
-                # onto two lines each (confirmed live) -- one button per
+                # onto two lines each (checked in the running app) -- one button per
                 # row never wraps regardless of how narrow the card gets.
                 if st.button(
                     L("rename"), key=f"rename_material_{row['slug']}",

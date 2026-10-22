@@ -99,7 +99,7 @@ def test_reanalyzing_keeps_the_same_specimen_label_and_id(workspace, single_file
     different label means a different specimen_id (persistence.specimen_id
     hashes source content + label + material), so the "same" specimen
     showed up TWICE in Results after a re-analysis: once under its
-    original name, once under "<hash>_Slugified-Name_S1". Confirmed live
+    original name, once under "<hash>_Slugified-Name_S1". checked in the running app
     before this fix."""
     ws = Workspace.at(workspace).ensure()
     first = ingest([single_file], ws, material="TALCO50")

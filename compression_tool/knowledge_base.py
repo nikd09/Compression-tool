@@ -234,7 +234,7 @@ def rebuild(ws: Workspace, *, db_path: Optional[Path] = None) -> int:
     # connection instead (it needs drop_schema before ensure_schema, which
     # connect() doesn't offer), so it has to do the same thing here or
     # rebuilding a workspace whose index directory doesn't exist yet fails
-    # outright -- confirmed live: exactly what happened the first time a
+    # outright -- checked in the running app: exactly what happened the first time a
     # workspace used a not-yet-created index_root.
     target.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(target))

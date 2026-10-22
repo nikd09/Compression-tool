@@ -12,7 +12,7 @@
          what makes the two read as the same mark at two sizes, not two
          different animations that happen to share a subject.
          CSS keyframes declared inside an SVG's own style block still
-         animate when the SVG is used as an image source (confirmed live)
+         animate when the SVG is used as an image source (checked in the running app)
          -- st.logo renders it that way, and an external stylesheet could
          not reach inside the image to animate it, only an internal one
          can. Literal angle brackets are avoided even in this comment: an

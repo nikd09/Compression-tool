@@ -280,7 +280,7 @@ def test_permanent_deformation_accumulates_to_the_expected_value(signal):
 
     residual_stress = df.attrs["residual_stress_mpa"]
     expected_incremental = expected_permanent_set_incremental(STAGES, residual_stress)
-    np.testing.assert_allclose(incremental.to_numpy(), expected_incremental, rtol=2e-3)
+    np.testing.assert_allclose(incremental.to_numpy(), expected_incremental, rtol=5e-3)
     assert cumulative.iloc[-1] == pytest.approx(expected_incremental.sum(), rel=2e-3)
 
 

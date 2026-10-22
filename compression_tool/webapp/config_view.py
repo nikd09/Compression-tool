@@ -406,7 +406,7 @@ def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
     different label means a different specimen ID (persistence.specimen_id
     hashes source content + label + material), which means re-analysing
     silently adds a second, duplicate specimen to the index instead of
-    updating the original in place. Confirmed live: exactly this, as two
+    updating the original in place. checked in the running app: exactly this, as two
     copies of the same specimen in Results, one under the plain original
     name and one under "<hash>_Slugified-Original-Name_S1". See
     core.load_tests' own docstring for the full mechanism.

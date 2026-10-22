@@ -119,7 +119,7 @@ _NAV_CSS = """
      user-resizable by dragging its edge, and max-width:100% means the logo
      -- icon AND the "CompressLab" wordmark text baked into the same image
      -- visibly shrinks and gets harder to read as the sidebar narrows
-     (confirmed live: dragging the sidebar from 300px to 200px shrank the
+     (checked in the running app: dragging the sidebar from 300px to 200px shrank the
      rendered logo from 176px to 100px wide). Pinning the size means it
      clips instead of shrinking illegibly if the sidebar is dragged
      narrower than the logo itself -- the same trade-off most sidebars with
@@ -128,7 +128,7 @@ _NAV_CSS = """
      A small negative margin on the header (not on stSidebarContent, which
      would also pull every nav button and the workspace box left with it)
      is what closes the left-edge gap Streamlit's own 20px sidebar padding
-     otherwise leaves specifically in front of the logo -- confirmed live
+     otherwise leaves specifically in front of the logo -- checked in the running app
      via computed styles that stSidebarContent's padding-left is the entire
      source of that gap, not something this header applies itself.
   */
@@ -192,7 +192,7 @@ _NAV_CSS = """
      ~1.5rem margin on top of that. The nav_menu rule below only ever
      reached the button list *inside* that one container, so the biggest
      gap on the page -- language toggle down to "WORKFLOW" -- was never
-     touched by it (confirmed live: everything below the first divider
+     touched by it (checked in the running app: everything below the first divider
      tightened, that one gap didn't). Placed BEFORE the nav_menu rule so,
      at equal specificity with both !important, the later, more specific
      nav_menu rule still wins there and stays at its own tighter .1rem.
@@ -215,7 +215,7 @@ _NAV_CSS = """
      bare class selector -- the general stVerticalBlock rule just above
      carries two attribute selectors, so at equal specificity + !important
      the LATER rule wins on source order alone; that briefly left this
-     container at .4rem instead of .1rem (confirmed live: nav item spacing
+     container at .4rem instead of .1rem (checked in the running app: nav item spacing
      visibly grew back). Matching its selector shape keeps this one
      unambiguously the more specific of the two regardless of order. */
   section[data-testid="stSidebar"] [class*="st-key-nav_menu"]{
@@ -252,10 +252,10 @@ _NAV_CSS = """
         stVerticalBlock is STILL a flex column with a single small-text
         child, and its computed height stayed pinned to Streamlit's own
         apparent default (~22px) regardless of the padding value -- also
-        confirmed live, padding computed correctly on the element, box
+        checked in the running app, padding computed correctly on the element, box
         height unmoved.
 
-     What DOES reliably work, confirmed live both times: MARGIN and
+     What DOES reliably work, checked in the running app both times: MARGIN and
      MIN-HEIGHT applied directly to the container -- i.e. to the flex ITEM
      itself, as nav_menu's flex layout sees it, not to anything nested
      inside it. A flex item's own margin is never subject to the parent/
@@ -324,7 +324,7 @@ def main() -> None:
                 # st.markdown() -- see the CSS comment above nav_sec_head_
                 # for why: padding on the markdown text itself gets silently
                 # discarded by a Streamlit-internal single-line height lock,
-                # confirmed live, while a container's own stVerticalBlock
+                # checked in the running app, while a container's own stVerticalBlock
                 # sizes correctly.
                 with st.container(key=f"nav_sec_head_{section_index}"):
                     st.markdown(f'<div class="ct-nav-section">{section_label}</div>',

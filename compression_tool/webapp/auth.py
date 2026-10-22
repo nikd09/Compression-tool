@@ -275,7 +275,7 @@ _GATE_CSS_TEMPLATE = """
      sized so the outer ramp finishes at the viewport edge rather than past
      it -- an earlier, larger ellipse put the edges only ~60% of the way
      down the ramp, so the traces ran right off the sides of the window
-     instead of dissolving before them (confirmed live). */
+     instead of dissolving before them (checked in the running app). */
   .ct-gate-bg{
     position:fixed; inset:0; width:100vw; height:100vh;
     z-index:0; pointer-events:none;
@@ -323,14 +323,14 @@ _GATE_CSS_TEMPLATE = """
      the same :has()-based relative-targeting this codebase already uses
      in compare_view.py. data-selected="true" (Streamlit's own attribute
      for the active option) drives the pill styling, not :checked --
-     confirmed live to be what's actually set here. */
+     checked in the running app to be what's actually set here. */
   /* Targeted via the key="ct_gate_lang" container's own st-key-* class
      (see require_password() below), not a hand-opened/closed <div> spanning
      two separate st.markdown() calls -- each st.markdown() call is its own
      sibling node in Streamlit's DOM, so a "<div>" opened in one and closed
      in another never actually wraps the widget rendered in between; the
      first version of this looked unstyled and left-aligned because of
-     exactly that (confirmed live). */
+     exactly that (checked in the running app). */
   [class*="st-key-ct_gate_lang"]{ display:flex; justify-content:flex-end; margin:0 0 1.5rem; }
   [class*="st-key-ct_gate_lang"] div[data-testid="stRadioGroup"]{ gap:.15rem; }
   /* Both states get an explicit colour: the unselected one used to inherit
@@ -466,7 +466,7 @@ def require_password() -> None:
 
         # st.form, not a bare text_input + button: a form submits on Enter from
         # within any of its own text inputs, which a standalone st.text_input
-        # next to an unrelated st.button does not -- confirmed live, pressing
+        # next to an unrelated st.button does not -- checked in the running app, pressing
         # Enter in the password field previously did nothing until the button
         # was clicked with the mouse.
         with st.form("ct_login", clear_on_submit=False):

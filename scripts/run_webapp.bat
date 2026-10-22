@@ -14,7 +14,7 @@ REM   1. Windows Search -> "Edit environment variables for your account"
 REM   2. New user variable:
 REM        Name:  COMPRESSION_TOOL_WORKSPACE
 REM        Value: the shared folder's path, e.g.
-REM               C:\Users\<you>\OneDrive - Saint-Gobain\Compression Testing
+REM               C:\Users\<you>\OneDrive\Compression Testing
 REM   3. Close and reopen this window (or just re-run this script) so the
 REM      new variable is picked up.
 REM
@@ -33,7 +33,7 @@ cd /d "%~dp0.."
 
 REM Resolve ONE Python and use it for everything below (the install check,
 REM the auto-install, and the final launch). Two different ways this goes
-REM wrong otherwise, both confirmed live:
+REM wrong otherwise, both checked in the running app:
 REM   1. A machine with more than one Python installed (e.g. python.org +
 REM      Microsoft Store) -- a bare "streamlit"/"pip" command on PATH can
 REM      silently resolve to a DIFFERENT install than whichever one you
@@ -50,7 +50,7 @@ REM "python -m venv .venv") is therefore preferred whenever it exists --
 REM using it explicitly by path sidesteps both problems, since it does not
 REM depend on activation or on PATH order at all.
 REM
-REM A THIRD way this goes wrong, also confirmed live: this whole project
+REM A THIRD way this goes wrong, also checked in the running app: this whole project
 REM folder (".venv" included) gets zipped up and copied to a colleague's PC
 REM instead of being freshly cloned/installed there. ".venv\Scripts\python.exe"
 REM is not a real, portable copy of Python -- on Windows it is a small

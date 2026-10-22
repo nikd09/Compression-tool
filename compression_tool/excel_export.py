@@ -224,7 +224,7 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
         pairs.append((_t("total_permdef_pct", lang), last_present("PermDef_cumulative_pct")))
     # First/last cycle peak stress and mean hysteresis loss rows were removed
     # along with Peak stress and Hysteresis loss as user-facing fields
-    # (deleted on request) -- both derived straight from those two columns
+    # (fields that are no longer shown) -- both derived straight from those two columns
     # and had no purpose left once the fields themselves were gone.
     pairs.append((_t("total_hold_disp", lang), total_present("Creep_during_hold_mm")))
 
@@ -255,7 +255,7 @@ def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en")
 
     Sheets: Summary, Cycles, Data dictionary, Config. (A "Statistics"
     cross-specimen sheet used to sit between Cycles and Data dictionary --
-    removed entirely on request, since it was covering the same headline
+    removed entirely, since it was covering the same headline
     metrics per-cycle bar charts already show, one abstraction layer up.
     cross_specimen_stats() itself stays -- html_report.py's own "Cross-
     specimen statistics" section still uses it.)
@@ -507,7 +507,7 @@ def _write_config(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
 # sequence requested for the dashboard, Compare's picker, and the Cycles/
 # CSV export) followed by the remaining, non-headline detail columns this
 # sheet already carried. Peak stress and Hysteresis loss are gone --
-# deleted as user-facing fields on request, same as everywhere else --
+# no longer shown as user-facing fields, same as everywhere else --
 # and Stiffness (relative band) plus Energy dissipated were added: this
 # sheet is meant to be a full "dashboard replica," and both were missing
 # from it entirely even before this change.

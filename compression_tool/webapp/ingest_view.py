@@ -300,7 +300,7 @@ def _preview_fingerprint(
     button used to just sit in session_state until Preview was clicked
     again, so swapping in a DIFFERENT file (or a different material split,
     or a changed threshold) without re-running Preview left last time's
-    dashboard on screen -- confirmed live, a second material's specimens
+    dashboard on screen -- checked in the running app, a second material's specimens
     uploaded after previewing a first still showed the first's dashboard
     and button, nothing about the page said it was stale. render() compares
     this against what was cached at the last successful Preview and only
@@ -390,7 +390,7 @@ def _save_uploads(files) -> list[Path]:
 def _render_preview_errors(rows: list[dict]) -> None:
     """A file that failed to parse outright, nothing else. Preview used to
     also surface every CAUTION/CRITICAL diagnostic (a discard threshold, a
-    provisional strain basis) here -- dropped on request: the dashboard
+    provisional strain basis) here -- dropped: the dashboard
     (built separately, see _build_dashboard_preview/_render_dashboard_preview)
     is now the one place those are read from, not duplicated in two places.
     A file that could not be analysed at all is different -- silently
@@ -446,13 +446,13 @@ def _open_in_new_tab_button(html: str, label: str) -> None:
     page, not an iframe embedded in the Ingest page itself.
 
     Not `st.link_button` to a `data:` URL: modern Chromium refuses that as
-    a TOP-LEVEL navigation outright (confirmed live -- a plain `<a
+    a TOP-LEVEL navigation outright (checked in the running app -- a plain `<a
     href="data:...", target="_blank">` click produces nothing, no new tab,
     no error) -- a spoofing-prevention restriction Chrome shipped some
     years back that specifically targets the data: scheme. blob: URLs are
     not covered by it: this builds the page as a Blob client-side, in the
     button's own click handler, and window.open()s the object URL that
-    creates -- confirmed live to actually open a working new tab with the
+    creates -- checked in the running app to actually open a working new tab with the
     dashboard rendered.
     """
     # The dashboard template has its own <script> tags -- embedded verbatim
