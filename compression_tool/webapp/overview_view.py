@@ -59,7 +59,7 @@ _T = {
               "material on Results to read it in full.",
         "de": "{flagged} von {total} zuletzt analysierten Proben, über {materials} "
               "Material(ien) hinweg, tragen einen Diagnosehinweis -- das Material "
-              "unter Results öffnen, um ihn vollständig zu lesen."},
+              "unter Ergebnisse öffnen, um ihn vollständig zu lesen."},
     "more": {"en": " (+{n} more)", "de": " (+{n} weitere)"},
     "recent_activity": {"en": "Recent activity", "de": "Letzte Aktivität"},
     "full_log": {"en": "Full log", "de": "Vollständiges Protokoll"},

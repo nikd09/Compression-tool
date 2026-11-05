@@ -103,10 +103,10 @@ _T = {
               "still be fixed after Commit, from the Materials tab.",
         "de": "„{material}“ sieht wie der Dateiname des Exports aus, nicht wie "
               "ein Materialcode. Ein kurzer Code (z. B. „T050LR1“) liest sich "
-              "als Materials-Karte und in der Compare-Legende deutlich besser "
+              "als Materialkarte und in der Legende unter Vergleich deutlich besser "
               "- der Dateiname selbst wird bereits vollständig in jedem "
               "Probendatensatz aufbewahrt. Das lässt sich auch nach dem "
-              "Speichern noch im Materials-Tab korrigieren."},
+              "Speichern noch unter Materialien korrigieren."},
     "diff_materials_expander": {"en": "Different materials in this batch? ({n} files uploaded)",
         "de": "Unterschiedliche Materialien in diesem Stapel? ({n} Dateien hochgeladen)"},
     "diff_materials_caption": {
