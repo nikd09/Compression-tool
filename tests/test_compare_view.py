@@ -112,3 +112,42 @@ def test_all_materials_starts_the_group_empty_not_the_whole_workspace(
     specimens0 = at.multiselect(key="cmp_specimens_0_All materials")
     assert specimens0.value == []
     assert len(specimens0.options) == 3
+
+
+def test_cycles_line_up_on_the_stress_axis():
+    """Peaks that differ by a fraction of a MPa land on one stress step, and a
+    run with fewer steps (PL-0087 Case B) still lines up at the same stresses."""
+    import pandas as pd
+
+    from compression_tool.webapp.compare_view import _metric_by_stress, _stress_level
+
+    df = pd.DataFrame({
+        "specimen_id": ["a", "a", "b", "b", "b"],
+        "Cycle": [1, 2, 1, 2, 3],
+        "PeakStress_MPa": [49.8, 100.3, 50.2, 99.9, 150.1],
+        "k": [10.0, 12.0, 14.0, 16.0, 18.0],
+    })
+    df["StressLevel_MPa"] = _stress_level(df["PeakStress_MPa"])
+    assert list(df["StressLevel_MPa"]) == [50.0, 100.0, 50.0, 100.0, 150.0]
+
+    agg = _metric_by_stress(df, [{"name": "G", "ids": ["a", "b"]}], "k")
+    assert list(agg["stress"]) == [50.0, 100.0, 150.0]
+    assert list(agg["mean"]) == [12.0, 14.0, 18.0]
+    assert list(agg["n"]) == [2, 2, 1]
+    assert agg.loc[agg["stress"] == 150.0, "sd"].iloc[0] == 0.0
+
+
+def test_raw_curves_can_be_narrowed_to_one_stress_step(
+    monkeypatch, workspace, single_file, series_file
+):
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="MatA")
+    ingest([series_file], ws, material="MatB")
+
+    at = _run(monkeypatch, workspace)
+    assert not at.exception
+    step = at.selectbox(key="cmp_curve_step")
+    assert step.value is None  # all steps by default
+    assert len(step.options) > 2
+    step.set_value(step.options[-1]).run()
+    assert not at.exception

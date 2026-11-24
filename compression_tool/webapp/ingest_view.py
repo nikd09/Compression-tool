@@ -83,18 +83,6 @@ _T = {
               "Halteerkennung vollständig, sodass jeder Zyklus kein Halten und "
               "kein Kriechen meldet, statt vereinzelter falscher Treffer in "
               "einer sonst haltefreien Prüfung."},
-    "gauge_confirmed": {"en": "Gauge length confirmed", "de": "Messlänge bestätigt"},
-    "gauge_confirmed_help": {
-        "en": "Check this only once someone has verified the displacement "
-              "channel's extensometer spans exactly this specimen's measured "
-              "thickness h0, not just that h0 gives a plausible modulus. Left "
-              "unchecked, strain and modulus stay provisional and carry a "
-              "critical warning.",
-        "de": "Nur aktivieren, wenn jemand bestätigt hat, dass der Extensometer "
-              "des Wegkanals genau die gemessene Dicke h0 dieser Probe erfasst, "
-              "nicht nur, dass h0 einen plausiblen Modul ergibt. Unmarkiert "
-              "bleiben Dehnung und Modul vorläufig und tragen einen kritischen "
-              "Hinweis."},
     "filename_warning": {
         "en": "'{material}' looks like the export's file name, not a material "
               "code. A short code (e.g. 'T050LR1') reads far better as a "
@@ -289,7 +277,7 @@ def _resolve_material_groups(
 
 
 def _preview_fingerprint(
-    paths: list[Path], material_groups: dict[str, list[Path]], cfg: Config, gauge_confirmed: bool,
+    paths: list[Path], material_groups: dict[str, list[Path]], cfg: Config, gauge_confirmed: Optional[bool],
 ) -> tuple:
     """What Preview's own output actually depends on: the attached files
     (by resolved path -- _save_uploads gives a stable path per (name, size)
@@ -402,7 +390,7 @@ def _render_preview_errors(rows: list[dict]) -> None:
 
 
 def _build_dashboard_preview(
-    paths: list[Path], cfg: Config, material: str, gauge_confirmed: bool,
+    paths: list[Path], cfg: Config, material: str, gauge_confirmed: Optional[bool],
     material_by_path: Optional[dict[str, str]] = None,
 ) -> dict:
     """The same charted dashboard Results renders, for files that are not
@@ -527,10 +515,6 @@ def render(ws: Workspace) -> None:
             L("hold_at_peak"), value=True,
             help=L("hold_at_peak_help"),
         )
-        gauge_confirmed = st.checkbox(
-            L("gauge_confirmed"),
-            help=L("gauge_confirmed_help"),
-        )
 
     if uploaded and _looks_like_a_filename(material, uploaded):
         st.warning(L("filename_warning", material=material))
@@ -549,6 +533,9 @@ def render(ws: Workspace) -> None:
         st.info(L("no_upload_info"))
         return
     paths = _save_uploads(uploaded)
+    # Gauge length is decided from the displacement channel at analysis
+    # time (diagnostics.resolve_gauge_confirmed); nothing to ask here.
+    gauge_confirmed = None
     material_groups = _resolve_material_groups(paths, material.strip(), per_file_material)
     preview_fp = _preview_fingerprint(paths, material_groups, cfg, gauge_confirmed)
 

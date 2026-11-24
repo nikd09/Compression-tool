@@ -89,13 +89,11 @@ class Config:
     detect_holds: bool = True
 
     # --- stiffness ----------------------------------------------------------
-    # FALLBACK window only: the real window is auto-located from the data on
-    # every cycle (see _auto_stiffness_window / ASTM E111 toe compensation).
-    # These two are used only on the rare cycle where no candidate window
-    # clears the minimum span -- not a manual override of auto-detection,
-    # which always runs first.
-    stiff_lo_frac: float = 0.25    # fallback lower bound of regression window
-    stiff_hi_frac: float = 0.75    # fallback upper bound of regression window
+    # Relative-band stiffness window, as fractions of EACH cycle's own peak
+    # (PL-0087: 25 % to 75 % of the step's maximum load). Also the fallback
+    # for the common-band window when it cannot be auto-located.
+    stiff_lo_frac: float = 0.25
+    stiff_hi_frac: float = 0.75
 
     # --- the one reference stress ------------------------------------------
     # A single low, test-wide stress, read on both branches of every cycle.
@@ -811,6 +809,11 @@ def _energies(stress, disp) -> tuple[Optional[float], Optional[float], Optional[
     return w_in, w_out, w_in - w_out
 
 
+# A first cycle without a hold counts as the seating cycle only if its peak
+# is well below the next cycle's (PL-0087: 10 MPa before a 50 MPa step).
+SEATING_MAX_FRAC_OF_NEXT = 0.5
+
+
 def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
     """Per-cycle metric table for one specimen."""
     cfg = cfg or Config()
@@ -820,6 +823,24 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     peaks = [float(np.nanmax(s[a : b + 1])) for a, b in cycles]
+
+    # Seating cycle: PL-0087 starts with a short load to about 10 MPa and
+    # back, with no hold, before the first programmed step. It only settles
+    # the specimen and the fixture, so it is left out of every result (and
+    # out of the curve cache, which follows these same cycle bounds). Only
+    # recognised when holds are expected and the next cycle has one, so a
+    # fast-cycling test without holds is never trimmed.
+    seating_peak = None
+    if cfg.detect_holds and len(cycles) >= 2:
+        (a0, b0), (a1, b1) = cycles[0], cycles[1]
+        if (
+            detect_hold(s[a0 : b0 + 1], cfg) is None
+            and detect_hold(s[a1 : b1 + 1], cfg) is not None
+            and peaks[0] < SEATING_MAX_FRAC_OF_NEXT * peaks[1]
+        ):
+            seating_peak = peaks[0]
+            cycles, peaks = cycles[1:], peaks[1:]
+
     global_peak = max(peaks)
 
     # ref_peak picks which cycle the common-band stiffness window (below) is
@@ -878,7 +899,10 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
         w_in, w_out, w_diss = _energies(cs, cx)
         cs_load, cx_load = cs[: peak_idx + 1], cx[: peak_idx + 1]
         k_common, k_common_n, k_common_r2 = _fit_window(cs_load, cx_load, common_lo, common_hi)
-        k_rel, k_rel_n, k_rel_r2, rel_lo, rel_hi = _auto_stiffness_window(cs_load, cx_load, cfg)
+        # Relative band: a fixed window of THIS cycle's own peak (PL-0087:
+        # 25-75 % of the step's maximum load), the same rule on every cycle.
+        rel_lo, rel_hi = cfg.stiff_lo_frac * peak, cfg.stiff_hi_frac * peak
+        k_rel, k_rel_n, k_rel_r2 = _fit_window(cs_load, cx_load, rel_lo, rel_hi)
 
         rows.append(
             {
@@ -931,9 +955,9 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
                 "Stiffness_common_r2": k_common_r2,
                 "Stiffness_common_lo_MPa": common_lo,
                 "Stiffness_common_hi_MPa": common_hi,
-                # Relative band: auto-located on THIS cycle's own loading
-                # branch. Describes the cycle faithfully but is NOT comparable
-                # across rising stages of a multi-stage test.
+                # Relative band: stiff_lo_frac..stiff_hi_frac of THIS cycle's
+                # peak. Follows each step's own load level, so it is NOT
+                # comparable across rising stages of a multi-stage test.
                 "Stiffness_relative_MPa_per_mm": k_rel,
                 "Stiffness_relative_n": k_rel_n,
                 "Stiffness_relative_r2": k_rel_r2,
@@ -1002,6 +1026,7 @@ def analyse_test(test: TestData, cfg: Optional[Config] = None) -> pd.DataFrame:
     df.attrs["stiffness_common_lo_mpa"] = common_lo
     df.attrs["stiffness_common_hi_mpa"] = common_hi
     df.attrs["multi_stage"] = bool(np.ptp(peaks) > 0.05 * global_peak)
+    df.attrs["seating_cycle_peak_mpa"] = seating_peak
     df.attrs["h0_mm"] = test.h0_mm
     df.attrs["notes"] = list(test.notes)
     return df

@@ -62,10 +62,16 @@ CONTRACT_WARNING: tuple[str, ...] = ("code", "severity", "message", "message_de"
 # Warning codes a consumer may rely on existing. New codes may be added;
 # existing codes keep their meaning.
 CONTRACT_WARNING_CODES: tuple[str, ...] = (
-    "gauge_length_unconfirmed",
+    "machine_displacement_channel",
     "no_gauge_length",
     "first_cycle_near_discard_threshold",
     "cycles_discarded_by_peak_filter",
+    "seating_cycle_excluded",
+    # Retired: the gauge length is now decided from the displacement channel
+    # (only the machine travel is flagged, as machine_displacement_channel),
+    # and hold lengths are fixed by the test method, so neither is emitted
+    # any more. Kept so older stored records still validate.
+    "gauge_length_unconfirmed",
     "variable_dwell_length",
     # Retired: the within-cycle permanent-deformation redesign (core.py)
     # removed the failure class this covered (a cross-cycle rebase onto
@@ -237,13 +243,11 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Stiffness_relative_MPa_per_mm", "REAL", "Stiffness (relative band)", "MPa/mm",
-        "Slope fitted over a window auto-located on THIS cycle's own loading "
-        "branch (see Stiffness_relative_lo_MPa / _hi_MPa) -- the region of "
-        "maximum, most-linear slope, found from the data rather than a fixed "
-        "percentage (ASTM E111 toe compensation / chord modulus). Describes "
-        "the cycle faithfully but is NOT comparable across cycles of a "
-        "multi-stage test, since the window itself moves with each cycle's "
-        "own peak.",
+        "Slope of the loading branch between 25 % and 75 % of THIS cycle's "
+        "own peak stress (the stiffness window in the thresholds; PL-0087). "
+        "Describes each step at its own load level, so it is NOT comparable "
+        "across cycles of a multi-stage test: the window moves up with each "
+        "step's peak.",
         fmt="0.0",
     ),
     Column(
@@ -260,14 +264,14 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     ),
     Column(
         "Stiffness_relative_lo_MPa", "REAL", "Stiffness (relative band), window low", "MPa",
-        "Lower bound of the auto-located relative-band window for THIS cycle, "
-        "in absolute MPa -- moves cycle to cycle, unlike the common band's.",
+        "Lower bound of the relative-band window for THIS cycle, in absolute "
+        "MPa -- moves cycle to cycle, unlike the common band's.",
         fmt="0.00", internal=True,
     ),
     Column(
         "Stiffness_relative_hi_MPa", "REAL", "Stiffness (relative band), window high", "MPa",
-        "Upper bound of the auto-located relative-band window for THIS cycle, "
-        "in absolute MPa.",
+        "Upper bound of the relative-band window for THIS cycle, in absolute "
+        "MPa.",
         fmt="0.00", internal=True,
     ),
     Column(
@@ -634,13 +638,12 @@ COLUMN_DESCRIPTIONS_DE: dict[str, str] = {
     "Stiffness_common_r2": "Bestimmtheitsmaß der Anpassung im gemeinsamen "
         "Fenster. Niedrige Werte bedeuten, dass der Ast über das Fenster "
         "gekrümmt war, sodass eine einzelne Steigung ihn nicht beschreibt.",
-    "Stiffness_relative_MPa_per_mm": "Steigung über ein Fenster, automatisch "
-        "im eigenen Belastungsast DIESES Zyklus bestimmt -- der Bereich mit "
-        "der stärksten, linearsten Steigung, aus den Daten ermittelt statt "
-        "einem festen Prozentsatz (ASTM E111 Toe-Kompensation / "
-        "Sehnenmodul). Beschreibt den Zyklus originalgetreu, ist aber NICHT "
-        "über Zyklen einer mehrstufigen Prüfung vergleichbar, da sich das "
-        "Fenster mit der jeweiligen Spitze verschiebt.",
+    "Stiffness_relative_MPa_per_mm": "Steigung des Belastungsastes zwischen "
+        "25 % und 75 % der eigenen Spitzenspannung DIESES Zyklus (das "
+        "Steifigkeitsfenster in den Schwellenwerten; PL-0087). Beschreibt "
+        "jede Stufe auf ihrem eigenen Lastniveau und ist deshalb NICHT über "
+        "Zyklen einer mehrstufigen Prüfung vergleichbar: das Fenster wandert "
+        "mit der Spitze jeder Stufe nach oben.",
     "Stiffness_relative_n": "Anzahl der für die Anpassung des eigenen "
         "Fensters verwendeten Messpunkte.",
     "Stiffness_relative_r2": "Bestimmtheitsmaß der Anpassung im eigenen "

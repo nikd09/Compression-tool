@@ -131,9 +131,9 @@ _CONFIG_FORM_T = {
               "absolute: the same knobs `--unload-frac` etc. expose on the "
               "command line. Cycle boundaries are found by locally-adaptive peak "
               "detection, not by these numbers directly -- unload_frac and "
-              "major_cycle_frac are SAFETY FLOORS on that, and the stiffness "
-              "window is auto-located from the data, with stiff_lo_frac / "
-              "stiff_hi_frac used only as a fallback. Defaults work unmodified for "
+              "major_cycle_frac are SAFETY FLOORS on that. The stiffness "
+              "window sets the relative-band stiffness of every cycle. "
+              "Defaults work unmodified for "
               "most exports; change one only if Preview below shows a stage being "
               "lost or a cycle miscounted.",
         "de": "Jeder Schwellenwert ist relativ zur eigenen Spitzenspannung der "
@@ -141,9 +141,8 @@ _CONFIG_FORM_T = {
               "auf der Kommandozeile bereitstellen. Zyklusgrenzen werden durch "
               "lokal-adaptive Peak-Erkennung gefunden, nicht direkt durch diese "
               "Zahlen -- unload_frac und major_cycle_frac sind "
-              "SICHERHEITSUNTERGRENZEN dafür, und das Steifigkeitsfenster wird "
-              "automatisch aus den Daten bestimmt, wobei stiff_lo_frac / "
-              "stiff_hi_frac nur als Ersatzwert dienen. Die Standardwerte "
+              "SICHERHEITSUNTERGRENZEN dafür. Das Steifigkeitsfenster legt die "
+              "Steifigkeit (eigenes Fenster) jedes Zyklus fest. Die Standardwerte "
               "funktionieren unverändert für die meisten Exporte; einen Wert nur "
               "ändern, wenn die Vorschau unten eine verlorene Stufe oder einen "
               "falsch gezählten Zyklus zeigt."},
@@ -168,16 +167,17 @@ _CONFIG_FORM_T = {
               "fängt Nahe-Null-Kontaktartefakte ab. Niedrig gehalten: echte "
               "Stufen werden anhand von unload_frac und lokalem Rauschen "
               "beurteilt, nicht hierdurch."},
-    "stiff_lo": {"en": "Stiffness window start (fallback)", "de": "Steifigkeitsfenster Anfang (Ersatzwert)"},
+    "stiff_lo": {"en": "Stiffness window start", "de": "Steifigkeitsfenster Anfang"},
     "stiff_lo_help": {
-        "en": "Fallback stiffness window (fraction of that cycle's own peak), "
-              "used only when no auto-located window clears the minimum span.",
-        "de": "Ersatz-Steifigkeitsfenster (Anteil der eigenen Spitze dieses "
-              "Zyklus), nur verwendet, wenn kein automatisch bestimmtes Fenster "
-              "die Mindestspanne erreicht."},
-    "stiff_hi": {"en": "Stiffness window end (fallback)", "de": "Steifigkeitsfenster Ende (Ersatzwert)"},
-    "stiff_hi_help": {"en": "Fallback stiffness window upper bound -- see Stiffness window start.",
-        "de": "Obere Grenze des Ersatz-Steifigkeitsfensters -- siehe Steifigkeitsfenster Anfang."},
+        "en": "Start of the relative-band stiffness window, as a fraction of each "
+              "cycle's own peak (PL-0087: 0.25).",
+        "de": "Anfang des Fensters für die Steifigkeit (eigenes Fenster), als "
+              "Anteil der eigenen Spitze jedes Zyklus (PL-0087: 0,25)."},
+    "stiff_hi": {"en": "Stiffness window end", "de": "Steifigkeitsfenster Ende"},
+    "stiff_hi_help": {"en": "End of the relative-band stiffness window, as a fraction of "
+              "each cycle's own peak (PL-0087: 0.75).",
+        "de": "Ende des Fensters für die Steifigkeit (eigenes Fenster), als Anteil "
+              "der eigenen Spitze jedes Zyklus (PL-0087: 0,75)."},
     "reference_stress": {"en": "Reference stress", "de": "Referenzspannung"},
     "reference_stress_help": {
         "en": "The one low, test-wide reference stress (fraction of the global "

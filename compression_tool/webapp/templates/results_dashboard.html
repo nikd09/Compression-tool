@@ -818,7 +818,7 @@ const PANELS=[
        "gekrümmt (R² unter "+QUALITY_MIN_R2+") ist: die Steigung dieses Zyklus nur als "+
        "Anhaltswert lesen, nie als belastbare Zahl zitieren."}},
   {k:"kRel", t:{en:"Relative-band stiffness",de:"Steifigkeit, eigenes Fenster"},
-   u:{en:"MPa/mm, window auto-located per cycle",de:"MPa/mm, Fenster je Zyklus automatisch bestimmt"},
+   u:{en:"MPa/mm, 25-75 % of each step's peak",de:"MPa/mm, 25-75 % der Spitze jeder Stufe"},
    f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
    q:{n:"kRelN", r2:"kRelR2"},
    why:{en:"Slope fitted over a window auto-located on THIS cycle's OWN loading branch -- the "+
@@ -1239,8 +1239,8 @@ const DEFS=[
    {en:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle, located once on the smallest-peak cycle's most linear region (see Settings above). This is the form that may be compared across stages, specimens and materials.",
     de:"Steigung des Belastungsastes über ein IDENTISCHES Spannungsfenster in jedem Zyklus, einmalig im linearsten Bereich des Zyklus mit der kleinsten Spitze bestimmt (siehe Einstellungen oben). Diese Form darf über Stufen, Proben und Materialien hinweg verglichen werden."}],
   [{en:"Stiffness, relative band",de:"Steifigkeit, eigenes Fenster"},"MPa/mm",
-   {en:"Slope over a window auto-located on THIS cycle's own loading branch (ASTM E111 toe compensation / chord modulus). Describes the cycle faithfully but is NOT comparable across cycles, since the window itself moves with each cycle's own peak.",
-    de:"Steigung über ein Fenster, automatisch im Belastungsast DIESES Zyklus bestimmt (ASTM E111 Toe-Kompensation / Sehnenmodul). Beschreibt den Zyklus originalgetreu, ist aber NICHT über Zyklen vergleichbar, da sich das Fenster mit der jeweiligen Spitze verschiebt."}],
+   {en:"Slope of the loading branch between the stiffness-window fractions (default 25-75 %, PL-0087) of THIS cycle's own peak. Describes each step at its own load level, so it is NOT comparable across cycles: the window moves up with each step's peak.",
+    de:"Steigung des Belastungsastes zwischen den Anteilen des Steifigkeitsfensters (Standard 25-75 %, PL-0087) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem eigenen Lastniveau und ist deshalb NICHT über Zyklen vergleichbar: das Fenster wandert mit der Spitze jeder Stufe nach oben."}],
   [{en:"Maximum displacement",de:"Maximaler Weg"},"mm",
    {en:"Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held.",
     de:"Größter in diesem Zyklus erreichter Weg, und der Punkt, an dem die Energieintegrale die Schleife teilen. Übersteigt den Weg bei Spitzenspannung um so viel, wie die Probe während des Haltens weiterkroch."}],
@@ -1262,13 +1262,10 @@ function renderMethod(){
   <p class="note">${L({
     en:"Cycle boundaries are found by locally-adaptive peak detection, not one fixed "+
        "threshold -- the two segmentation rows below are SAFETY FLOORS on that, not the primary "+
-       "gate. The stiffness window is auto-located from the data (ASTM E111 toe compensation); "+
-       "the percentages below are the fallback used only if no window clears the minimum span.",
+       "gate.",
     de:"Zyklusgrenzen werden durch lokal-adaptive Peak-Erkennung gefunden, nicht durch einen "+
        "einzelnen festen Schwellenwert -- die beiden Segmentierungszeilen unten sind "+
-       "SICHERHEITSUNTERGRENZEN dafür, nicht das primäre Kriterium. Das Steifigkeitsfenster wird "+
-       "automatisch aus den Daten bestimmt (ASTM E111 Toe-Kompensation); die Prozentsätze unten "+
-       "sind der Ersatzwert, der nur greift, wenn kein Fenster die Mindestspanne erreicht."})}</p>
+       "SICHERHEITSUNTERGRENZEN dafür, nicht das primäre Kriterium."})}</p>
   <div class="tw" style="max-height:none"><table class="dict"><tbody>
     <tr><td>${L({en:"Valley depth floor",de:"Untergrenze Talstiefe"})}</td><td>${(cfg.unload_frac*100).toFixed(0)}%</td>
       <td>${L({en:"of a candidate's OWN peak stress: its bounding valley must give back at least this much to count as a real load-unload separation, not a shoulder on the ramp toward a taller neighbour",
@@ -1279,9 +1276,9 @@ function renderMethod(){
     <tr><td>${L({en:"Stiffness window (common band)",de:"Steifigkeitsfenster (gemeinsames Fenster)"})}</td><td>${fmt(s.stiffLo,1)}-${fmt(s.stiffHi,1)} MPa</td>
       <td>${L({en:"auto-located once on the reference (smallest-peak) cycle's own most-linear region, reused as this same absolute window on every cycle",
         de:"einmalig im linearsten Bereich des Referenzzyklus (kleinste Spitzenspannung) bestimmt, danach als dasselbe absolute Fenster auf jeden Zyklus angewendet"})}</td></tr>
-    <tr><td>${L({en:"Stiffness window fallback",de:"Ersatz-Steifigkeitsfenster"})}</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
-      <td>${L({en:"of that cycle's own peak -- used only when no auto-located window clears the minimum span",
-        de:"der eigenen Spitze dieses Zyklus -- nur verwendet, wenn kein automatisch bestimmtes Fenster die Mindestspanne erreicht"})}</td></tr>
+    <tr><td>${L({en:"Stiffness window (relative band)",de:"Steifigkeitsfenster (eigenes Fenster)"})}</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
+      <td>${L({en:"of each cycle's own peak, the window the relative-band stiffness is fitted over (PL-0087)",
+        de:"der eigenen Spitze jedes Zyklus, das Fenster für die Steifigkeit im eigenen Fenster (PL-0087)"})}</td></tr>
     <tr><td>${L({en:"Reference stress",de:"Referenzspannung"})}</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
       <td>${L({en:`of global peak = ${fmt(s.residStress,1)} MPa, above the contact-loss baseline -- the one reference stress, used both for permanent deformation and for cross-cycle comparison`,
         de:`der globalen Spitze = ${fmt(s.residStress,1)} MPa, oberhalb der Kontaktverlust-Grundlinie -- die eine Referenzspannung, verwendet sowohl für die bleibende Verformung als auch für den Zyklenvergleich`})}</td></tr>

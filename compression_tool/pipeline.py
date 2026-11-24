@@ -99,7 +99,7 @@ def preview(
     paths: Sequence[str | os.PathLike],
     cfg: Optional[Config] = None,
     *,
-    gauge_length_confirmed: bool = False,
+    gauge_length_confirmed: Optional[bool] = None,
 ) -> list[dict]:
     """Load and analyse without writing anything.
 
@@ -153,7 +153,7 @@ def preview_dashboard_data(
     *,
     material: Optional[str] = None,
     material_by_path: Optional[dict[str, str]] = None,
-    gauge_length_confirmed: bool = False,
+    gauge_length_confirmed: Optional[bool] = None,
 ) -> dict:
     """Everything `dashboard_data.build_dashboard_data()` needs, for every
     specimen across `paths`, built entirely in memory.
@@ -245,17 +245,17 @@ def ingest(
     cfg: Optional[Config] = None,
     when: Optional[datetime] = None,
     update_index: bool = True,
-    gauge_length_confirmed: bool = False,
+    gauge_length_confirmed: Optional[bool] = None,
     archive_originals: bool = True,
     label_stems: Optional[dict[str, str]] = None,
     write_reports: bool = True,
 ) -> IngestResult:
     """Archive, analyse, persist and index one or more exports.
 
-    `gauge_length_confirmed` asserts that the displacement channel spans only
-    the specimen height h0. It defaults to False, which marks every strain and
-    modulus figure provisional: nothing in an export proves what the
-    extensometer was clamped across, so the tool will not assume it.
+    `gauge_length_confirmed` defaults to None: decided from the displacement
+    channel (diagnostics.resolve_gauge_confirmed). The clip-on extensometer
+    the test method uses counts as confirmed; the machine's own travel
+    ("Standardweg") does not and is flagged. Pass True/False to override.
 
     `archive_originals=False` skips copying the export into Raw exports/ --
     only its SHA-256 is recorded (still needed for the specimen ID and to

@@ -69,8 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_prev = sub.add_parser("preview", help="analyse without writing anything")
     p_prev.add_argument("files", nargs="+")
-    p_prev.add_argument("--gauge-length-confirmed", action="store_true",
-                        help="assert that the displacement channel spans only h0")
+    p_prev.add_argument("--gauge-length-confirmed", action="store_true", default=None,
+                        help="treat the displacement channel as confirmed even if it "
+                             "is the machine travel (default: decided from the channel)")
     _add_config_args(p_prev)
 
     p_ing = sub.add_parser("ingest", help="archive, analyse, persist and index")
@@ -80,9 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
                             "short material code, not the export's file name")
     p_ing.add_argument("--no-index", action="store_true",
                        help="write the records but leave the database untouched")
-    p_ing.add_argument("--gauge-length-confirmed", action="store_true",
-                       help="assert that the displacement channel spans only h0; "
-                            "without it, strain and modulus are marked provisional")
+    p_ing.add_argument("--gauge-length-confirmed", action="store_true", default=None,
+                       help="treat the displacement channel as confirmed even if it "
+                            "is the machine travel (default: decided from the channel)")
     p_ing.add_argument("--no-archive", action="store_true",
                        help="do not copy the export into Raw exports/ -- only its "
                             "SHA-256 is recorded")

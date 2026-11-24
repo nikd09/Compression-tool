@@ -1,6 +1,7 @@
 """Compare: build named groups of specimens -- any specimens, from any
 materials, in any combination -- and overlay one metric across the groups'
-means. A group is not required to be "a whole material": Group A can be
+means, plotted against the stress of each step, plus the groups' raw
+stress-displacement curves. A group is not required to be "a whole material": Group A can be
 Material-X's S2+S3 while Group B is Material-Y's S4+S5, so a bad trial run in
 one material does not have to drag its whole mean into the comparison."""
 
@@ -13,11 +14,17 @@ import pandas as pd
 import streamlit as st
 
 from .. import knowledge_base
+from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..persistence import Workspace
 from ..schema import column_label_de, user_facing_cycle_columns
 from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot, short_tag
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
+
+# Each cycle is placed on the stress axis at its peak stress, rounded to this
+# step, so specimens of one group that reached 449.8 and 450.3 MPa share one
+# point, and a 6-cycle and a 9-cycle run line up at 50, 100 ... 300 MPa.
+STRESS_LEVEL_STEP_MPA = 5.0
 
 # Streamlit's chart toolbar has no Python-side option to drop one of its own
 # buttons, so this hides "Copy Vega-Lite spec" with CSS instead: it copies
@@ -105,36 +112,37 @@ _T = {
               "übereinstimmende."},
     "tooltip_group": {"en": "Group", "de": "Gruppe"},
     "tooltip_cycle": {"en": "Cycle", "de": "Zyklus"},
+    "tooltip_stress": {"en": "Stress step (MPa)", "de": "Laststufe (MPa)"},
     "tooltip_sd": {"en": "SD", "de": "SD"},
     "tooltip_specimens": {"en": "Specimens", "de": "Proben"},
-    "axis_cycle": {"en": "Cycle", "de": "Zyklus"},
+    "axis_stress": {"en": "Peak stress of the step (MPa)", "de": "Spitzenspannung der Stufe (MPa)"},
     "chart_caption": {
-        "en": "Each bar is the mean across that group's chosen specimens, for that "
-              "cycle; the whisker is ±1 standard deviation across them. A group of "
-              "one specimen shows that specimen's own value and no whisker. Bars "
-              "carry a value label at 3 groups or fewer; past that, a number on "
-              "every bar is too many labels for the space, so hover a bar for its "
-              "exact value instead.",
-        "de": "Jeder Balken ist der Mittelwert über die ausgewählten Proben dieser "
-              "Gruppe, für diesen Zyklus; die Fehlerlinie ist ±1 Standardabweichung "
-              "über diese Proben. Eine Gruppe mit nur einer Probe zeigt deren "
-              "eigenen Wert und keine Fehlerlinie. Balken tragen bei 3 Gruppen oder "
-              "weniger eine Wertbeschriftung; darüber sind Zahlen auf jedem Balken "
-              "zu viele Beschriftungen für den Platz - stattdessen einen Balken für "
-              "seinen genauen Wert überfahren."},
+        "en": "Each point is the group's mean at that stress step; the vertical bar "
+              "is ±1 standard deviation across its specimens.",
+        "de": "Jeder Punkt ist der Mittelwert der Gruppe auf dieser Laststufe; der "
+              "senkrechte Strich ist ±1 Standardabweichung über ihre Proben."},
+    "curves_heading": {"en": "Stress-displacement curves", "de": "Spannungs-Weg-Kurven"},
+    "curves_step": {"en": "Stress-displacement curves: steps shown",
+        "de": "Spannungs-Weg-Kurven: angezeigte Stufen"},
+    "curves_all_steps": {"en": "All steps", "de": "Alle Stufen"},
+    "curves_step_option": {"en": "{mpa:g} MPa step", "de": "Stufe {mpa:g} MPa"},
+    "curves_caption": {
+        "en": "Raw loading and unloading curves of every specimen in the groups, "
+              "coloured by group.",
+        "de": "Rohe Be- und Entlastungskurven aller Proben der Gruppen, nach Gruppe "
+              "eingefärbt."},
+    "curves_missing": {"en": "No curve data for: {names}",
+        "de": "Keine Kurvendaten für: {names}"},
+    "axis_disp": {"en": "Displacement (µm)", "de": "Weg (µm)"},
+    "axis_curve_stress": {"en": "Stress (MPa)", "de": "Spannung (MPa)"},
     "expander_title": {"en": "Group membership and underlying rows",
         "de": "Gruppenzugehörigkeit und zugrunde liegende Werte"},
     "summary_heading": {"en": "Key properties by group", "de": "Kennwerte je Gruppe"},
     "summary_caption": {
-        "en": "One row per group, every headline property side by side -- not just "
-              "the one metric charted above. Each specimen contributes its OWN last "
-              "cycle (its final state), then those are averaged across the group; a "
-              "group of one specimen shows that specimen's own values, unaveraged.",
-        "de": "Eine Zeile je Gruppe, alle Kennwerte nebeneinander - nicht nur die oben "
-              "als Diagramm dargestellte Kennzahl. Jede Probe geht mit ihrem EIGENEN "
-              "letzten Zyklus (ihrem Endzustand) ein, diese werden dann über die Gruppe "
-              "gemittelt; eine Gruppe mit nur einer Probe zeigt deren eigene Werte, "
-              "ungemittelt."},
+        "en": "All six properties per group, from each specimen's last step, "
+              "averaged over the group.",
+        "de": "Alle sechs Kennwerte je Gruppe, aus der letzten Stufe jeder Probe, "
+              "über die Gruppe gemittelt."},
     "col_group": {"en": "Group", "de": "Gruppe"},
     "col_material": {"en": "Material", "de": "Material"},
     "col_specimen": {"en": "Specimen", "de": "Probe"},
@@ -183,6 +191,129 @@ def _headline_summary_table(
             row[header] = round(float(vals.mean()), _decimals(col.fmt)) if not vals.empty else None
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _stress_level(peaks: pd.Series) -> pd.Series:
+    """Each cycle's peak stress rounded to STRESS_LEVEL_STEP_MPA: the stress
+    step it belongs to on the chart's x axis."""
+    p = pd.to_numeric(peaks, errors="coerce")
+    return (p / STRESS_LEVEL_STEP_MPA).round() * STRESS_LEVEL_STEP_MPA
+
+
+def _metric_by_stress(df: pd.DataFrame, groups: list[dict], key: str) -> pd.DataFrame:
+    """Mean, SD and count of `key` per group and stress step. A group of one
+    specimen has SD 0, so it shows its own value with no spread."""
+    rows = []
+    for g in groups:
+        sub = df[df["specimen_id"].isin(g["ids"])]
+        for level, part in sub.groupby("StressLevel_MPa"):
+            vals = pd.to_numeric(part[key], errors="coerce").dropna()
+            if vals.empty:
+                continue
+            sd = float(vals.std(ddof=0)) if len(vals) > 1 else 0.0
+            rows.append({
+                "group": g["name"], "stress": float(level), "mean": float(vals.mean()),
+                "sd": sd, "n": len(vals),
+            })
+    agg = pd.DataFrame(rows)
+    if not agg.empty:
+        agg["err_lo"] = agg["mean"] - agg["sd"]
+        agg["err_hi"] = agg["mean"] + agg["sd"]
+    return agg
+
+
+def _subtitle(unit: str, show_spread: bool, lang: str) -> str:
+    """Unit plus what the points are, so a downloaded PNG explains itself."""
+    what = {"en": "mean per stress step", "de": "Mittelwert je Laststufe"}[lang]
+    if show_spread:
+        what += {"en": " ± 1 SD", "de": " ± 1 SD"}[lang]
+    return f"{unit} · {what}" if unit else what
+
+
+def _curve_rows(
+    ws: Workspace, specimens: pd.DataFrame, groups: list[dict], cycles: pd.DataFrame,
+    level: float | None,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Raw stress-displacement points of every specimen in every group, from
+    the curve cache written at ingest (the same data Results draws). `level`
+    keeps only the cycles of that stress step; None keeps all of them."""
+    row_by_id = specimens.set_index("specimen_id")
+    level_by_cycle = {
+        (sid, int(c)): lv for sid, c, lv in
+        cycles[["specimen_id", "Cycle", "StressLevel_MPa"]].itertuples(index=False)
+    }
+    frames, missing = [], []
+    for g in groups:
+        for sid in g["ids"]:
+            row = row_by_id.loc[sid]
+            path = curve_cache_path_for(ws.root / row["json_path"])
+            try:
+                cache = read_curve_cache(path)
+            except (FileNotFoundError, OSError, ValueError):
+                missing.append(str(row["label"]))
+                continue
+            tag = short_tag(str(row["label"]), 0)
+            for cyc in cache.get("cycles", []):
+                n = int(cyc.get("cycle", 0))
+                lv = level_by_cycle.get((sid, n))
+                if level is not None and lv != level:
+                    continue
+                pts = cyc.get("points") or []
+                if not pts:
+                    continue
+                part = pd.DataFrame(pts, columns=["disp_mm", "stress"])
+                part["disp_um"] = part["disp_mm"] * 1000.0
+                part["order"] = range(len(part))
+                part["group"] = g["name"]
+                part["specimen"] = f"{row['material']} {tag}"
+                part["line"] = f"{g['name']}|{sid}|{n}"
+                part["step"] = lv
+                frames.append(part)
+    data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return data, missing
+
+
+def _render_curves(ws, specimens, groups, cycles, group_order, color, L, lang) -> None:
+    # No separate section heading: the chart carries the title itself, so a
+    # downloaded PNG is labelled too.
+    levels = sorted(cycles["StressLevel_MPa"].dropna().unique().tolist())
+    options = [None] + levels
+    level = st.selectbox(
+        L("curves_step"), options, key="cmp_curve_step", index=0,
+        format_func=lambda v: L("curves_all_steps") if v is None else L("curves_step_option", mpa=v),
+    )
+    data, missing = _curve_rows(ws, specimens, groups, cycles, level)
+    if missing:
+        st.caption(L("curves_missing", names=", ".join(missing)))
+    if data.empty:
+        return
+    chart = (
+        alt.Chart(data)
+        .mark_line(strokeWidth=1.3, opacity=0.85)
+        .encode(
+            x=alt.X("disp_um:Q", title=L("axis_disp"), scale=alt.Scale(zero=False)),
+            y=alt.Y("stress:Q", title=L("axis_curve_stress")),
+            color=color, detail="line:N", order="order:Q",
+            tooltip=[
+                alt.Tooltip("group:N", title=L("tooltip_group")),
+                alt.Tooltip("specimen:N", title=L("col_specimen")),
+                alt.Tooltip("step:Q", title=L("tooltip_stress"), format=".0f"),
+            ],
+        )
+        .properties(
+            width=820, height=460,
+            title=alt.TitleParams(
+                text=L("curves_heading"),
+                subtitle=L("curves_all_steps") if level is None else L("curves_step_option", mpa=level),
+                fontSize=16, fontWeight=600, anchor="start", subtitleFontSize=12, offset=16,
+            ),
+        )
+        .configure_view(stroke=None)
+        .configure_axis(labelFontSize=12, titleFontSize=13)
+        .configure_legend(labelFontSize=12, titleFontSize=13, symbolSize=110)
+    )
+    st.altair_chart(chart, use_container_width=False)
+    st.caption(L("curves_caption"))
 
 
 def render(ws: Workspace) -> None:
@@ -314,25 +445,11 @@ def render(ws: Workspace) -> None:
         L("metric_label"), options, format_func=lambda c: f"{_metric_label(c, lang)} ({c.unit})" if c.unit else _metric_label(c, lang),
     )
 
-    by_specimen = df.set_index("specimen_id") if "specimen_id" in df.columns else None
-    rows = []
-    for g in groups:
-        sub = df[df["specimen_id"].isin(g["ids"])] if by_specimen is not None else df
-        for cycle, part in sub.groupby("Cycle"):
-            vals = part[metric.key].dropna()
-            if vals.empty:
-                continue
-            rows.append({
-                "group": g["name"], "Cycle": cycle,
-                "mean": vals.mean(), "sd": vals.std(ddof=0) if len(vals) > 1 else 0.0,
-                "n": len(vals),
-            })
-    agg = pd.DataFrame(rows)
+    df["StressLevel_MPa"] = _stress_level(df["PeakStress_MPa"])
+    agg = _metric_by_stress(df, groups, metric.key)
     if agg.empty:
         st.info(L("no_values", label=_metric_label(metric, lang)))
         return
-    agg["err_lo"] = agg["mean"] - agg["sd"]
-    agg["err_hi"] = agg["mean"] + agg["sd"]
 
     show_spread = st.checkbox(
         L("spread_checkbox"), value=True, help=L("spread_help"),
@@ -343,78 +460,53 @@ def render(ws: Workspace) -> None:
     y_title = metric_name + (f" ({metric.unit})" if metric.unit else "")
     tooltip = [
         alt.Tooltip("group:N", title=L("tooltip_group")),
-        alt.Tooltip("Cycle:O", title=L("tooltip_cycle")),
-        alt.Tooltip("mean:Q", title=metric_name, format=".4g"),
-        alt.Tooltip("sd:Q", title=L("tooltip_sd"), format=".3g"),
+        alt.Tooltip("stress:Q", title=L("tooltip_stress"), format=".0f"),
+        alt.Tooltip("mean:Q", title=metric_name, format=",.4~g"),
+        alt.Tooltip("sd:Q", title=L("tooltip_sd"), format=",.3~g"),
         alt.Tooltip("n:Q", title=L("tooltip_specimens")),
     ]
     # Same fixed categorical order the Results dashboard uses -- a group's
     # colour follows its position in the form above, not a value sort, so
-    # editing one group's specimens never repaints another group's bars.
+    # editing one group's specimens never repaints another group's line.
     color = alt.Color(
-        "group:N", title=L("tooltip_group"),
+        "group:N", title=L("tooltip_group"), sort=group_order,
         scale=alt.Scale(domain=group_order, range=CATEGORICAL_LIGHT[: len(group_order)]),
+    )
+    # Stress on the x axis rather than the cycle number: a shared picture
+    # then says "at 300 MPa" instead of "cycle 6", and runs with a different
+    # number of steps (PL-0087 Case A and B) line up at the same stresses.
+    x_stress = alt.X(
+        "stress:Q", title=L("axis_stress"),
+        scale=alt.Scale(domainMin=0, nice=True), axis=alt.Axis(tickMinStep=50),
     )
 
     base = alt.Chart(agg)
-    bars = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, stroke=None).encode(
-        x=alt.X("Cycle:O", title=L("axis_cycle"), axis=alt.Axis(labelAngle=0)),
-        xOffset=alt.XOffset("group:N", sort=group_order),
-        y=alt.Y("mean:Q", title=y_title, axis=alt.Axis(grid=True)),
-        color=color,
-        tooltip=tooltip,
-    )
-    layers = [bars]
+    layers = [
+        base.mark_line(strokeWidth=2.2, point=alt.OverlayMarkDef(size=60, filled=True)).encode(
+            x=x_stress,
+            # Axis titled with the unit only: the chart title already names
+            # the metric, so the full name twice just crowds the left edge.
+            y=alt.Y("mean:Q", title=metric.unit or metric_name,
+                    axis=alt.Axis(grid=True, format=",.4~g")),
+            color=color, tooltip=tooltip,
+        )
+    ]
     if show_spread:
         layers.append(
-            base.mark_rule(strokeWidth=1.4, opacity=0.75).encode(
-                x=alt.X("Cycle:O"), xOffset=alt.XOffset("group:N", sort=group_order),
-                y=alt.Y("err_lo:Q"), y2=alt.Y2("err_hi:Q"), tooltip=tooltip,
+            base.mark_rule(strokeWidth=1.6, opacity=0.7).encode(
+                x="stress:Q", y="err_lo:Q", y2="err_hi:Q", color=color, tooltip=tooltip,
             )
         )
-    # Direct labels stay SELECTIVE, same threshold and reasoning as the
-    # Results dashboard's own bar charts: past three groups, a number on
-    # every bar is dozens of labels fighting for the same strip of space,
-    # and the fullscreen/PNG-export view -- which is exactly where hovering
-    # for the tooltip is not an option -- would be the most crowded of all.
-    # Below that threshold, this is also what makes the value actually
-    # visible there, which the hover-only tooltip alone cannot do.
-    if len(group_order) <= 3:
-        layers.append(
-            base.mark_text(dy=-7, fontSize=11, fontWeight=600).encode(
-                x=alt.X("Cycle:O"), xOffset=alt.XOffset("group:N", sort=group_order),
-                y=alt.Y("mean:Q"), text=alt.Text("mean:Q", format=".3g"),
-            )
-        )
-    # A title, matching every chart on the Results tab having one -- this
-    # was the one chart in the app without it. Subtitle carries the unit
-    # separately, the same title/unit split the Results panels use, rather
-    # than folding it into one long title string.
-    #
     # width is FIXED, not use_container_width=True: Vega-Lite text is set in
-    # absolute pixels and does not scale with the chart's size the way
-    # Results' hand-built SVG charts do (every dimension in that template,
-    # bar widths down to font sizes, is a function of one base width, so
-    # scaling the SVG up for the expanded dialog or a PNG export scales
-    # everything together and the proportions never change). Letting this
-    # chart stretch to the full page width -- checked in the running app, a Vega-Lite
-    # spec copied out of this app at "width": 1340 -- grows the plot area
-    # while the text stays the same absolute size, so it reads smaller as a
-    # fraction of the chart the wider the window is, and the SAME width is
-    # what "Download as PNG" captures: a screen-filling chart downloads as a
-    # huge image with comparatively tiny text once pasted into a document at
-    # a normal page width. A fixed, moderate width keeps that ratio close to
-    # what Results' own PNG exports already look like, at every size this
-    # spec is ever rendered or exported at, not just on screen.
+    # absolute pixels, so a screen-wide chart exports as a huge PNG with
+    # comparatively tiny text. A fixed, moderate width keeps the text size in
+    # proportion at every size the chart is shown or downloaded at.
     chart = (
         alt.layer(*layers)
         .properties(
-            width=820, height=480,
+            width=820, height=460,
             title=alt.TitleParams(
-                text=metric_name, subtitle=metric.unit or None,
-                # Vega-Lite's fontWeight is a fixed enum (100-900 in steps of
-                # 100, or a named keyword) -- not an arbitrary CSS weight
-                # like the rest of this app's "650" convention uses.
+                text=metric_name, subtitle=_subtitle(metric.unit, show_spread, lang),
                 fontSize=16, fontWeight=600, anchor="start",
                 subtitleFontSize=12, offset=16,
             ),
@@ -426,6 +518,8 @@ def render(ws: Workspace) -> None:
     st.markdown(_HIDE_SPEC_COPY_CSS, unsafe_allow_html=True)
     st.altair_chart(chart, use_container_width=False)
     st.caption(L("chart_caption"))
+
+    _render_curves(ws, specimens, groups, df, group_order, color, L, lang)
 
     st.markdown(f"##### {L('summary_heading')}")
     st.caption(L("summary_caption"))
@@ -447,9 +541,10 @@ def render(ws: Workspace) -> None:
                 unsafe_allow_html=True,
             )
         st.dataframe(
-            df[["material", "label", "Cycle", metric.key]].rename(columns={
+            df[["material", "label", "Cycle", "StressLevel_MPa", metric.key]].rename(columns={
                 "material": L("col_material"), "label": L("col_specimen"),
-                "Cycle": L("tooltip_cycle"), metric.key: y_title,
+                "Cycle": L("tooltip_cycle"), "StressLevel_MPa": L("tooltip_stress"),
+                metric.key: y_title,
             }),
             use_container_width=True, hide_index=True,
         )

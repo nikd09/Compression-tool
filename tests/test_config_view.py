@@ -205,3 +205,35 @@ def test_reanalyze_button_is_disabled_until_the_confirm_checkbox_is_ticked(
     at = confirm.check().run()
     reanalyze_btn = next(b for b in at.button if b.key == "cfg_reanalyze_btn")
     assert not reanalyze_btn.disabled
+
+
+def test_reanalyze_all_rewrites_every_run_in_its_own_folder(workspace, single_file, series_file):
+    """After a tool update every run is recalculated in place: same run
+    folders, same specimens, no duplicates. A run whose original was never
+    archived is skipped, not failed."""
+    from datetime import datetime
+
+    from compression_tool.webapp.config_view import _stem_of, reanalyze_all
+
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="MatA", when=datetime(2026, 1, 5))
+    ingest([series_file], ws, material="MatB", when=datetime(2026, 1, 6),
+           cfg=Config(stiff_lo_frac=0.3))
+    folders_before = sorted(p.parent.name for p in ws.processed.glob("*/run.json"))
+    conn = knowledge_base.connect(ws.db_path)
+    n_before = len(knowledge_base.list_specimens(conn))
+    conn.close()
+
+    done, skipped, failed = reanalyze_all(ws)
+
+    assert (done, skipped, failed) == (2, [], [])
+    assert sorted(p.parent.name for p in ws.processed.glob("*/run.json")) == folders_before
+    conn = knowledge_base.connect(ws.db_path)
+    assert len(knowledge_base.list_specimens(conn)) == n_before
+    conn.close()
+    # Each run keeps the settings it was saved with.
+    matb = read_json(next(ws.processed.glob("MatB_*/run.json")))
+    assert matb["config"]["stiff_lo_frac"] == 0.3
+
+    assert _stem_of(r"C:\Users\x\Tests\T050E1 run.xlsx") == "T050E1 run"
+    assert _stem_of("/data/T050E1 run.xlsx") == "T050E1 run"

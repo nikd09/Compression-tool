@@ -164,7 +164,7 @@ def test_numeric_cycle_values_are_numbers_or_null(record):
 
 def test_warning_shape_and_codes(record):
     warnings = record["analysis"]["warnings"]
-    assert warnings, "the fixture should trip at least the gauge-length warning"
+    assert warnings, "the fixture should trip at least the machine-channel warning"
     for w in warnings:
         assert set(w) == set(CONTRACT_WARNING)
         assert w["code"] in CONTRACT_WARNING_CODES
@@ -172,12 +172,13 @@ def test_warning_shape_and_codes(record):
         assert isinstance(w["message"], str) and w["message"]
 
 
-def test_gauge_length_unconfirmed_by_default(record):
+def test_machine_travel_is_not_confirmed_by_default(record):
+    # The fixture's displacement channel is the machine travel ("Standardweg").
     basis = record["analysis"]["strain_basis"]
     assert basis["gauge_length_confirmed"] is False
     assert basis["strain_valid"] is False
     codes = {w["code"] for w in record["analysis"]["warnings"]}
-    assert "gauge_length_unconfirmed" in codes
+    assert "machine_displacement_channel" in codes
 
 
 def test_confirming_the_gauge_length_clears_the_warning(tmp_path, series_file):
@@ -189,7 +190,7 @@ def test_confirming_the_gauge_length_clears_the_warning(tmp_path, series_file):
     assert basis["gauge_length_confirmed"] is True
     assert basis["strain_valid"] is True
     codes = {w["code"] for w in payload["analysis"]["warnings"]}
-    assert "gauge_length_unconfirmed" not in codes
+    assert "machine_displacement_channel" not in codes
 
 
 def test_missing_h0_reports_no_gauge_length_not_unconfirmed(record_no_strain):

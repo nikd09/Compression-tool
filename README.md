@@ -213,12 +213,13 @@ The JSON contract is frozen at schema_version 2 — see
   hold at peak" checkbox, or `--no-detect-holds` on the CLI -- for a test
   known to have no dwell, and every cycle reports no hold and no creep instead
   of a few false ones scattered through an otherwise hold-free test.
-- **Strain and modulus are conditional.** Both depend on h0 being the gauge
-  length the displacement channel actually spans, which no export proves. Every
-  record carries a `strain_basis` block with `gauge_length_confirmed` (default
-  **false**) and `strain_valid`; until someone asserts it via
-  `--gauge-length-confirmed`, strain is marked provisional and a `critical`
-  warning travels with the result. Stress-based metrics are unaffected.
+- **Strain and modulus depend on the displacement channel.** PL-0087 always
+  measures with the clip-on extensometer and a compliance correction, so that
+  channel counts as confirmed. Every record carries a `strain_basis` block with
+  `gauge_length_confirmed` and `strain_valid`, decided from the channel: the
+  machine's own travel (`Standardweg`) is not confirmed and raises a `critical`
+  `machine_displacement_channel` warning. `--gauge-length-confirmed` still
+  overrides it.
 
   This is not the same question as *which* h0 to divide by. A
   modulus-plausibility check can rule out a wrong candidate — for T050E1 the
@@ -1085,9 +1086,6 @@ under 0.3% enclosed-area error per cycle.
 
 Open items:
 
-- **Confirm the `Sonder LÄA` gauge length.** Until someone verifies that the
-  extensometer spans only the 0.471 mm specimen, strain and modulus stay
-  provisional. This is a fixturing question the tool cannot answer.
 - **h0 for exports without a metadata sheet.** Currently a `Config` fallback
   (`--h0-mm`); strain columns are suppressed rather than faked when it is
   unset. Whether the UI should prompt or a material lookup table should hold it

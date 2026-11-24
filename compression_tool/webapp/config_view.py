@@ -12,12 +12,16 @@ of them, so switching tabs never re-asks which run you meant."""
 
 from __future__ import annotations
 
-from pathlib import Path
+import dataclasses
+import re
+from datetime import datetime
+from pathlib import Path, PureWindowsPath
 
 import pandas as pd
 import streamlit as st
 
 from .. import audit, knowledge_base
+from ..core import Config
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..pipeline import ingest
@@ -142,6 +146,26 @@ _T = {
               "ein Tab, der ihn dann öffnen will, zeigt statt des Materials einen "
               "Fehler. Neu erstellen ist immer sicher: die JSON-Datensätze sind "
               "die maßgebliche Quelle, der Index wird nur aus ihnen abgeleitet."},
+    "reanalyze_all_heading": {"en": "Re-analyse all runs", "de": "Alle Läufe neu analysieren"},
+    "reanalyze_all_caption": {
+        "en": "Runs every saved test again from its archived original file, each "
+              "with the settings it was saved with, and replaces the stored "
+              "numbers. Use it once after a tool update that changes how values "
+              "are calculated, so every result in this library follows the same "
+              "method. Runs without an archived original are skipped.",
+        "de": "Wertet jede gespeicherte Prüfung erneut aus ihrer archivierten "
+              "Originaldatei aus, jeweils mit den Einstellungen, mit denen sie "
+              "gespeichert wurde, und ersetzt die gespeicherten Zahlen. Einmal nach "
+              "einem Tool-Update verwenden, das die Berechnung ändert, damit alle "
+              "Ergebnisse dieser Bibliothek derselben Methode folgen. Läufe ohne "
+              "archivierte Originaldatei werden übersprungen."},
+    "reanalyze_all_confirm": {"en": "I understand this replaces the stored analysis of every run",
+        "de": "Mir ist klar, dass dies die gespeicherte Analyse aller Läufe ersetzt"},
+    "reanalyze_all_button": {"en": "Re-analyse all runs", "de": "Alle Läufe neu analysieren"},
+    "reanalyze_all_done": {"en": "Re-analysed {n} run(s).", "de": "{n} Lauf/Läufe neu analysiert."},
+    "reanalyze_all_skipped": {"en": "Skipped (original file not archived): {names}",
+        "de": "Übersprungen (Originaldatei nicht archiviert): {names}"},
+    "reanalyze_all_failed": {"en": "Failed: {name}: {why}", "de": "Fehlgeschlagen: {name}: {why}"},
     "reindex": {"en": "Reindex from disk", "de": "Von der Festplatte neu indizieren"},
     "reindexing": {"en": "Reindexing...", "de": "Wird neu indiziert…"},
     "reindexed": {"en": "Reindexed {n} specimen record(s) from disk.",
@@ -172,14 +196,6 @@ _T = {
         "de": "{n} von {total} Quelldatei(en) dieses Laufs fehlen im Archiv und "
               "werden übersprungen: {names}"},
     "hold_at_peak": {"en": "Test has a hold at peak", "de": "Prüfung hat ein Halten am Spitzenwert"},
-    "gauge_confirmed": {"en": "Gauge length confirmed", "de": "Messlänge bestätigt"},
-    "gauge_confirmed_help": {
-        "en": "Check this only once someone has verified the displacement "
-              "channel spans exactly this specimen's h0. Left unchecked, strain "
-              "and modulus stay provisional in the re-analysed record.",
-        "de": "Nur aktivieren, wenn jemand bestätigt hat, dass der Wegkanal "
-              "genau die h0 dieser Probe erfasst. Unmarkiert bleiben Dehnung "
-              "und Modul im neu analysierten Datensatz vorläufig."},
     "reanalyze_overwrite_note": {
         "en": "This overwrites this run's stored numbers in place if the settings "
               "below fingerprint the same as today's, or creates a new run "
@@ -365,7 +381,64 @@ def _render_activity(ws: Workspace, L) -> None:
     )
 
 
+def _manifest_config(manifest: dict) -> Config:
+    """The Config a run was saved with, ignoring any key this version of the
+    engine no longer has."""
+    known = {f.name for f in dataclasses.fields(Config)}
+    return Config(**{k: v for k, v in (manifest.get("config") or {}).items() if k in known})
+
+
+def _run_date(run_dir: Path) -> datetime | None:
+    """The date in a run folder's name (<material>_YYYY-MM-DD[-NNN]), so a
+    re-analysis lands back in that same folder instead of today's."""
+    m = re.search(r"_(\d{4}-\d{2}-\d{2})(?:-\d{3})?$", run_dir.name)
+    return datetime.strptime(m.group(1), "%Y-%m-%d") if m else None
+
+
+def reanalyze_all(ws: Workspace) -> tuple[int, list[str], list[tuple[str, str]]]:
+    """Re-run every saved run from its archived originals, with the settings
+    it was saved with and on its own date, so each run is rewritten in its
+    own folder (same sources, same settings, same day = same run; see
+    persistence.resolve_run_dir). Returns (runs done, runs skipped for
+    lack of an archived original, runs that failed with the reason)."""
+    done, skipped, failed = 0, [], []
+    for manifest_path in sorted(ws.processed.glob("*/run.json")):
+        run_dir = manifest_path.parent
+        try:
+            manifest = read_json(manifest_path)
+            found, missing = _reanalyze_sources(ws, manifest)
+            if not found or missing:
+                skipped.append(run_dir.name)
+                continue
+            ingest(
+                found, ws, material=manifest.get("material", ""),
+                cfg=_manifest_config(manifest), when=_run_date(run_dir),
+                archive_originals=True, write_reports=True,
+                label_stems=_reanalyze_label_stems(ws, manifest),
+            )
+            done += 1
+        except Exception as exc:  # one broken run must not stop the rest
+            failed.append((run_dir.name, str(exc)))
+    return done, skipped, failed
+
+
 def _render_administration(ws: Workspace, L) -> None:
+    with st.container(border=True, key="card_reanalyze_all"):
+        st.markdown(f"##### {L('reanalyze_all_heading')}")
+        st.caption(L("reanalyze_all_caption"))
+        confirm = st.checkbox(L("reanalyze_all_confirm"), key="cfg_reanalyze_all_confirm")
+        if st.button(
+            L("reanalyze_all_button"), icon=":material/refresh:", key="reanalyze_all_btn",
+            disabled=not confirm,
+        ):
+            done, skipped, failed = with_utm_animation(
+                L("reanalyzing"), lambda: reanalyze_all(ws),
+            )
+            st.success(L("reanalyze_all_done", n=done))
+            if skipped:
+                st.warning(L("reanalyze_all_skipped", names=", ".join(skipped)))
+            for name, why in failed:
+                st.error(L("reanalyze_all_failed", name=name, why=why))
     with st.container(border=True, key="card_index"):
         st.markdown(f"##### {L('index_heading')}")
         st.caption(L("index_caption"))
@@ -396,6 +469,12 @@ def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[
     return found, missing
 
 
+def _stem_of(source_file: str) -> str:
+    """File-name stem of a stored source path, whichever system wrote it: a
+    Windows path keeps its backslashes when read anywhere else."""
+    return (PureWindowsPath if "\\" in source_file else Path)(source_file).stem
+
+
 def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
     """Maps each re-analysed source's resolved archive path to the filename
     stem its ORIGINAL ingest used, for ingest()'s own `label_stems` param.
@@ -418,7 +497,7 @@ def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
             continue
         path = ws.root / rel
         if path.exists():
-            stems[str(path.resolve())] = Path(source.get("source_file", "")).stem
+            stems[str(path.resolve())] = _stem_of(source.get("source_file", ""))
     return stems
 
 
@@ -455,10 +534,6 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
         L("hold_at_peak"), value=True, key="cfg_reanalyze_holds",
     )
     cfg = config_form(detect_holds)
-    gauge_confirmed = st.checkbox(
-        L("gauge_confirmed"), key="cfg_reanalyze_gauge",
-        help=L("gauge_confirmed_help"),
-    )
     st.caption(L("reanalyze_overwrite_note"))
     confirm = st.checkbox(
         L("reanalyze_confirm"),
@@ -472,7 +547,6 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
             L("reanalyzing"),
             lambda: ingest(
                 found, ws, material=material, cfg=cfg,
-                gauge_length_confirmed=gauge_confirmed,
                 archive_originals=True, write_reports=True,
                 label_stems=_reanalyze_label_stems(ws, manifest),
             ),

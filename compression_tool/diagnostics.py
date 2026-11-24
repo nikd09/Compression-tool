@@ -36,9 +36,12 @@ SEVERITIES = ("critical", "caution", "info")
 # judged comfortable rather than fragile.
 FIRST_CYCLE_MARGIN = 0.75
 
-# Hold lengths differing by more than this ratio make hold displacement
-# non-comparable across cycles without normalising.
-DWELL_RATIO_TOLERANCE = 1.10
+# Displacement channels that report the machine's own travel rather than a
+# clip-on extensometer on the specimen. Machine travel includes the frame's
+# own deformation and reads several times larger (PL-0087: about 5x), so a
+# result built on it is flagged. Every other channel is taken as the
+# compliance-corrected extensometer the test method prescribes.
+MACHINE_CHANNEL_HINTS = ("standardweg", "traverse", "crosshead", "maschinenweg")
 
 # residual_stress is documented (core.py, ResidualDisp_mm) as a LOW
 # reference stress. A cycle whose own peak is small enough that the
@@ -292,34 +295,23 @@ def _cycles_discarded(test: TestData, cfg: Config) -> Optional[Warning_]:
     )
 
 
-def _variable_dwell(df: pd.DataFrame) -> Optional[Warning_]:
-    """Unequal dwell lengths make creep at peak load non-comparable."""
-    if df.empty or "HoldPoints" not in df:
-        return None
-    held = pd.to_numeric(df["HoldPoints"], errors="coerce")
-    held = held[held > 0]
-    if len(held) < 2:
-        return None
-    lo, hi = float(held.min()), float(held.max())
-    if lo <= 0 or hi / lo <= DWELL_RATIO_TOLERANCE:
+def _seating_cycle(df: pd.DataFrame) -> Optional[Warning_]:
+    """Say so when analyse_test left a seating cycle out of the results."""
+    peak = df.attrs.get("seating_cycle_peak_mpa") if not df.empty else None
+    if peak is None:
         return None
     return Warning_(
-        code="variable_dwell_length",
-        severity="caution",
+        code="seating_cycle_excluded",
+        severity="info",
         message=(
-            f"Dwell length varies from {lo:.0f} to {hi:.0f} samples ({hi / lo:.1f}x) "
-            "across the cycles, so creep at peak load is NOT comparable between "
-            "them as a raw total -- a longer dwell accumulates more at identical "
-            "material behaviour. Compare creep only between cycles (or "
-            "specimens) held for a similar time."
+            f"The first load-unload ({peak:.1f} MPa, no hold) was recognised as "
+            "the seating cycle and left out of all results. Cycle 1 is the "
+            "first programmed step."
         ),
         message_de=(
-            f"Die Haltedauer variiert zwischen {lo:.0f} und {hi:.0f} Messpunkten "
-            f"({hi / lo:.1f}-fach) über die Zyklen, daher ist der Kriechweg am "
-            "Spitzenwert zwischen ihnen als Rohsumme NICHT vergleichbar -- eine "
-            "längere Haltezeit sammelt bei identischem Materialverhalten mehr an. "
-            "Den Kriechweg nur zwischen Zyklen (oder Proben) mit ähnlicher "
-            "Haltedauer vergleichen."
+            f"Die erste Be- und Entlastung ({peak:.1f} MPa, ohne Halten) wurde "
+            "als Setzzyklus erkannt und aus allen Ergebnissen herausgenommen. "
+            "Zyklus 1 ist die erste programmierte Stufe."
         ),
     )
 
@@ -386,8 +378,10 @@ def _possible_preload_cycle(df: pd.DataFrame, cfg: Config) -> Optional[Warning_]
 
 
 def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional[Warning_]:
-    """Strain and modulus are only as good as the gauge length behind them."""
-    if not has_strain:
+    """Strain and modulus are only as good as the gauge length behind them.
+    A machine-travel channel outranks a missing h0: it affects every value,
+    not only the % columns."""
+    if not has_strain and confirmed:
         return Warning_(
             code="no_gauge_length",
             severity="info",
@@ -404,43 +398,41 @@ def _gauge_length(test: TestData, has_strain: bool, confirmed: bool) -> Optional
         )
     if confirmed:
         return None
-    channel = test.displacement_channel or "the displacement channel"
+    channel = test.displacement_channel or "?"
     return Warning_(
-        code="gauge_length_unconfirmed",
+        code="machine_displacement_channel",
         severity="critical",
         message=(
-            f"Strain and any derived modulus are PROVISIONAL: it has not been "
-            f"confirmed that '{channel}' spans only the {test.h0_mm:g} mm "
-            "specimen. This is NOT the same question as which h0 to divide "
-            "by -- a modulus-plausibility check can rule out a wrong h0 "
-            "candidate (e.g. a crosshead reference length that implies an "
-            "impossible modulus), but it cannot confirm what the "
-            "extensometer physically spans; a channel that bridges extra "
-            "material would still produce a plausible-looking modulus, just "
-            "a wrong one. If it bridges additional material, every strain "
-            "percentage and every modulus is wrong by that ratio, while all "
-            "stress-based metrics remain correct. Confirm the fixturing with "
-            "the person who ran the test, then re-ingest with "
-            "gauge_length_confirmed=True."
+            f"Displacement comes from '{channel}', the machine's own travel, "
+            "not the clip-on extensometer. Machine travel includes the "
+            "deformation of the test frame and reads several times larger, so "
+            "every displacement-based value (stiffness, displacement, total "
+            "deformation, creep, energy) is too high or too low by that amount. "
+            "Use an export that contains the extensometer channel."
         ),
         message_de=(
-            f"Dehnung und jeder daraus abgeleitete Modul sind VORLÄUFIG: es "
-            f"wurde nicht bestätigt, dass '{channel}' ausschließlich die "
-            f"{test.h0_mm:g} mm der Probe erfasst. Das ist NICHT dieselbe "
-            "Frage wie welches h0 zum Teilen verwendet wird -- eine "
-            "Plausibilitätsprüfung des Moduls kann ein falsches h0 "
-            "ausschließen (z. B. eine Referenzlänge am Querhaupt, die einen "
-            "unmöglichen Modul ergäbe), kann aber nicht bestätigen, was der "
-            "Extensometer tatsächlich physisch erfasst; ein Kanal, der "
-            "zusätzliches Material überbrückt, würde trotzdem einen plausibel "
-            "aussehenden, aber falschen Modul liefern. Überbrückt er "
-            "zusätzliches Material, sind jeder Dehnungsprozentsatz und jeder "
-            "Modul um dieses Verhältnis falsch, während alle spannungsbasierten "
-            "Kennzahlen korrekt bleiben. Die Einspannung mit der Person klären, "
-            "die die Prüfung durchgeführt hat, und anschließend mit "
-            "gauge_length_confirmed=True erneut einlesen."
+            f"Der Weg stammt aus '{channel}', dem Maschinenweg, nicht vom "
+            "Ansetzextensometer. Der Maschinenweg enthält die Verformung des "
+            "Prüfrahmens und ist um ein Mehrfaches größer, daher sind alle "
+            "wegbasierten Werte (Steifigkeit, Weg, Gesamtverformung, Kriechen, "
+            "Energie) entsprechend verfälscht. Einen Export mit dem "
+            "Extensometer-Kanal verwenden."
         ),
     )
+
+
+def is_machine_channel(channel: Optional[str]) -> bool:
+    name = (channel or "").casefold()
+    return any(h in name for h in MACHINE_CHANNEL_HINTS)
+
+
+def resolve_gauge_confirmed(test: TestData, confirmed: Optional[bool]) -> bool:
+    """None means "decide from the channel": the extensometer counts as
+    confirmed (PL-0087 always uses it with compliance correction), the
+    machine travel does not. An explicit True/False is kept as given."""
+    if confirmed is None:
+        return not is_machine_channel(test.displacement_channel)
+    return bool(confirmed)
 
 
 def collect(
@@ -448,9 +440,10 @@ def collect(
     df: pd.DataFrame,
     cfg: Config,
     *,
-    gauge_length_confirmed: bool = False,
+    gauge_length_confirmed: Optional[bool] = None,
 ) -> list[dict]:
     """Every warning that applies to one analysed specimen, worst first."""
+    gauge_length_confirmed = resolve_gauge_confirmed(test, gauge_length_confirmed)
     stress = test.stress_mpa
     has_strain = bool(test.h0_mm)
 
@@ -461,7 +454,7 @@ def collect(
         _residual_unreadable_cycles(df),
         _residual_reference_not_low(df, residual_stress),
         _cycles_discarded(test, cfg),
-        _variable_dwell(df),
+        _seating_cycle(df),
         _possible_preload_cycle(df, cfg),
     ]
     order = {name: i for i, name in enumerate(SEVERITIES)}
@@ -490,12 +483,13 @@ def distinct(payloads: Iterable[dict]) -> list[dict]:
     return sorted(seen.values(), key=lambda w: order.get(w.get("severity"), len(SEVERITIES)))
 
 
-def strain_basis(test: TestData, *, gauge_length_confirmed: bool = False) -> dict:
+def strain_basis(test: TestData, *, gauge_length_confirmed: Optional[bool] = None) -> dict:
     """What the strain columns were divided by, and whether anyone has checked.
 
     Recorded per specimen so a stored result can never be read as validated
     strain when nobody confirmed the gauge length that produced it.
     """
+    gauge_length_confirmed = resolve_gauge_confirmed(test, gauge_length_confirmed)
     return {
         "h0_mm": float(test.h0_mm) if test.h0_mm else None,
         "displacement_channel": test.displacement_channel or None,

@@ -83,7 +83,7 @@ loss — are **unaffected** by this flag and remain valid either way.
 ### `analysis.warnings`
 
 ```jsonc
-[ { "code": "gauge_length_unconfirmed", "severity": "critical", "message": "…" } ]
+[ { "code": "seating_cycle_excluded", "severity": "info", "message": "…" } ]
 ```
 
 Ordered worst-first. `severity` is one of:
@@ -99,12 +99,14 @@ meaning):
 
 | Code | Severity | Fires when |
 |---|---|---|
-| `gauge_length_unconfirmed` | critical | `has_strain` but the gauge length has not been confirmed. |
+| `machine_displacement_channel` | critical | Displacement comes from the machine travel (e.g. `Standardweg`), not the clip-on extensometer, so every displacement-based value includes the frame's own deformation. |
+| `seating_cycle_excluded` | info | A first, hold-free cycle well below the next step (the PL-0087 seating cycle) was left out of all results. Cycle 1 is the first programmed step. |
+| `gauge_length_unconfirmed` | critical | Retired, only in older records: the gauge length had not been confirmed. |
 | `no_gauge_length` | info | No h0, so strain keys are absent rather than estimated. |
 | `first_cycle_near_discard_threshold` | caution / critical | The smallest cycle clears `major_cycle_frac × global peak` by a thin margin. Losing cycle 1 rebases every cumulative figure. Escalates to `critical` within 5% of the cliff. |
 | `first_cycle_residual_unreachable` | critical | Cycle 1 survived segmentation but its loading branch never reached the residual reference stress (a fraction of the GLOBAL peak, which a rising multi-stage test's smallest stage can sit below entirely) — `PermDef_cumulative_mm` is silently referenced to whichever later cycle reached it first, not cycle 1. |
 | `cycles_discarded_by_peak_filter` | caution | Long-enough runs were dropped for peaking too low. Message names their peaks — a low-stress run at the start is normally the machine finding contact. |
-| `variable_dwell_length` | caution | Hold lengths differ by >10%, so hold displacement is not comparable as a raw total. |
+| `variable_dwell_length` | caution | Retired, only in older records: hold lengths differed by >10%. |
 
 ## `cycles[]`
 
@@ -142,7 +144,8 @@ itself a reading — see `StressAtMaxDisp_MPa` below.
 
 **Two stiffnesses, one comparable.** `Stiffness_common_*` uses an identical
 stress window in every cycle and may be compared across stages, specimens and
-materials. `Stiffness_relative_*` uses each cycle's own peak and rises as the
+materials. `Stiffness_relative_*` is fitted over 25–75 % of each cycle's own
+peak (PL-0087; `stiff_lo_frac`/`stiff_hi_frac` in the config) and rises as the
 stages climb even when the material has not stiffened — never plot it across
 stages.
 

@@ -249,6 +249,20 @@ def test_common_band_stiffness_is_comparable_across_stages(signal):
     assert relative.iloc[-1] > relative.iloc[0] * 1.1
 
 
+def test_relative_band_uses_25_to_75_percent_of_each_cycle_peak(signal):
+    """PL-0087: stiffness over 25-75 % of the step's own maximum load, set by
+    stiff_lo_frac / stiff_hi_frac, the same rule on every cycle."""
+    stress, disp = signal
+    df = analyse_test(_as_test(stress, disp))
+    peaks = df["PeakStress_MPa"]
+    assert np.allclose(df["Stiffness_relative_lo_MPa"], 0.25 * peaks)
+    assert np.allclose(df["Stiffness_relative_hi_MPa"], 0.75 * peaks)
+
+    narrow = analyse_test(_as_test(stress, disp), Config(stiff_lo_frac=0.4, stiff_hi_frac=0.6))
+    assert np.allclose(narrow["Stiffness_relative_lo_MPa"], 0.4 * narrow["PeakStress_MPa"])
+    assert not np.allclose(narrow["Stiffness_relative_MPa_per_mm"], df["Stiffness_relative_MPa_per_mm"])
+
+
 def test_stiffness_reports_its_own_fit_quality(signal):
     """A slope from a handful of points is not trustworthy; n and R2 exist so
     the UI can say so rather than plot it as solid."""

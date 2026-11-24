@@ -364,7 +364,7 @@ def build_payload(
     raw_path: Optional[Path],
     source_sha256: str,
     workspace: Optional[Workspace] = None,
-    gauge_length_confirmed: bool = False,
+    gauge_length_confirmed: Optional[bool] = None,
 ) -> dict:
     """Assemble everything needed to reproduce and index one specimen's result.
 

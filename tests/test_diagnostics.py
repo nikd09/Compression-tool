@@ -38,21 +38,32 @@ def _codes(warnings) -> set[str]:
 # ----------------------------------------------------------------------------
 
 
-def test_gauge_length_is_unconfirmed_until_asserted(signal):
+def test_extensometer_channel_counts_as_confirmed(signal):
+    """PL-0087 always measures with the clip-on extensometer and a compliance
+    correction, so that channel needs no confirmation and raises nothing."""
     stress, disp = signal
     test = _test_data(stress, disp)
     df = analyse_test(test, Config())
 
-    warnings = collect(test, df, Config())
-    assert "gauge_length_unconfirmed" in _codes(warnings)
-    critical = [w for w in warnings if w["code"] == "gauge_length_unconfirmed"]
-    assert critical[0]["severity"] == "critical"
-    # The message must name the channel and the height being assumed.
-    assert "Sonder LAA" in critical[0]["message"]
-    assert "0.471" in critical[0]["message"]
+    codes = _codes(collect(test, df, Config()))
+    assert "machine_displacement_channel" not in codes
+    assert "gauge_length_unconfirmed" not in codes
 
+
+def test_machine_travel_channel_is_flagged(signal):
+    stress, disp = signal
+    test = _test_data(stress, disp, channel="Standardweg")
+    df = analyse_test(test, Config())
+
+    warnings = collect(test, df, Config())
+    flagged = [w for w in warnings if w["code"] == "machine_displacement_channel"]
+    assert flagged and flagged[0]["severity"] == "critical"
+    assert "Standardweg" in flagged[0]["message"]
+    assert "Standardweg" in flagged[0]["message_de"]
+
+    # An explicit confirmation still overrides the channel check.
     confirmed = collect(test, df, Config(), gauge_length_confirmed=True)
-    assert "gauge_length_unconfirmed" not in _codes(confirmed)
+    assert "machine_displacement_channel" not in _codes(confirmed)
 
 
 def test_no_h0_reports_absence_rather_than_doubt(signal):
@@ -72,10 +83,13 @@ def test_strain_basis_records_what_was_divided_by(signal):
     basis = strain_basis(test)
     assert basis["h0_mm"] == pytest.approx(H0_MM)
     assert basis["displacement_channel"] == "Sonder LAA"
-    assert basis["gauge_length_confirmed"] is False
-    assert basis["strain_valid"] is False
+    assert basis["gauge_length_confirmed"] is True
+    assert basis["strain_valid"] is True
 
-    assert strain_basis(test, gauge_length_confirmed=True)["strain_valid"] is True
+    machine = strain_basis(_test_data(stress, disp, channel="Standardweg"))
+    assert machine["gauge_length_confirmed"] is False
+    assert machine["strain_valid"] is False
+    assert strain_basis(test, gauge_length_confirmed=False)["strain_valid"] is False
     # No h0 means strain can never be valid, whatever is asserted.
     bare = strain_basis(_test_data(stress, disp, h0=None), gauge_length_confirmed=True)
     assert bare["strain_valid"] is False
@@ -214,7 +228,9 @@ def test_equal_dwells_do_not_trip_the_comparability_warning(signal):
     assert "variable_dwell_length" not in _codes(collect(test, df, Config()))
 
 
-def test_unequal_dwells_are_flagged():
+def test_unequal_dwells_raise_no_warning():
+    """Hold times are fixed by the test method (PL-0087: 60 s), so a
+    difference in hold length is not reported any more."""
     from conftest import BASELINE_MM, cycle_arrays
 
     parts_s, parts_x = [np.zeros(200)], [np.full(200, BASELINE_MM)]
@@ -228,13 +244,7 @@ def test_unequal_dwells_are_flagged():
     test = _test_data(np.concatenate(parts_s), np.concatenate(parts_x))
     df = analyse_test(test, Config())
 
-    warnings = [w for w in collect(test, df, Config()) if w["code"] == "variable_dwell_length"]
-    assert warnings
-    msg = warnings[0]["message"]
-    assert "NOT comparable" in msg
-    # The per-1000-samples column is no longer shown anywhere, so the
-    # warning must not send people looking for it.
-    assert "1000" not in msg and "1000" not in warnings[0]["message_de"]
+    assert "variable_dwell_length" not in _codes(collect(test, df, Config()))
 
 
 # ----------------------------------------------------------------------------
@@ -242,19 +252,12 @@ def test_unequal_dwells_are_flagged():
 # ----------------------------------------------------------------------------
 
 
-def test_a_hold_free_cycle_among_held_ones_is_flagged_as_a_possible_preload():
-    """A small, clean, hold-free ramp ahead of several held stages is exactly
-    the real signature found on the T050E1 export -- adaptive segmentation
-    now correctly finds it as its own cycle (it is real, cleanly-separated
-    signal, not noise), and it is kept in the data rather than silently
-    dropped. This diagnostic is what keeps that honest instead of letting a
-    reader assume every counted cycle is a programmed stage."""
+def _seating_signal(first_peak: float):
     from conftest import BASELINE_MM, cycle_arrays
 
     parts_s, parts_x = [np.zeros(200)], [np.full(200, BASELINE_MM)]
     x_perm = BASELINE_MM
-    preload_peak = 10.0
-    s, x = cycle_arrays(preload_peak, x_perm, 0.01, 0.0, 0.0002, hold=False)
+    s, x = cycle_arrays(first_peak, x_perm, 0.01, 0.0, 0.0002, hold=False)
     parts_s.append(s)
     parts_x.append(x)
     x_perm += 0.0002
@@ -263,17 +266,38 @@ def test_a_hold_free_cycle_among_held_ones_is_flagged_as_a_possible_preload():
         parts_s.append(s)
         parts_x.append(x)
         x_perm += 0.001
+    return _test_data(np.concatenate(parts_s), np.concatenate(parts_x))
 
-    test = _test_data(np.concatenate(parts_s), np.concatenate(parts_x))
+
+def test_seating_cycle_is_left_out_of_the_results():
+    """PL-0087 starts with a 10 MPa load-unload without a hold before the
+    first 50 MPa step. It only settles the specimen, so it is dropped and
+    cycle 1 is the first programmed step."""
+    test = _seating_signal(10.0)
     df = analyse_test(test, Config())
-    assert len(df) == 4
-    assert not df["HoldDetected"].iloc[0]
-    assert df["HoldDetected"].iloc[1:].all()
 
+    assert len(df) == 3
+    assert df["HoldDetected"].all()
+    assert df["PeakStress_MPa"].iloc[0] == pytest.approx(100.0, rel=0.01)
+    assert df.attrs["seating_cycle_peak_mpa"] == pytest.approx(10.0, rel=0.01)
+
+    warnings = collect(test, df, Config())
+    seating = [w for w in warnings if w["code"] == "seating_cycle_excluded"]
+    assert seating and seating[0]["severity"] == "info"
+    assert "10.0 MPa" in seating[0]["message"]
+    assert "possible_preload_cycle" not in _codes(warnings)
+
+
+def test_a_hold_free_first_cycle_close_to_the_next_step_is_kept():
+    """Only a first cycle well below the next step is the seating cycle; a
+    hold-free cycle at 80 MPa before a 100 MPa step is kept and flagged."""
+    test = _seating_signal(80.0)
+    df = analyse_test(test, Config())
+
+    assert len(df) == 4
+    assert df.attrs["seating_cycle_peak_mpa"] is None
     warnings = [w for w in collect(test, df, Config()) if w["code"] == "possible_preload_cycle"]
-    assert warnings
-    assert warnings[0]["severity"] == "caution"
-    assert "Cycle(s) 1" in warnings[0]["message"]
+    assert warnings and "Cycle(s) 1" in warnings[0]["message"]
 
 
 def test_no_preload_warning_when_every_cycle_holds(signal):
@@ -313,12 +337,14 @@ def test_no_preload_warning_when_holds_are_the_exception_not_the_norm():
 
 
 def test_warnings_reach_the_record_and_the_preview(workspace, series_file):
+    # The fixture's channel is the machine travel ("Standardweg"), which is
+    # flagged in both the preview rows and the stored record.
     rows = preview([series_file])
-    assert all("gauge_length_unconfirmed" in _codes(r["warnings"]) for r in rows)
+    assert all("machine_displacement_channel" in _codes(r["warnings"]) for r in rows)
 
     result = ingest([series_file], workspace, material="PEEK")
     payload = read_json(result.specimens[0].json_path)
-    assert "gauge_length_unconfirmed" in _codes(payload["analysis"]["warnings"])
+    assert "machine_displacement_channel" in _codes(payload["analysis"]["warnings"])
 
 
 def test_warnings_are_ordered_worst_first(signal):
