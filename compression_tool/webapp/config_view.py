@@ -182,6 +182,18 @@ _T = {
         "de": "{run} gelöscht ({n} Probe(n))."},
     "delete_run_material_gone": {"en": "That was the last run of {material}, so the material was removed too.",
         "de": "Das war der letzte Lauf von {material}, daher wurde auch das Material entfernt."},
+    "delete_run_locked": {
+        "en": "{n} file(s) in {run} could not be deleted (Windows or OneDrive still has "
+              "them open). Close Explorer windows on that folder, wait for OneDrive to "
+              "finish syncing, then delete the run again.",
+        "de": "{n} Datei(en) in {run} konnten nicht gelöscht werden (Windows oder OneDrive "
+              "hält sie noch geöffnet). Explorer-Fenster dieses Ordners schließen, warten, "
+              "bis OneDrive fertig synchronisiert hat, dann den Lauf erneut löschen."},
+    "delete_run_empty_folder": {
+        "en": "The empty folder {run} could not be removed (OneDrive is still syncing it). "
+              "It is harmless and can be deleted by hand later.",
+        "de": "Der leere Ordner {run} konnte nicht entfernt werden (OneDrive synchronisiert "
+              "ihn noch). Er ist harmlos und kann später von Hand gelöscht werden."},
     "reindex": {"en": "Reindex from disk", "de": "Von der Festplatte neu indizieren"},
     "reindexing": {"en": "Reindexing...", "de": "Wird neu indiziert…"},
     "reindexed": {"en": "Reindexed {n} specimen record(s) from disk.",
@@ -302,6 +314,10 @@ def _render_delete_run(ws: Workspace, run_dir: Path, L) -> None:
             flash = [L("delete_run_done", run=run_dir.name, n=out["removed_specimens"])]
             if out["material_removed"]:
                 flash.append(L("delete_run_material_gone", material=out["material"]))
+            if out["files_left"]:
+                flash.append(L("delete_run_locked", n=out["files_left"], run=run_dir.name))
+            elif not out["folder_removed"]:
+                flash.append(L("delete_run_empty_folder", run=run_dir.name))
             st.session_state["cfg_flash"] = flash
             st.rerun()
 

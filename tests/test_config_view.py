@@ -259,3 +259,38 @@ def test_delete_run_removes_one_run_and_keeps_the_material(workspace, single_fil
 
     out = delete_run(ws, keep.run_dir)
     assert out["material_removed"]
+
+
+def test_delete_run_still_reindexes_when_windows_keeps_the_folder(
+    workspace, single_file, series_file, monkeypatch
+):
+    """OneDrive or Explorer can hold an emptied folder open ("Access is
+    denied" on the folder itself). The files go, the index is rebuilt, and
+    the leftover empty folder is reported instead of stopping half-way."""
+    import os
+    from datetime import datetime
+
+    from compression_tool import material_admin
+    from compression_tool.material_admin import delete_run
+
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="MatA", when=datetime(2026, 1, 5))
+    drop = ingest([series_file], ws, material="MatA", when=datetime(2026, 1, 6))
+
+    real_rmdir = os.rmdir
+    locked = drop.run_dir.name
+
+    def rmdir(path, *a, **kw):
+        if str(path).endswith(locked):
+            raise PermissionError(5, "Access is denied", str(path))
+        return real_rmdir(path, *a, **kw)
+
+    monkeypatch.setattr(os, "rmdir", rmdir)
+    monkeypatch.setattr(material_admin.time, "sleep", lambda s: None)
+
+    out = delete_run(ws, drop.run_dir)
+
+    assert out["folder_removed"] is False and out["files_left"] == 0
+    conn = knowledge_base.connect(ws.db_path)
+    assert len(knowledge_base.list_specimens(conn, "MatA")) == 1
+    conn.close()

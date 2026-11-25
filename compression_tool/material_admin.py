@@ -20,7 +20,11 @@ needs the material's exact name typed to confirm.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
+import stat
+import sys
+import time
 from pathlib import Path
 
 from . import knowledge_base
@@ -277,6 +281,30 @@ def delete_material(ws: Workspace, material: str, *, delete_raw: bool = False) -
     }
 
 
+def _remove_tree(path: Path, attempts: int = 5) -> bool:
+    """Delete a folder, tolerating what Windows and OneDrive do to it: a
+    read-only file is made writable and retried, and a folder that a sync
+    client or Explorer still holds open is retried a few times. Returns
+    whether the folder is gone. An empty folder left behind is harmless;
+    the caller carries on either way."""
+    def _retry_writable(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+
+    for i in range(attempts):
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_retry_writable)
+        else:
+            shutil.rmtree(path, onerror=_retry_writable)
+        if not path.exists():
+            return True
+        time.sleep(0.4 * (i + 1))
+    return not path.exists()
+
+
 def delete_run(ws: Workspace, run_dir: Path) -> dict:
     """Remove ONE run (one saved import) and its specimens, keeping the rest
     of the material. For a wrong or duplicate upload, without deleting the
@@ -295,7 +323,10 @@ def delete_run(ws: Workspace, run_dir: Path) -> dict:
         1 for p in run_dir.glob("*.json")
         if p.name != "run.json" and not p.name.endswith(".curve.json")
     )
-    shutil.rmtree(run_dir)
+    # Never stop half-way: whatever Windows lets us delete is gone, and the
+    # index is rebuilt from what is really left on disk in every case.
+    folder_removed = _remove_tree(run_dir)
+    files_left = len(list(run_dir.rglob("*"))) if run_dir.exists() else 0
     knowledge_base.rebuild(ws)
 
     material_left = bool(material) and bool(_material_run_dirs(ws, material))
@@ -308,5 +339,10 @@ def delete_run(ws: Workspace, run_dir: Path) -> dict:
             if stale.exists():
                 stale.unlink()
     build_overview(ws)
-    _log.info("delete_run: %s (%s) -> %d specimen(s) removed", run_dir.name, material, removed)
-    return {"material": material, "removed_specimens": removed, "material_removed": not material_left}
+    _log.info("delete_run: %s (%s) -> %d specimen(s) removed, folder removed: %s, files left: %d",
+              run_dir.name, material, removed, folder_removed, files_left)
+    return {
+        "material": material, "removed_specimens": removed,
+        "material_removed": not material_left,
+        "folder_removed": folder_removed, "files_left": files_left,
+    }
