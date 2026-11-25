@@ -128,12 +128,17 @@ _T = {
     "curves_step_option": {"en": "{mpa:g} MPa step", "de": "Stufe {mpa:g} MPa"},
     "curves_caption": {
         "en": "Raw loading and unloading curves of every specimen in the groups, "
-              "coloured by group.",
+              "coloured by group. Hover a curve to read stress, displacement and the "
+              "local stiffness at that point (stiffness on the loading branch only).",
         "de": "Rohe Be- und Entlastungskurven aller Proben der Gruppen, nach Gruppe "
-              "eingefärbt."},
+              "eingefärbt. Mit der Maus über eine Kurve fahren, um Spannung, Weg und die "
+              "lokale Steifigkeit an dieser Stelle abzulesen (Steifigkeit nur im "
+              "Belastungsast)."},
     "curves_missing": {"en": "No curve data for: {names}",
         "de": "Keine Kurvendaten für: {names}"},
     "axis_disp": {"en": "Displacement (µm)", "de": "Weg (µm)"},
+    "tooltip_force": {"en": "Force (kN)", "de": "Kraft (kN)"},
+    "tooltip_local_stiffness": {"en": "Local stiffness (MPa/mm)", "de": "Lokale Steifigkeit (MPa/mm)"},
     "axis_curve_stress": {"en": "Stress (MPa)", "de": "Spannung (MPa)"},
     "expander_title": {"en": "Group membership and underlying rows",
         "de": "Gruppenzugehörigkeit und zugrunde liegende Werte"},
@@ -261,8 +266,10 @@ def _curve_rows(
                 pts = cyc.get("points") or []
                 if not pts:
                     continue
-                part = pd.DataFrame(pts, columns=["disp_mm", "stress"])
+                part = pd.DataFrame([p[:3] + [None] * (3 - len(p[:3])) for p in pts],
+                                    columns=["disp_mm", "stress", "force_kn"])
                 part["disp_um"] = part["disp_mm"] * 1000.0
+                part["k_local"] = _local_stiffness(part["disp_mm"], part["stress"])
                 part["order"] = range(len(part))
                 part["group"] = g["name"]
                 part["specimen"] = f"{row['material']} {tag}"
@@ -271,6 +278,20 @@ def _curve_rows(
                 frames.append(part)
     data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     return data, missing
+
+
+def _local_stiffness(disp_mm: pd.Series, stress: pd.Series) -> pd.Series:
+    """Slope between each point's two neighbours (MPa/mm) on the loading
+    branch only, up to the cycle's highest stress. On the hold and the
+    unloading branch a slope is not a stiffness, so those stay empty."""
+    x, y = disp_mm.to_numpy(dtype=float), stress.to_numpy(dtype=float)
+    out = pd.Series([None] * len(x), dtype="float64", index=disp_mm.index)
+    top = int(y.argmax()) if len(y) else 0
+    for j in range(1, top):
+        dx = x[j + 1] - x[j - 1]
+        if dx > 0:
+            out.iloc[j] = (y[j + 1] - y[j - 1]) / dx
+    return out
 
 
 def _render_curves(ws, specimens, groups, cycles, group_order, color, L, lang) -> None:
@@ -287,19 +308,35 @@ def _render_curves(ws, specimens, groups, cycles, group_order, color, L, lang) -
         st.caption(L("curves_missing", names=", ".join(missing)))
     if data.empty:
         return
+    tooltip = [
+        alt.Tooltip("group:N", title=L("tooltip_group")),
+        alt.Tooltip("specimen:N", title=L("col_specimen")),
+        alt.Tooltip("step:Q", title=L("tooltip_stress"), format=".0f"),
+        alt.Tooltip("stress:Q", title=L("axis_curve_stress"), format=".1f"),
+        alt.Tooltip("disp_um:Q", title=L("axis_disp"), format=".2f"),
+    ]
+    # Force only when the export itself had a force column; never derived.
+    if data["force_kn"].notna().any():
+        tooltip.append(alt.Tooltip("force_kn:Q", title=L("tooltip_force"), format=".2f"))
+    tooltip.append(alt.Tooltip("k_local:Q", title=L("tooltip_local_stiffness"), format=",.0f"))
+
+    x = alt.X("disp_um:Q", title=L("axis_disp"), scale=alt.Scale(zero=False))
+    y = alt.Y("stress:Q", title=L("axis_curve_stress"))
+    # Hovering anywhere near a curve picks the nearest measured point and
+    # shows its values, from zero up to the top of the step.
+    hover = alt.selection_point(
+        on="pointerover", nearest=True, fields=["line", "order"], empty=False, clear="pointerout",
+    )
+    base = alt.Chart(data)
+    lines = base.mark_line(strokeWidth=1.3, opacity=0.85).encode(
+        x=x, y=y, color=color, detail="line:N", order="order:Q",
+    )
+    points = base.mark_point(size=70, filled=True).encode(
+        x=x, y=y, color=color, tooltip=tooltip,
+        opacity=alt.condition(hover, alt.value(1.0), alt.value(0.0)),
+    ).add_params(hover)
     chart = (
-        alt.Chart(data)
-        .mark_line(strokeWidth=1.3, opacity=0.85)
-        .encode(
-            x=alt.X("disp_um:Q", title=L("axis_disp"), scale=alt.Scale(zero=False)),
-            y=alt.Y("stress:Q", title=L("axis_curve_stress")),
-            color=color, detail="line:N", order="order:Q",
-            tooltip=[
-                alt.Tooltip("group:N", title=L("tooltip_group")),
-                alt.Tooltip("specimen:N", title=L("col_specimen")),
-                alt.Tooltip("step:Q", title=L("tooltip_stress"), format=".0f"),
-            ],
-        )
+        alt.layer(lines, points)
         .properties(
             width=820, height=460,
             title=alt.TitleParams(

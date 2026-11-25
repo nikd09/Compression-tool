@@ -78,8 +78,10 @@ def _rdp_mask(xy: np.ndarray, eps: float) -> np.ndarray:
 def build_curve_cache(
     test: TestData, df: pd.DataFrame, *, specimen_id: str, eps: float = DEFAULT_EPS
 ) -> dict:
-    """Per-cycle [displacement_mm, stress_mpa] points, RDP-reduced for drawing."""
-    disp, stress = test.displacement_mm, test.stress_mpa
+    """Per-cycle [displacement_mm, stress_mpa] points, RDP-reduced for drawing.
+    When the export has a force column, each point carries it as a third
+    value, [displacement_mm, stress_mpa, force_kn]."""
+    disp, stress, force = test.displacement_mm, test.stress_mpa, test.force_kn
     x_range = float(np.nanmax(disp) - np.nanmin(disp)) or 1.0
     y_range = float(np.nanmax(stress) - np.nanmin(stress)) or 1.0
 
@@ -97,7 +99,12 @@ def build_curve_cache(
 
         cycles.append({
             "cycle": int(row["Cycle"]),
-            "points": [[jsonable(px), jsonable(py)] for px, py in zip(cx[mask], cy[mask])],
+            "points": (
+                [[jsonable(px), jsonable(py)] for px, py in zip(cx[mask], cy[mask])]
+                if force is None else
+                [[jsonable(px), jsonable(py), jsonable(pf)]
+                 for px, py, pf in zip(cx[mask], cy[mask], force[a : b + 1][mask])]
+            ),
         })
 
     return {

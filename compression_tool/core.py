@@ -141,6 +141,9 @@ class TestData:
     temperature_c: Optional[float] = None
     displacement_channel: str = ""
     notes: list[str] = field(default_factory=list)
+    # Force in kN, only when the export itself has a force column. Never
+    # derived from stress: nothing here computes a force the export lacks.
+    force_kn: Optional[np.ndarray] = None
 
     @property
     def strain(self) -> Optional[np.ndarray]:
@@ -162,6 +165,13 @@ _STRESS_UNITS = {
     "pa": 1e-6,
     "gpa": 1e3,
 }
+
+
+_FORCE_UNITS = {"kn": 1.0, "n": 1e-3, "mn": 1e3}
+
+
+def _is_force_unit(unit: str) -> bool:
+    return (unit or "").strip().lower() in _FORCE_UNITS
 
 
 def _disp_factor(unit: str) -> float:
@@ -273,6 +283,21 @@ def _clean_pair(disp_raw, stress_raw, d_fac, s_fac) -> tuple[np.ndarray, np.ndar
     return pair["d"].to_numpy() * d_fac, pair["s"].to_numpy() * s_fac
 
 
+def _clean_with_force(disp_raw, stress_raw, force_raw, d_fac, s_fac, force_unit):
+    """Like _clean_pair, plus an optional force column (None if the export
+    has none) kept row-aligned with the other two."""
+    if force_raw is None:
+        d, s = _clean_pair(disp_raw, stress_raw, d_fac, s_fac)
+        return d, s, None
+    rows = pd.DataFrame({"d": disp_raw, "s": stress_raw, "f": force_raw}).apply(
+        pd.to_numeric, errors="coerce"
+    ).dropna(subset=["d", "s"])
+    f = rows["f"].to_numpy() * _FORCE_UNITS[force_unit.strip().lower()]
+    if np.isnan(f).all():
+        f = None
+    return rows["d"].to_numpy() * d_fac, rows["s"].to_numpy() * s_fac, f
+
+
 def load_series_format(path: str, cfg: Config, *, label_stem: Optional[str] = None) -> list[TestData]:
     """Multi-sample workbook: 'Werte Serie' holds sample columns side by side.
 
@@ -310,11 +335,14 @@ def load_series_format(path: str, cfg: Config, *, label_stem: Optional[str] = No
     for sid, cols in groups.items():
         d_col = next((c for c in cols if _is_disp_unit(units[c])), None)
         s_col = next((c for c in cols if _is_stress_unit(units[c])), None)
+        f_col = next((c for c in cols if _is_force_unit(units[c])), None)
         if d_col is None or s_col is None:
             continue
 
-        disp, stress = _clean_pair(
-            body[d_col], body[s_col], _disp_factor(units[d_col]), _stress_factor(units[s_col])
+        disp, stress, force = _clean_with_force(
+            body[d_col], body[s_col], body[f_col] if f_col is not None else None,
+            _disp_factor(units[d_col]), _stress_factor(units[s_col]),
+            units[f_col] if f_col is not None else "",
         )
         if len(disp) < cfg.min_cycle_points:
             continue
@@ -335,6 +363,7 @@ def load_series_format(path: str, cfg: Config, *, label_stem: Optional[str] = No
                 h0_mm=m.get("h0_mm") or cfg.h0_mm,
                 d0_mm=m.get("d0_mm"),
                 temperature_c=m.get("temperature_c"),
+                force_kn=force,
             )
         )
     return tests
@@ -372,8 +401,11 @@ def load_single_format(path: str, cfg: Config, *, label_stem: Optional[str] = No
             f"({', '.join(channels[i] for i in d_cols)}); using '{channels[d_col]}'."
         )
 
-    disp, stress = _clean_pair(
-        body[d_col], body[s_col], _disp_factor(units[d_col]), _stress_factor(units[s_col])
+    f_col = next((i for i, u in enumerate(units) if _is_force_unit(u)), None)
+    disp, stress, force = _clean_with_force(
+        body[d_col], body[s_col], body[f_col] if f_col is not None else None,
+        _disp_factor(units[d_col]), _stress_factor(units[s_col]),
+        units[f_col] if f_col is not None else "",
     )
     return [
         TestData(
@@ -385,6 +417,7 @@ def load_single_format(path: str, cfg: Config, *, label_stem: Optional[str] = No
             displacement_channel=channels[d_col],
             h0_mm=cfg.h0_mm,
             notes=notes,
+            force_kn=force,
         )
     ]
 

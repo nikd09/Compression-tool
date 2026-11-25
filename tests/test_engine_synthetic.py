@@ -435,3 +435,36 @@ def _as_test(stress, disp, h0=H0_MM) -> TestData:
         source_format="single",
         h0_mm=h0,
     )
+
+
+def test_force_is_read_only_when_the_export_has_a_force_column(tmp_path, signal):
+    """A force column (N or kN) is carried through to the curve points as
+    kN; without one, nothing is derived from stress."""
+    from openpyxl import Workbook
+
+    from compression_tool.curve_cache import build_curve_cache
+
+    stress, disp = signal
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Werte Serie "
+    ws.append(["1", "1", "1"])
+    ws.append(["Sonder LÄA", "Druckspannung", "Standardkraft"])
+    ws.append(["mm", "MPa", "N"])
+    for x, s in zip(disp, stress):
+        ws.append([float(x), float(s), float(s) * 201.06])
+    path = tmp_path / "with_force.xlsx"
+    wb.save(path)
+
+    test = load_tests(str(path))[0]
+    assert test.force_kn is not None
+    assert test.force_kn.max() == pytest.approx(stress.max() * 0.20106, rel=1e-6)
+    cache = build_curve_cache(test, analyse_test(test), specimen_id="x")
+    assert len(cache["cycles"][0]["points"][0]) == 3
+
+    plain = tmp_path / "plain.xlsx"
+    write_series_workbook(plain, {"1": (stress, disp)})
+    no_force = load_tests(str(plain))[0]
+    assert no_force.force_kn is None
+    cache = build_curve_cache(no_force, analyse_test(no_force), specimen_id="y")
+    assert len(cache["cycles"][0]["points"][0]) == 2
