@@ -294,3 +294,59 @@ def test_delete_run_still_reindexes_when_windows_keeps_the_folder(
     conn = knowledge_base.connect(ws.db_path)
     assert len(knowledge_base.list_specimens(conn, "MatA")) == 1
     conn.close()
+
+
+def test_reanalyzing_twice_keeps_the_original_specimen_names(workspace, tmp_path):
+    """After one re-analysis the run's manifest points at the archive copy
+    ("<sha12>_<name>"). Taking the label from that again used to save every
+    specimen a second time under "<sha12>_..." in the same run folder. The
+    label now comes from the run's own records, and any such leftover copy
+    is removed by the next re-analysis."""
+    import json
+    import shutil
+
+    from compression_tool.webapp.config_view import reanalyze_all
+
+    src = tmp_path / "Druckversuch Mehrstufen_X 1149571.xlsx"
+    shutil.copy(_series_copy(tmp_path), src)
+    ws = Workspace.at(workspace).ensure()
+    ingest([src], ws, material="X")
+
+    def labels():
+        return sorted(
+            read_json(p)["specimen"]["label"] for p in ws.processed.glob("*/*.json")
+            if p.name != "run.json" and not p.name.endswith(".curve.json")
+        )
+
+    before = labels()
+    for _ in range(3):
+        reanalyze_all(ws)
+        assert labels() == before
+
+    # A run polluted by the old behaviour (a "<sha12>_" copy next to the
+    # originals) is cleaned by the next re-analysis.
+    run_dir = next(ws.processed.glob("X_*"))
+    for p in list(run_dir.glob("*.json")):
+        if p.name != "run.json":
+            shutil.copy(p, p.with_name("0123456789ab_" + p.name))
+            if not p.name.endswith(".curve.json"):
+                data = read_json(p.with_name("0123456789ab_" + p.name))
+                data["specimen"]["label"] = "0123456789ab_" + data["specimen"]["label"]
+                data["specimen"]["specimen_id"] = "x" + data["specimen"]["specimen_id"][1:]
+                p.with_name("0123456789ab_" + p.name).write_text(json.dumps(data))
+    knowledge_base.rebuild(ws)
+    assert len(labels()) == 2 * len(before)
+    reanalyze_all(ws)
+    assert labels() == before
+    conn = knowledge_base.connect(ws.db_path)
+    assert len(knowledge_base.list_specimens(conn, "X")) == len(before)
+    conn.close()
+
+
+def _series_copy(tmp_path):
+    from conftest import multistage_signal, write_series_workbook
+
+    s, x = multistage_signal()
+    path = tmp_path / "series_src.xlsx"
+    write_series_workbook(path, {"1": (s, x), "2": (s, x * 1.01)})
+    return path

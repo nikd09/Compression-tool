@@ -286,7 +286,7 @@ def render(ws: Workspace) -> None:
         _render_run(manifest, L)
         _render_delete_run(ws, chosen.parent, L)
     with tab_reanalyze:
-        _render_reanalyze(ws, manifest, L)
+        _render_reanalyze(ws, manifest, L, chosen.parent)
     with tab_exports:
         _render_exports(ws, manifest, L)
     with tab_activity:
@@ -467,13 +467,14 @@ def reanalyze_all(ws: Workspace) -> tuple[int, list[str], list[tuple[str, str]]]
             if not found or missing:
                 skipped.append(run_dir.name)
                 continue
-            ingest(
+            result = ingest(
                 found, ws, material=manifest.get("material", ""),
                 cfg=_manifest_config(manifest), when=_run_date(run_dir),
                 archive_originals=True, write_reports=True,
-                label_stems=_reanalyze_label_stems(ws, manifest),
+                label_stems=_reanalyze_label_stems(ws, manifest, run_dir),
                 allow_same_content=True,
             )
+            _prune_stale_specimens(ws, result)
             done += 1
         except Exception as exc:  # one broken run must not stop the rest
             failed.append((run_dir.name, str(exc)))
@@ -527,13 +528,18 @@ def _reanalyze_sources(ws: Workspace, manifest: dict) -> tuple[list[Path], list[
     return found, missing
 
 
+_ARCHIVE_CODE = re.compile(r"^[0-9a-f]{12}_")
+
+
 def _stem_of(source_file: str) -> str:
     """File-name stem of a stored source path, whichever system wrote it: a
     Windows path keeps its backslashes when read anywhere else."""
     return (PureWindowsPath if "\\" in source_file else Path)(source_file).stem
 
 
-def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
+def _reanalyze_label_stems(
+    ws: Workspace, manifest: dict, run_dir: Path | None = None,
+) -> dict[str, str]:
     """Maps each re-analysed source's resolved archive path to the filename
     stem its ORIGINAL ingest used, for ingest()'s own `label_stems` param.
 
@@ -547,19 +553,76 @@ def _reanalyze_label_stems(ws: Workspace, manifest: dict) -> dict[str, str]:
     copies of the same specimen in Results, one under the plain original
     name and one under "<hash>_Slugified-Original-Name_S1". See
     core.load_tests' own docstring for the full mechanism.
+
+    The stem is read from the run's own specimen records (their labels), not
+    from the manifest's source path: after one re-analysis that path is the
+    ARCHIVE copy, and taking the name from it again gave every specimen a new
+    "<sha12>_..." label -- a second copy of the same specimens in the same
+    run folder on the next re-analysis. Where a run holds both, the label
+    without the archive code is the original and wins.
     """
+    from_records: dict[str, list[str]] = {}
+    for _json_path, spec in _run_specimens(run_dir):
+        label, sha = spec.get("label"), spec.get("source_sha256")
+        if not label or not sha:
+            continue
+        stem = re.sub(r"_S\d+$", "", label) if spec.get("source_format") == "series" else label
+        from_records.setdefault(sha, []).append(stem)
+
     stems: dict[str, str] = {}
     for source in manifest.get("sources", []):
         rel = source.get("raw_input_path")
         if not rel:
             continue
         path = ws.root / rel
-        if path.exists():
-            stems[str(path.resolve())] = _stem_of(source.get("source_file", ""))
+        if not path.exists():
+            continue
+        candidates = from_records.get(source.get("sha256"), [])
+        original = [c for c in candidates if not _ARCHIVE_CODE.match(c)]
+        stems[str(path.resolve())] = (
+            original[0] if original else candidates[0] if candidates
+            else _stem_of(source.get("source_file", ""))
+        )
     return stems
 
 
-def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
+def _run_specimens(run_dir: Path | None) -> list[tuple[Path, dict]]:
+    """(json path, specimen block) of every specimen record in a run folder."""
+    out: list[tuple[Path, dict]] = []
+    if run_dir is None or not run_dir.exists():
+        return out
+    for json_path in sorted(run_dir.glob("*.json")):
+        if json_path.name == "run.json" or json_path.name.endswith(".curve.json"):
+            continue
+        try:
+            payload = read_json(json_path)
+        except (OSError, ValueError):
+            continue
+        if "specimen" in payload:
+            out.append((json_path, payload["specimen"]))
+    return out
+
+
+def _prune_stale_specimens(ws: Workspace, result) -> int:
+    """After a re-analysis wrote a run, remove any other specimen in that
+    same folder that came from the same source file but was not re-written:
+    a leftover copy under an older label. Returns how many were removed."""
+    keep = {s.specimen_id for s in result.specimens}
+    shas = {s.payload["specimen"].get("source_sha256") for s in result.specimens}
+    removed = 0
+    for json_path, spec in _run_specimens(result.run_dir):
+        if spec.get("source_sha256") in shas and spec.get("specimen_id") not in keep:
+            stem = json_path.name[: -len(".json")]
+            for suffix in (".json", ".curve.json", ".csv", ".xlsx", ".html"):
+                (json_path.parent / f"{stem}{suffix}").unlink(missing_ok=True)
+            removed += 1
+    if removed:
+        knowledge_base.rebuild(ws)
+        export_material(ws, result.material)
+    return removed
+
+
+def _render_reanalyze(ws: Workspace, manifest: dict, L, run_dir: Path | None = None) -> None:
     """Re-run this run's already-archived sources through the engine with
     different thresholds, without asking anyone to find and re-upload the
     original export. archive_originals=True below is deliberate even though
@@ -603,10 +666,11 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
             lambda: ingest(
                 found, ws, material=material, cfg=cfg,
                 archive_originals=True, write_reports=True,
-                label_stems=_reanalyze_label_stems(ws, manifest),
+                label_stems=_reanalyze_label_stems(ws, manifest, run_dir),
                 allow_same_content=True,
             ),
         )
+        _prune_stale_specimens(ws, result)
         st.success(L("reanalyzed_success", run_dir=result.run_dir, n=len(result.specimens)))
         for name, why in result.skipped:
             st.warning(L("skipped_warning", name=name, why=why))
