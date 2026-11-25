@@ -236,7 +236,7 @@ def delete_material(ws: Workspace, material: str, *, delete_raw: bool = False) -
 
     reports_dir = ws.root / "reports"
     slug = slugify(material)
-    for suffix in (".xlsx", ".html"):
+    for suffix in (".xlsx", "_de.xlsx", ".html"):
         stale = reports_dir / f"{slug}{suffix}"
         if stale.exists():
             stale.unlink()
@@ -275,3 +275,38 @@ def delete_material(ws: Workspace, material: str, *, delete_raw: bool = False) -
         "removed_specimens": removed_specimens,
         "removed_raw_files": removed_raw,
     }
+
+
+def delete_run(ws: Workspace, run_dir: Path) -> dict:
+    """Remove ONE run (one saved import) and its specimens, keeping the rest
+    of the material. For a wrong or duplicate upload, without deleting the
+    whole material or touching folders by hand.
+
+    The archived original under Raw exports/ is left in place (another run
+    may share it, see delete_material). The material's combined workbook
+    and dashboard are rebuilt from what is left; if this was its last run,
+    the material itself is removed too.
+    """
+    run_dir = Path(run_dir).resolve()
+    if run_dir.parent != ws.processed.resolve() or not (run_dir / "run.json").exists():
+        raise ValueError(f"not a run folder of this library: {run_dir}")
+    material = read_json(run_dir / "run.json").get("material", "")
+    removed = sum(
+        1 for p in run_dir.glob("*.json")
+        if p.name != "run.json" and not p.name.endswith(".curve.json")
+    )
+    shutil.rmtree(run_dir)
+    knowledge_base.rebuild(ws)
+
+    material_left = bool(material) and bool(_material_run_dirs(ws, material))
+    if material_left:
+        export_material(ws, material)
+    elif material:
+        remove_material(ws, material)
+        for suffix in (".xlsx", "_de.xlsx", ".html"):
+            stale = ws.root / "reports" / f"{slugify(material)}{suffix}"
+            if stale.exists():
+                stale.unlink()
+    build_overview(ws)
+    _log.info("delete_run: %s (%s) -> %d specimen(s) removed", run_dir.name, material, removed)
+    return {"material": material, "removed_specimens": removed, "material_removed": not material_left}

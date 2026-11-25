@@ -21,6 +21,7 @@ import pandas as pd
 import streamlit as st
 
 from .. import audit, knowledge_base
+from ..material_admin import delete_run
 from ..core import Config
 from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
@@ -166,6 +167,21 @@ _T = {
     "reanalyze_all_skipped": {"en": "Skipped (original file not archived): {names}",
         "de": "Übersprungen (Originaldatei nicht archiviert): {names}"},
     "reanalyze_all_failed": {"en": "Failed: {name}: {why}", "de": "Fehlgeschlagen: {name}: {why}"},
+    "delete_run_heading": {"en": "Delete this run", "de": "Diesen Lauf löschen"},
+    "delete_run_caption": {
+        "en": "Removes this one saved import and its specimens, for example a wrong or "
+              "duplicate upload. The rest of the material stays. The archived original "
+              "file is kept. Type the run name to confirm.",
+        "de": "Entfernt diesen einen gespeicherten Import und seine Proben, zum Beispiel "
+              "einen falschen oder doppelten Upload. Der Rest des Materials bleibt. Die "
+              "archivierte Originaldatei bleibt erhalten. Zur Bestätigung den Laufnamen "
+              "eintippen."},
+    "delete_run_confirm": {"en": "Run name", "de": "Laufname"},
+    "delete_run_button": {"en": "Delete run", "de": "Lauf löschen"},
+    "delete_run_done": {"en": "Deleted {run} ({n} specimen(s)).",
+        "de": "{run} gelöscht ({n} Probe(n))."},
+    "delete_run_material_gone": {"en": "That was the last run of {material}, so the material was removed too.",
+        "de": "Das war der letzte Lauf von {material}, daher wurde auch das Material entfernt."},
     "reindex": {"en": "Reindex from disk", "de": "Von der Festplatte neu indizieren"},
     "reindexing": {"en": "Reindexing...", "de": "Wird neu indiziert…"},
     "reindexed": {"en": "Reindexed {n} specimen record(s) from disk.",
@@ -195,7 +211,6 @@ _T = {
               "archive and will be skipped: {names}",
         "de": "{n} von {total} Quelldatei(en) dieses Laufs fehlen im Archiv und "
               "werden übersprungen: {names}"},
-    "hold_at_peak": {"en": "Test has a hold at peak", "de": "Prüfung hat ein Halten am Spitzenwert"},
     "reanalyze_overwrite_note": {
         "en": "This overwrites this run's stored numbers in place if the settings "
               "below fingerprint the same as today's, or creates a new run "
@@ -225,6 +240,8 @@ def render(ws: Workspace) -> None:
 
     st.header(L("header"))
     st.caption(L("subtitle"))
+    for msg in st.session_state.pop("cfg_flash", []):
+        st.success(msg)
 
     manifests = sorted(ws.processed.glob("*/run.json")) if ws.processed.exists() else []
 
@@ -234,7 +251,7 @@ def render(ws: Workspace) -> None:
         # "which run" reads this same selection, so switching tabs never
         # re-asks for it.
         labels = {m: f"{m.parent.name}" for m in manifests}
-        chosen = st.selectbox(L("run"), manifests, format_func=lambda m: labels[m])
+        chosen = st.selectbox(L("run"), manifests, format_func=lambda m: labels[m], key="cfg_run")
         manifest = read_json(chosen)
 
     tab_run, tab_reanalyze, tab_exports, tab_activity, tab_admin = st.tabs([
@@ -255,6 +272,7 @@ def render(ws: Workspace) -> None:
 
     with tab_run:
         _render_run(manifest, L)
+        _render_delete_run(ws, chosen.parent, L)
     with tab_reanalyze:
         _render_reanalyze(ws, manifest, L)
     with tab_exports:
@@ -263,6 +281,29 @@ def render(ws: Workspace) -> None:
         _render_activity(ws, L)
     with tab_admin:
         _render_administration(ws, L)
+
+
+def _render_delete_run(ws: Workspace, run_dir: Path, L) -> None:
+    with st.container(border=True, key="card_delete_run"):
+        st.markdown(f"##### {L('delete_run_heading')}")
+        st.caption(L("delete_run_caption"))
+        typed = st.text_input(
+            L("delete_run_confirm"), key=f"cfg_delete_run_{run_dir.name}",
+            placeholder=run_dir.name,
+        )
+        if st.button(
+            L("delete_run_button"), icon=":material/delete:", key="cfg_delete_run_btn",
+            disabled=typed.strip() != run_dir.name,
+        ):
+            out = with_utm_animation(L("reindexing"), lambda: delete_run(ws, run_dir))
+            # The run picker above still points at the folder that is now
+            # gone, so start the page over and say what happened at the top.
+            st.session_state.pop("cfg_run", None)
+            flash = [L("delete_run_done", run=run_dir.name, n=out["removed_specimens"])]
+            if out["material_removed"]:
+                flash.append(L("delete_run_material_gone", material=out["material"]))
+            st.session_state["cfg_flash"] = flash
+            st.rerun()
 
 
 def _render_run(manifest: dict, L) -> None:
@@ -415,6 +456,7 @@ def reanalyze_all(ws: Workspace) -> tuple[int, list[str], list[tuple[str, str]]]
                 cfg=_manifest_config(manifest), when=_run_date(run_dir),
                 archive_originals=True, write_reports=True,
                 label_stems=_reanalyze_label_stems(ws, manifest),
+                allow_same_content=True,
             )
             done += 1
         except Exception as exc:  # one broken run must not stop the rest
@@ -530,10 +572,7 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
             names=", ".join(missing),
         ))
 
-    detect_holds = st.checkbox(
-        L("hold_at_peak"), value=True, key="cfg_reanalyze_holds",
-    )
-    cfg = config_form(detect_holds)
+    cfg = config_form()
     st.caption(L("reanalyze_overwrite_note"))
     confirm = st.checkbox(
         L("reanalyze_confirm"),
@@ -549,6 +588,7 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L) -> None:
                 found, ws, material=material, cfg=cfg,
                 archive_originals=True, write_reports=True,
                 label_stems=_reanalyze_label_stems(ws, manifest),
+                allow_same_content=True,
             ),
         )
         st.success(L("reanalyzed_success", run_dir=result.run_dir, n=len(result.specimens)))

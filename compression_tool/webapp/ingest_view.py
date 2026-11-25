@@ -65,24 +65,6 @@ _T = {
               "zwei Materialien werden, die nie miteinander verglichen werden."},
     "new_material_name": {"en": "New material name", "de": "Name des neuen Materials"},
     "new_material_placeholder": {"en": "e.g. PEEK-GF30", "de": "z. B. PEEK-GF30"},
-    "hold_at_peak": {"en": "Test has a hold at peak", "de": "Prüfung hat ein Halten am Spitzenwert"},
-    "hold_at_peak_help": {
-        "en": "Uncheck for a fast-cycling test with no programmed dwell. "
-              "A short cycle still spends a few samples turning around at peak "
-              "stress (geometry, not a hold), and on a short enough cycle "
-              "that turnaround can accidentally look long enough to be misread "
-              "as a real one. Unchecking skips hold detection entirely, so "
-              "every cycle reports no hold and no creep, instead of a few "
-              "false ones scattered through an otherwise hold-free test.",
-        "de": "Deaktivieren bei einer schnell zyklierenden Prüfung ohne "
-              "programmiertes Halten. Ein kurzer Zyklus verbringt trotzdem ein "
-              "paar Messpunkte mit der Umkehr bei Spitzenspannung (Geometrie, "
-              "kein Halten), und bei einem ausreichend kurzen Zyklus kann diese "
-              "Umkehr versehentlich lang genug wirken, um als echtes Halten "
-              "fehlgedeutet zu werden. Deaktivieren überspringt die "
-              "Halteerkennung vollständig, sodass jeder Zyklus kein Halten und "
-              "kein Kriechen meldet, statt vereinzelter falscher Treffer in "
-              "einer sonst haltefreien Prüfung."},
     "filename_warning": {
         "en": "'{material}' looks like the export's file name, not a material "
               "code. A short code (e.g. 'T050LR1') reads far better as a "
@@ -506,15 +488,9 @@ def render(ws: Workspace) -> None:
         label_visibility="collapsed",
         help=L("uploader_help"),
     )
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        material = _material_picker(ws, L)
-    with c2:
-        st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-        detect_holds = st.checkbox(
-            L("hold_at_peak"), value=True,
-            help=L("hold_at_peak_help"),
-        )
+    # Holds are always found from the data (PL-0087 holds every step), so
+    # there is no "test has a hold" switch to set here.
+    material = _material_picker(ws, L)
 
     if uploaded and _looks_like_a_filename(material, uploaded):
         st.warning(L("filename_warning", material=material))
@@ -523,7 +499,7 @@ def render(ws: Workspace) -> None:
 
     st.divider()
     _step(2, L("step2"), L("optional"))
-    cfg = config_form(detect_holds)
+    cfg = config_form()
 
     if not uploaded:
         # Nothing attached (including "no longer attached" -- the uploader
@@ -632,7 +608,10 @@ def render(ws: Workspace) -> None:
             for mat, result in zip(material_groups.keys(), results):
                 if result.material != mat:
                     st.info(L("matched_existing", typed=mat, actual=result.material))
-                st.success(L("ingested_success", n=len(result.specimens), material=result.material, run_dir=result.run_dir))
-                st.code(result.summary())
+                # Nothing new saved (every file was already in the library):
+                # only the skip reasons below, no "ingested 0" success line.
+                if result.specimens:
+                    st.success(L("ingested_success", n=len(result.specimens), material=result.material, run_dir=result.run_dir))
+                    st.code(result.summary())
                 for name, why in result.skipped:
                     st.warning(L("skipped", name=name, why=why))

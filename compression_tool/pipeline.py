@@ -237,6 +237,24 @@ def preview_dashboard_data(
     }
 
 
+def _saved_runs_by_content(ws: Workspace, material: str) -> dict[str, str]:
+    """SHA-256 of every source already saved for `material` -> the run folder
+    (workspace-relative) it was saved in."""
+    if not ws.db_path.exists():
+        return {}
+    conn = knowledge_base.connect(ws.db_path)
+    try:
+        rows = conn.execute(
+            'SELECT "source_sha256", "run_dir" FROM specimens WHERE "material" = ?',
+            (material,),
+        ).fetchall()
+    except Exception:  # an index from an older layout: no check rather than no ingest
+        return {}
+    finally:
+        conn.close()
+    return {sha: run for sha, run in rows if sha and run}
+
+
 def ingest(
     paths: Iterable[str | os.PathLike],
     workspace: str | os.PathLike | Workspace,
@@ -249,8 +267,14 @@ def ingest(
     archive_originals: bool = True,
     label_stems: Optional[dict[str, str]] = None,
     write_reports: bool = True,
+    allow_same_content: bool = False,
 ) -> IngestResult:
     """Archive, analyse, persist and index one or more exports.
+
+    A file whose CONTENT is already saved for this material (same SHA-256,
+    whatever its name) is skipped and reported, not saved a second time
+    under new specimen names. Re-analysis passes `allow_same_content=True`,
+    since re-running saved data is exactly its job.
 
     `gauge_length_confirmed` defaults to None: decided from the displacement
     channel (diagnostics.resolve_gauge_confirmed). The clip-on extensometer
@@ -332,6 +356,26 @@ def ingest(
     # after "SteelMesh" already exists files under "SteelMesh" rather than
     # quietly starting a second, never-comparable material.
     material = add_material(ws, material)
+
+    already: list[tuple[str, str]] = []
+    if not allow_same_content:
+        saved = _saved_runs_by_content(ws, material)
+        kept = []
+        for src in sources:
+            run = saved.get(src["sha256"])
+            if run:
+                already.append((Path(src["source_file"]).name, run))
+            else:
+                kept.append(src)
+        sources = kept
+        if not sources:
+            # Nothing new: no empty run folder, point at where it already is.
+            result = IngestResult(material=material, run_dir=ws.root / already[0][1], workspace=ws)
+            result.skipped.extend(
+                (name, f"already saved as {Path(run).name} (same data, different file name)")
+                for name, run in already
+            )
+            return result
     fingerprint = run_fingerprint((s["sha256"] for s in sources), cfg)
     # resolve_run_dir claims the folder itself (exclusive-create) -- nothing
     # left to mkdir here.
@@ -339,6 +383,10 @@ def ingest(
 
     # 2. Analyse and write one record per specimen.
     result = IngestResult(material=material, run_dir=run_dir, workspace=ws)
+    result.skipped.extend(
+        (name, f"already saved as {Path(run).name} (same data, different file name)")
+        for name, run in already
+    )
     used_names: set[str] = set()
 
     for source in sources:

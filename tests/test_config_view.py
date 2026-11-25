@@ -79,6 +79,7 @@ def test_reanalyzing_with_a_different_config_creates_a_new_run_and_reuses_the_ar
         found, ws, material=manifest["material"], cfg=changed_cfg,
         archive_originals=True, write_reports=True,
         label_stems=_reanalyze_label_stems(ws, manifest),
+        allow_same_content=True,
     )
 
     assert second.run_dir != first.run_dir
@@ -237,3 +238,24 @@ def test_reanalyze_all_rewrites_every_run_in_its_own_folder(workspace, single_fi
 
     assert _stem_of(r"C:\Users\x\Tests\T050E1 run.xlsx") == "T050E1 run"
     assert _stem_of("/data/T050E1 run.xlsx") == "T050E1 run"
+
+
+def test_delete_run_removes_one_run_and_keeps_the_material(workspace, single_file, series_file):
+    from datetime import datetime
+
+    from compression_tool.material_admin import delete_run
+
+    ws = Workspace.at(workspace).ensure()
+    keep = ingest([single_file], ws, material="MatA", when=datetime(2026, 1, 5))
+    drop = ingest([series_file], ws, material="MatA", when=datetime(2026, 1, 6))
+
+    out = delete_run(ws, drop.run_dir)
+
+    assert out["removed_specimens"] == 2 and not out["material_removed"]
+    assert not drop.run_dir.exists() and keep.run_dir.exists()
+    conn = knowledge_base.connect(ws.db_path)
+    assert len(knowledge_base.list_specimens(conn, "MatA")) == 1
+    conn.close()
+
+    out = delete_run(ws, keep.run_dir)
+    assert out["material_removed"]

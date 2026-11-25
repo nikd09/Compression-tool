@@ -208,7 +208,7 @@ _CONFIG_FORM_T = {
 }
 
 
-def config_form(detect_holds: bool) -> Config:
+def config_form(detect_holds: bool = True) -> Config:
     """The "Advanced: segmentation and reference thresholds" expander --
     every threshold knob the CLI also exposes, defaulted from a fresh
     Config() and rendered as one form. Shared between Ingest (where a

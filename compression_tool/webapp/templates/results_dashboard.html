@@ -543,6 +543,21 @@ function stiffQuality(n,r2){
   return "ok";
 }
 const qualityLabel = q => q==="few points" ? L(UI.fewPoints) : q==="nonlinear" ? L(UI.nonlinear) : q;
+/* Diagonal hatch, one <pattern> per chart instance (ids must be unique only
+   within their own SVG, but several charts share one page) -- laid OVER a
+   dimmed bar so a shaky fit is never drawn identically to a solid one. */
+let hatchSeq=0;
+function ensureHatch(root){
+  if(root.__hatchId) return root.__hatchId;
+  const id=`hatch${hatchSeq++}`;
+  const defs=el("defs",{},root);
+  const pat=el("pattern",{id,width:6,height:6,patternTransform:"rotate(45)",
+    patternUnits:"userSpaceOnUse"},defs);
+  el("line",{x1:0,y1:0,x2:0,y2:6,stroke:"var(--ink)",opacity:.55,"stroke-width":2},pat);
+  root.__hatchId=id;
+  return id;
+}
+
 const visible = () => SPS.map((s,i)=>i).filter(i=>!state.hidden.has(i));
 
 /* Series actually drawn. Colour follows the specimen, never its position in
@@ -643,7 +658,7 @@ function legendRows(ser, x0, maxX, big){
    instead of squeezing. Capped so it never falls below two columns. */
 const MIN_BAR = 5, BAR_GAP = 2, GROUP_PAD = 8, PANEL_CAP = 530;
 function panelWidth(nSer){
-  const need = NC * (nSer*(MIN_BAR+BAR_GAP) + GROUP_PAD) + 60;
+  const need = Math.max(LEVELS.length,1) * (nSer*(MIN_BAR+BAR_GAP) + GROUP_PAD) + 60;
   return Math.max(340, Math.min(need, PANEL_CAP));
 }
 const RATIO = 360/220;
@@ -655,30 +670,28 @@ const RATIO = 360/220;
 const STRESS_STEP = 5;
 const levelOf = c => c && c.peakStress!=null ? Math.round(c.peakStress/STRESS_STEP)*STRESS_STEP : null;
 
-/* Points of one series: [{lv, v, c}] sorted by stress. The average is taken
-   per stress step over the visible specimens that reached it. */
-function seriesPoints(ser, key){
+/* Stress steps present in the data, over ALL specimens (not only the shown
+   ones), so hiding a specimen never shifts the bar groups. Mixed programmes
+   (a 6-step and a 9-step run) simply leave the missing steps empty. */
+const LEVELS = [...new Set(SPS.flatMap(s => s.cycles.map(levelOf)).filter(v => v!=null))]
+  .sort((a,b)=>a-b);
+const cycleAt = (i, lv) => SPS[i].cycles.find(c => levelOf(c)===lv) || null;
+/* One series' value at one stress step. The average is taken over the
+   visible specimens that reached that step. */
+function valAt(ser, key, lv){
   if (ser.key === "avg"){
-    const byLv = new Map();
-    visible().forEach(i => SPS[i].cycles.forEach(c => {
-      const lv = levelOf(c), v = c[key];
-      if (lv==null || v==null) return;
-      if (!byLv.has(lv)) byLv.set(lv, []);
-      byLv.get(lv).push(v);
-    }));
-    return [...byLv.entries()].sort((a,b)=>a[0]-b[0])
-      .map(([lv,vs]) => ({lv, v: vs.reduce((a,b)=>a+b,0)/vs.length, c:null, n:vs.length}));
+    const vs = visible().map(i => cycleAt(i, lv)?.[key]).filter(v => v!=null);
+    return vs.length ? vs.reduce((a,b)=>a+b,0)/vs.length : null;
   }
-  return SPS[ser.key].cycles
-    .map(c => ({lv: levelOf(c), v: c[key], c}))
-    .filter(p => p.lv!=null && p.v!=null)
-    .sort((a,b)=>a.lv-b.lv);
+  const c = cycleAt(ser.key, lv);
+  return c ? c[key] : null;
 }
 
-/* property per stress step: one line per specimen (and the average) */
-function stepChart(host, spec, big=false, aspect=null){
+/* grouped bars, one group per stress step */
+function barChart(host, spec, big=false, aspect=null){
   const ser = series();
   if(!ser.length){ host.innerHTML=""; return; }
+  const NL = LEVELS.length;
   const W = big ? 1000 : panelWidth(ser.length);
   const H = Math.round(W / (aspect || RATIO));
   const k = W/360;
@@ -689,55 +702,59 @@ function stepChart(host, spec, big=false, aspect=null){
   drawLegend(root, ser, 46*k, legH-(big?12:8), big, W-10*k);
 
   const sc = spec.scale || 1;
-  const pts = ser.map(s => seriesPoints(s, spec.k));
-  const vals = pts.flat().map(p=>p.v*sc), lvs = pts.flat().map(p=>p.lv);
+  const vals=[];
+  LEVELS.forEach(lv => ser.forEach(s=>{const v=valAt(s,spec.k,lv); if(v!=null) vals.push(v*sc);}));
   if(!vals.length) return;
   const hi=Math.max(...vals), lo=Math.min(0,Math.min(...vals));
   const yd=[lo, hi*(big?1.08:1.12) || 1];
-  // Ticks every 50 or 100 MPa, ending on a tick at or just past the
-  // highest step, so the last step always has a labelled position.
-  const maxLv=Math.max(...lvs) || 1;
-  const xStep=maxLv<=300 ? 50 : 100;
-  const xd=[0, Math.ceil(maxLv/xStep)*xStep + xStep*0.15];
-  const X=v=>m.l+(v-xd[0])/(xd[1]-xd[0])*(W-m.l-m.r);
   const Y=axes(root,m,W,H,yd,spec.f,L(UI.stressStepAxis));
-  for(let t=0; t<=xd[1]; t+=xStep){
-    const tx=el("text",{x:X(t),y:H-m.b+12*k,class:"tk","text-anchor":"middle"},root);
-    tx.textContent=t.toFixed(0);
-    if(big) tx.setAttribute("style","font-size:13px");
-  }
   // Unconditional Y-axis unit label, so a panel copied or downloaded from the
   // small grid still carries its unit (see chartToPng / renderCharts).
   const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
     transform:`translate(13 ${(m.t+H-m.b)/2}) rotate(-90)`},root);
   yl.textContent=spec.u2 || L(spec.t);
 
-  ser.forEach((s,si)=>{
-    const P = pts[si];
-    if(!P.length) return;
-    const d = P.map(p=>`${X(p.lv).toFixed(1)} ${Y(p.v*sc).toFixed(1)}`).join(" L");
-    el("path",{d:"M"+d, fill:"none", stroke:s.colour, "stroke-width":(s.isAvg?2.6:1.7)*(big?1.2:1),
-      "stroke-linejoin":"round", "stroke-linecap":"round", opacity:s.isAvg?1:.9},root);
-    P.forEach(p=>{
-      const v=p.v*sc, cx=X(p.lv), cy=Y(v);
-      // A slope is only as good as the fit behind it: a weak fit is drawn as
-      // a hollow, faded point, never identically to a solid one.
-      const quality = spec.q && p.c ? stiffQuality(p.c[spec.q.n], p.c[spec.q.r2]) : null;
-      const weak = quality && quality!=="ok";
-      el("circle",{cx, cy, r:(s.isAvg?3.6:3)*k*(big?.8:1),
-        fill: weak ? "var(--surface)" : s.colour, stroke:s.colour, "stroke-width":1.4,
-        opacity: weak ? .6 : 1},root);
-      const hit=el("circle",{cx, cy, r:9*k*(big?.7:1), fill:"transparent", style:"cursor:crosshair"},root);
+  const gw=(W-m.l-m.r)/NL, bw=Math.max(2.5,(gw-6*k)/ser.length-2*k);
+  let bi=0;
+  LEVELS.forEach((lv, li)=>{
+    const gx=m.l+li*gw+3*k;
+    // The step's stress under each group, where the cycle number used to be:
+    // a shared picture then reads "at 300 MPa", not "cycle 6".
+    const tx=el("text",{x:m.l+(li+.5)*gw,y:H-m.b+12*k,class:"tk","text-anchor":"middle"},root);
+    tx.textContent=lv;
+    if(big) tx.setAttribute("style","font-size:13px");
+    ser.forEach((s,si)=>{
+      const raw=valAt(s,spec.k,lv); if(raw==null) return;
+      const v=raw*sc;
+      const y=Y(v), y0=Y(Math.max(yd[0],0));
+      const hgt=Math.abs(y0-y);
+      // 4px rounded data-end anchored to the baseline; 2px gap between bars
+      const r=Math.min(4*k,bw/2,hgt);
+      const x=gx+si*(bw+2*k);
+      const top=Math.min(y,y0);
+      const d=`M${x} ${top+hgt} L${x} ${top+r} Q${x} ${top} ${x+r} ${top}
+        L${x+bw-r} ${top} Q${x+bw} ${top} ${x+bw} ${top+r} L${x+bw} ${top+hgt} Z`;
+      // A slope is only as good as the fit behind it -- for the panel this
+      // applies to, dim + hatch a bar whose fit is thin or curved, so a
+      // shaky number is never drawn identically to a solid one.
+      const c = s.isAvg ? null : cycleAt(s.key, lv);
+      const quality = spec.q && c ? stiffQuality(c[spec.q.n], c[spec.q.r2]) : null;
+      const thisBi=bi++;
+      const path=el("path",{d, fill:s.colour, class:"bar-mark",
+        style:`cursor:crosshair;--bi:${thisBi}` + (quality&&quality!=="ok" ? ";opacity:.55" : "")},root);
+      if(quality&&quality!=="ok"){
+        el("path",{d, fill:`url(#${ensureHatch(root)})`, class:"bar-mark",
+          style:`pointer-events:none;--bi:${thisBi}`},root);
+      }
       const rowsTip=[[L(spec.t), spec.f(v)+(spec.u2?" "+spec.u2:"")]];
-      if(p.c) rowsTip.push([L(UI.cycleAxis), p.c.n]);
-      if(p.n) rowsTip.push([L(UI.specimensLbl), p.n]);
-      if(weak) rowsTip.push([L(UI.fitQualityLbl), qualityLabel(quality)]);
-      hit.addEventListener("pointermove",ev=>showTip(ev,`${p.lv} MPa · ${s.name}`,s.colour,rowsTip));
-      // Direct labels stay SELECTIVE: past three series a number on every
-      // point is too many labels for the space; hover and the values table
-      // carry the exact figures.
+      if(c) rowsTip.push([L(UI.cycleAxis), c.n]);
+      if(quality&&quality!=="ok") rowsTip.push([L(UI.fitQualityLbl), qualityLabel(quality)]);
+      path.addEventListener("pointermove",ev=>showTip(ev,`${lv} MPa · ${s.name}`,s.colour,rowsTip));
+      // Direct labels stay SELECTIVE: past three series a number on every bar
+      // is 40+ labels fighting for the same strip of space. Beyond that the
+      // hover tooltip and the values table carry the exact figures.
       if(big && ser.length<=3){
-        const lab=el("text",{x:cx,y:cy-8,class:"vl","text-anchor":"middle"},root);
+        const lab=el("text",{x:x+bw/2,y:top-5,class:"vl","text-anchor":"middle"},root);
         lab.textContent=spec.f(v);
       }
     });
@@ -844,14 +861,14 @@ const PANELS=[
        "auto-located once, on the reference (smallest-peak) cycle's own most-linear region, "+
        "then reused as the same absolute-stress window on every other cycle. This is the "+
        "form that may be compared across stages, specimens and materials. A rollover here is "+
-       "the material softening. A hollow, faded point means the fit behind it is thin (fewer "+
+       "the material softening. A hatched, dimmed bar means the fit behind it is thin (fewer "+
        "than "+QUALITY_MIN_POINTS+" points) or curved (R² below "+QUALITY_MIN_R2+"): read "+
        "that cycle's slope as indicative only, never as a solid number to quote.",
    de:"Steigung des Belastungsastes über ein IDENTISCHES Spannungsfenster in jedem Zyklus -- "+
        "einmalig im linearsten Bereich des Referenzzyklus (kleinste Spitzenspannung) bestimmt "+
        "und danach als gleiches absolutes Fenster auf jeden anderen Zyklus angewendet. Diese "+
        "Form darf über Stufen, Proben und Materialien hinweg verglichen werden. Ein Abknicken "+
-       "hier bedeutet, dass das Material weicher wird. Ein hohler, blasser Punkt "+
+       "hier bedeutet, dass das Material weicher wird. Ein schraffierter, abgedunkelter Balken "+
        "bedeutet, dass die Anpassung dünn (weniger als "+QUALITY_MIN_POINTS+" Punkte) oder "+
        "gekrümmt (R² unter "+QUALITY_MIN_R2+") ist: die Steigung dieses Zyklus nur als "+
        "Anhaltswert lesen, nie als belastbare Zahl zitieren."}},
@@ -862,12 +879,12 @@ const PANELS=[
    why:{en:"Slope of the loading branch between the stiffness-window fractions (default "+
        "25-75 %, PL-0087) of THIS cycle's own peak. Describes each step at its own load level, "+
        "so it is NOT comparable across steps: the window moves up with each step's peak. A "+
-       "hollow, faded point means the fit behind it is thin or curved -- same rule as the "+
+       "hatched, dimmed bar means the fit behind it is thin or curved -- same rule as the "+
        "common band.",
    de:"Steigung des Belastungsastes zwischen den Anteilen des Steifigkeitsfensters (Standard "+
        "25-75 %, PL-0087) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem "+
        "eigenen Lastniveau und ist deshalb NICHT über Stufen vergleichbar: das Fenster wandert "+
-       "mit der Spitze jeder Stufe nach oben. Ein hohler, blasser Punkt bedeutet dieselbe "+
+       "mit der Spitze jeder Stufe nach oben. Ein schraffierter, abgedunkelter Balken bedeutet dieselbe "+
        "Einschränkung wie beim gemeinsamen Fenster."}},
   {k:"maxDisp", t:{en:"Maximum displacement",de:"Maximaler Weg"}, u:{en:"mm",de:"mm"}, f:v=>fmt(v,3), u2:"mm",
    why:{en:"Largest displacement reached in the cycle, and the point the energy integrals split "+
@@ -883,12 +900,12 @@ const PANELS=[
        "back by this point in the test, altogether. Always rises or holds flat, never falls, so "+
        "it is the number to quote for \"how much permanent set has this specimen taken so far\" "+
        "-- but a single unusually large cycle can be hard to spot here, since it only steepens "+
-       "one step among a run of already-rising points.",
+       "one step among a run of already-rising bars.",
    de:"Zyklus für Zyklus aufsummierter Wert, wie viel von der Probendicke bis zu diesem Punkt "+
        "der Prüfung insgesamt nicht zurückgefedert ist. Steigt immer oder bleibt gleich, fällt "+
        "nie -- daher die Zahl für „wie viel bleibende Verformung hat diese Probe bisher "+
        "aufgenommen“ -- aber ein einzelner ungewöhnlich großer Zyklus ist hier schwer zu "+
-       "erkennen, da er nur eine Stufe unter bereits ansteigenden Punkten etwas steiler macht."}},
+       "erkennen, da er nur eine Stufe unter bereits ansteigenden Balken etwas steiler macht."}},
   {k:"holdDisp", t:{en:"Creep at peak load",de:"Kriechweg am Spitzenwert"},
    u:{en:"mm, a total, not a rate",de:"mm, eine Gesamtsumme, keine Rate"}, f:v=>fmt(v,4), u2:"mm",
    why:{en:"Displacement accumulated across the dwell at peak stress: a TOTAL, not a rate. "+
@@ -1058,7 +1075,7 @@ function renderCharts(){
        <div class="plot" id="c${i}" role="button" tabindex="0"
             aria-label="${L(p.t)}, ${L(UI.expandLbl)}"></div>
      </div>`).join("");
-  PANELS.forEach((p,i)=>(p.draw||stepChart)($("#c"+i),p,false));
+  PANELS.forEach((p,i)=>(p.draw||barChart)($("#c"+i),p,false));
 }
 
 /* export: SVG → PNG.
@@ -1182,7 +1199,7 @@ function drawExpanded(){
   // Measured after the dialog is on screen, so the chart is built to the space
   // that actually exists on this display rather than a guessed one.
   const w=box.clientWidth, h=box.clientHeight;
-  (p.draw||stepChart)(box,p,true, w>0&&h>0 ? w/h : null);
+  (p.draw||barChart)(box,p,true, w>0&&h>0 ? w/h : null);
 }
 function expand(i){
   const p=PANELS[i];
@@ -1280,8 +1297,8 @@ const DEFS=[
    {en:"Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held.",
     de:"Größter in diesem Zyklus erreichter Weg, und der Punkt, an dem die Energieintegrale die Schleife teilen. Übersteigt den Weg bei Spitzenspannung um so viel, wie die Probe während des Haltens weiterkroch."}],
   [{en:"Total deformation",de:"Gesamtverformung"},"mm / % h₀",
-   {en:"Cycle-by-cycle running total: how much of the specimen's thickness has not sprung back by this point in the test, altogether. Always rises or holds flat, never falls. A single unusually large cycle can be hard to spot here since it only steepens one step among a run of already-rising points.",
-    de:"Zyklus für Zyklus aufsummierter Wert: wie viel von der Probendicke bis zu diesem Punkt insgesamt nicht zurückgefedert ist. Steigt immer oder bleibt gleich, fällt nie. Ein einzelner ungewöhnlich großer Zyklus ist hier schwer zu erkennen, da er nur eine Stufe unter bereits ansteigenden Punkten etwas steiler macht."}],
+   {en:"Cycle-by-cycle running total: how much of the specimen's thickness has not sprung back by this point in the test, altogether. Always rises or holds flat, never falls. A single unusually large cycle can be hard to spot here since it only steepens one step among a run of already-rising bars.",
+    de:"Zyklus für Zyklus aufsummierter Wert: wie viel von der Probendicke bis zu diesem Punkt insgesamt nicht zurückgefedert ist. Steigt immer oder bleibt gleich, fällt nie. Ein einzelner ungewöhnlich großer Zyklus ist hier schwer zu erkennen, da er nur eine Stufe unter bereits ansteigenden Balken etwas steiler macht."}],
   [{en:"Creep at peak load",de:"Kriechweg am Spitzenwert"},"mm",
    {en:"Displacement accumulated across the dwell: a TOTAL, not a rate. Only comparable between cycles whose hold lengths match.",
     de:"Über die Verweilzeit aufsummierter Weg: eine GESAMTSUMME, keine Rate. Nur zwischen Zyklen mit gleicher Haltedauer vergleichbar."}],
@@ -1337,8 +1354,8 @@ function renderMethod(){
       ${L({en:"The export carries no time channel, so the dwell is measured in samples. A rate in mm/s needs a time channel enabled at export, one setting on the machine.",
         de:"Der Export enthält keinen Zeitkanal, daher wird die Verweilzeit in Messpunkten gemessen. Eine Rate in mm/s erfordert einen beim Export aktivierten Zeitkanal, eine Einstellung an der Maschine."})}</li>
     <li><strong>${L({en:"Fit quality is not measurement accuracy.",de:"Anpassungsgüte ist keine Messgenauigkeit."})}</strong>
-      ${L({en:"A hollow, faded stiffness point means the straight-line fit behind it was weak. That describes the fit only. It says nothing about calibration, machine compliance or alignment.",
-        de:"Ein hohler, blasser Steifigkeitspunkt bedeutet, dass die Geradenanpassung dahinter schwach war. Das beschreibt nur die Anpassung, nicht Kalibrierung, Maschinennachgiebigkeit oder Ausrichtung."})}</li>
+      ${L({en:"A dimmed, hatched stiffness bar means the straight-line fit behind it was weak. That describes the fit only. It says nothing about calibration, machine compliance or alignment.",
+        de:"Ein blasser, schraffierter Steifigkeitsbalken bedeutet, dass die Geradenanpassung dahinter schwach war. Das beschreibt nur die Anpassung, nicht Kalibrierung, Maschinennachgiebigkeit oder Ausrichtung."})}</li>
   </ul>`;
 }
 

@@ -362,7 +362,7 @@ def test_changed_settings_get_their_own_folder(workspace, single_file):
     it should be compared against."""
     a = ingest([single_file], workspace, material="TALCO50")
     b = ingest([single_file], workspace, material="TALCO50",
-               cfg=Config(residual_stress_frac=0.05))
+               cfg=Config(residual_stress_frac=0.05), allow_same_content=True)
 
     assert a.run_dir != b.run_dir
     assert a.run_dir.exists() and b.run_dir.exists()
@@ -690,3 +690,27 @@ def test_locked_update_removes_its_lock_even_if_the_body_raises(tmp_path):
         with locked_update(target):
             raise ValueError("boom")
     assert not lock_path.exists()
+
+
+def test_same_data_under_another_name_is_not_saved_twice(workspace, single_file, tmp_path):
+    """Uploading the archived copy (or any renamed copy) of a file already in
+    the material is skipped with the run it is already in, not saved again
+    as new specimens."""
+    import shutil
+
+    first = ingest([single_file], workspace, material="TALCO50")
+    copy = tmp_path / f"0123456789ab_{single_file.stem}-renamed.xlsx"
+    shutil.copy(single_file, copy)
+
+    again = ingest([copy], workspace, material="TALCO50")
+    assert again.specimens == []
+    assert again.run_dir == first.run_dir
+    assert "already saved as" in again.skipped[0][1]
+    runs = list(Workspace.at(workspace).processed.glob("*/run.json"))
+    assert len(runs) == 1
+
+    # A different material is a different thing: it is saved, and the
+    # archive code in front of the file name is not part of the label.
+    other = ingest([copy], workspace, material="OTHER")
+    assert other.specimens
+    assert not other.specimens[0].label.startswith("0123456789ab_")

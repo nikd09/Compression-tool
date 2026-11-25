@@ -456,10 +456,16 @@ def load_tests(
     return load_single_format(path, cfg, label_stem=label_stem)
 
 
+# The archive keeps each original as "Raw exports/<first 12 hex of its
+# SHA-256>_<name>". Someone may upload that copy instead of the original;
+# the code in front is not part of the test's name, so it is dropped.
+_ARCHIVE_PREFIX_RE = re.compile(r"^[0-9a-f]{12}_")
+
+
 def _stem(path: str) -> str:
     import os
 
-    return os.path.splitext(os.path.basename(path))[0]
+    return _ARCHIVE_PREFIX_RE.sub("", os.path.splitext(os.path.basename(path))[0])
 
 
 # ----------------------------------------------------------------------------
