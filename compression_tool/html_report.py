@@ -18,7 +18,7 @@ from typing import Any, Optional, Sequence
 # Reused deliberately: the workbook and the report must show the same
 # columns and the same summary, projected the same way.
 from . import diagnostics
-from .excel_export import cross_specimen_stats, row_values, summary_pairs
+from .excel_export import cross_specimen_stats, row_values, summary_pairs, traceability_pairs
 from .schema import STIFFNESS_QUALITY, user_facing_cycle_columns
 
 _CSS = """
@@ -100,7 +100,7 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
 
     # --- summary -------------------------------------------------------------
     parts.append("<h2>Summary</h2><div class='scroll'><table class='kv'><tbody>")
-    columns = [summary_pairs(p) for p in payloads]
+    columns = [summary_pairs(p) + [("", "")] + traceability_pairs(p) for p in payloads]
     labels = [p.get("specimen", {}).get("label", "") for p in payloads]
     if multi:
         parts.append("<tr><th style='text-align:left'>Field</th>"

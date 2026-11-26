@@ -15,6 +15,7 @@ out of step with the engine.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -96,9 +97,188 @@ _EXCEL_T = {
     "differing_settings_warning": {
         "en": "Warning: specimens in this workbook were analysed with different settings.",
         "de": "Achtung: Proben in dieser Arbeitsmappe wurden mit unterschiedlichen Einstellungen analysiert."},
-    "derived_reference_levels": {"en": "Derived reference levels", "de": "Abgeleitete Referenzwerte"},
-    "reference_stress_for": {"en": "{label}: reference stress (MPa)", "de": "{label}: Referenzspannung (MPa)"},
+    "trace_sheet": {"en": "Traceability", "de": "Rückverfolgbarkeit"},
+    "trace_title": {"en": "Where these numbers come from", "de": "Woher diese Zahlen stammen"},
+    "trace_fields": {"en": "Traceability fields", "de": "Felder der Rückverfolgbarkeit"},
+    "yes": {"en": "yes", "de": "ja"},
+    "no": {"en": "no", "de": "nein"},
 }
+
+
+# ----------------------------------------------------------------------------
+# Plain-language texts for the workbook
+# ----------------------------------------------------------------------------
+# The workbook is read by people who never see the app's code, so its column
+# and field descriptions are written here in plain words rather than taken
+# from schema.py's developer descriptions. Labels still come from schema.py
+# unless overridden here.
+
+STRESS_STEP_MPA = 5  # same rounding as the Results and Compare pages
+
+STRESS_STEP = Column(
+    "_StressStep", "REAL", "Stress step", "MPa", "", fmt="0")
+
+_COL_TEXT = {
+    "Cycle": {
+        "en": "Number of the load step, counted after the seating cycle.",
+        "de": "Nummer der Laststufe, gezählt nach dem Setzzyklus."},
+    "_StressStep": {
+        "label_de": "Spannungsstufe",
+        "en": "Peak stress of the cycle, rounded to 5 MPa. The same grouping the "
+              "app uses on the Results and Compare pages.",
+        "de": "Spitzenspannung des Zyklus, auf 5 MPa gerundet. Dieselbe Einteilung "
+              "wie auf den Seiten Ergebnisse und Vergleich."},
+    "Stiffness_common_MPa_per_mm": {
+        "en": "Slope of the loading curve over the same stress range in every "
+              "cycle. Use this value to compare cycles, specimens and materials.",
+        "de": "Steigung der Belastungskurve über denselben Spannungsbereich in "
+              "jedem Zyklus. Diesen Wert für Vergleiche zwischen Zyklen, Proben "
+              "und Materialien verwenden."},
+    "Stiffness_relative_MPa_per_mm": {
+        "en": "Slope of the loading curve between 25 % and 75 % of this cycle's "
+              "own peak stress (PL-0087). The range moves up with every step, so "
+              "do not compare different cycles on this value.",
+        "de": "Steigung der Belastungskurve zwischen 25 % und 75 % der eigenen "
+              "Spitzenspannung dieses Zyklus (PL-0087). Der Bereich wandert mit "
+              "jeder Stufe nach oben, daher verschiedene Zyklen nicht über diesen "
+              "Wert vergleichen."},
+    "MaxDisp_mm": {
+        "en": "Largest displacement in the cycle, including the creep while the "
+              "load was held.",
+        "de": "Größter Weg im Zyklus, einschließlich des Kriechens während des "
+              "Haltens."},
+    "PermDef_cumulative_mm": {
+        "en": "Permanent deformation (what did not spring back), added up over "
+              "all cycles so far. This is not compression set in the sense of "
+              "ISO 815 or ASTM D395.",
+        "de": "Bleibende Verformung (was nicht zurückfedert), über alle bisherigen "
+              "Zyklen aufsummiert. Das ist kein Druckverformungsrest im Sinne von "
+              "ISO 815 oder ASTM D395."},
+    "PermDef_cumulative_pct": {
+        "en": "The same total deformation as a share of the specimen height h0.",
+        "de": "Dieselbe Gesamtverformung als Anteil der Probenhöhe h0."},
+    "Creep_during_hold_mm": {
+        "en": "How far the specimen kept sinking while the load was held at the "
+              "top. A total, not a rate. Empty when the cycle has no hold.",
+        "de": "Wie weit die Probe beim Halten der Last oben noch nachgegeben hat. "
+              "Eine Summe, keine Rate. Leer, wenn der Zyklus kein Halten hat."},
+    "Energy_dissipated_MPa_mm": {
+        "en": "Area of the load-unload loop: the energy lost in the cycle per unit "
+              "area. Divide by h0 for energy per unit volume.",
+        "de": "Fläche der Be- und Entlastungsschleife: die im Zyklus verlorene "
+              "Energie je Flächeneinheit. Durch h0 teilen für Energie je "
+              "Volumeneinheit."},
+}
+
+# Summary sheet: what a reader needs. Everything else about the source goes
+# to the Traceability sheet.
+SUMMARY_KEYS = ("material", "source_filename", "displacement_channel", "h0_mm",
+                "d0_mm", "temperature_c", "n_cycles", "global_peak_mpa",
+                "residual_stress_mpa")
+TRACE_KEYS = ("specimen_id", "source_format", "source_sha256", "raw_input_path",
+              "n_points", "multi_stage", "created_utc")
+
+_FIELD_TEXT = {
+    "material": {"en": "Material name given when the test was saved.",
+                 "de": "Beim Speichern angegebener Materialname."},
+    "source_filename": {"en": "Name of the testXpert export file.",
+                        "de": "Name der testXpert-Exportdatei."},
+    "displacement_channel": {
+        "en": "Channel the displacement was read from. The extensometer is "
+              "preferred; the machine travel also contains the machine's own "
+              "deflection.",
+        "de": "Kanal, aus dem der Weg gelesen wurde. Der Feindehnungsaufnehmer "
+              "wird bevorzugt; der Maschinenweg enthält auch die Nachgiebigkeit "
+              "der Maschine."},
+    "h0_mm": {"en": "Specimen height, read from the export.",
+              "de": "Probenhöhe, aus dem Export gelesen."},
+    "d0_mm": {"en": "Specimen diameter, read from the export.",
+              "de": "Probendurchmesser, aus dem Export gelesen."},
+    "temperature_c": {"en": "Test temperature, read from the export.",
+                      "de": "Prüftemperatur, aus dem Export gelesen."},
+    "n_cycles": {"en": "Number of cycles evaluated, without the seating cycle.",
+                 "de": "Anzahl ausgewerteter Zyklen, ohne den Setzzyklus."},
+    "global_peak_mpa": {"en": "Highest stress reached in the test.",
+                        "de": "Höchste in der Prüfung erreichte Spannung."},
+    "residual_stress_mpa": {
+        "en": "Low stress level (1 % of the highest stress by default) at which "
+              "the permanent deformation is read.",
+        "de": "Niedrige Spannung (standardmäßig 1 % der höchsten Spannung), bei "
+              "der die bleibende Verformung abgelesen wird."},
+    "specimen_id": {"en": "Fixed ID of the specimen in the library.",
+                    "de": "Feste Kennung der Probe in der Bibliothek."},
+    "source_format": {
+        "en": "'series' = several specimens in one workbook, 'single' = one "
+              "specimen per sheet.",
+        "de": "'series' = mehrere Proben in einer Arbeitsmappe, 'single' = eine "
+              "Probe je Blatt."},
+    "source_sha256": {
+        "en": "Check number of the original file's content. Two identical files "
+              "have the same number.",
+        "de": "Prüfnummer des Inhalts der Originaldatei. Zwei gleiche Dateien "
+              "haben dieselbe Nummer."},
+    "raw_input_path": {
+        "en": "Where the unchanged copy of the export is kept in the library.",
+        "de": "Wo die unveränderte Kopie des Exports in der Bibliothek liegt."},
+    "n_points": {"en": "Number of measured points used.",
+                 "de": "Anzahl verwendeter Messpunkte."},
+    "multi_stage": {"en": "Yes when the cycles have different peak stresses (load steps).",
+                    "de": "Ja, wenn die Zyklen unterschiedliche Spitzenspannungen haben (Laststufen)."},
+    "created_utc": {"en": "When the analysis was run (UTC).",
+                    "de": "Zeitpunkt der Auswertung (UTC)."},
+}
+
+_SUMMARY_TOTAL_TEXT = {
+    "total_permdef_mm": {
+        "en": "Total deformation after the last cycle.",
+        "de": "Gesamtverformung nach dem letzten Zyklus."},
+    "total_permdef_pct": {
+        "en": "The same, as a share of h0.",
+        "de": "Dasselbe als Anteil von h0."},
+    "total_hold_disp": {
+        "en": "Creep at peak load, added up over all cycles.",
+        "de": "Kriechweg am Spitzenwert, über alle Zyklen aufsummiert."},
+}
+
+_CONFIG_LABELS = {
+    "unload_frac": ("Unload sensitivity", "Entlastungsempfindlichkeit"),
+    "major_cycle_frac": ("Minimum cycle size", "Mindestzyklusgröße"),
+    "min_cycle_points": ("Minimum points per cycle", "Mindestpunkte je Zyklus"),
+    "hold_tol_frac": ("Hold detection tolerance", "Toleranz für Halteerkennung"),
+    "hold_min_points": ("Minimum points in a hold", "Mindestpunkte beim Halten"),
+    "detect_holds": ("Detect holds", "Halten erkennen"),
+    "stiff_lo_frac": ("Stiffness window start (share of peak)",
+                      "Steifigkeitsfenster Anfang (Anteil der Spitze)"),
+    "stiff_hi_frac": ("Stiffness window end (share of peak)",
+                      "Steifigkeitsfenster Ende (Anteil der Spitze)"),
+    "residual_stress_mpa": ("Reference stress (MPa)", "Referenzspannung (MPa)"),
+    "residual_stress_frac": ("Reference stress (share of highest stress)",
+                             "Referenzspannung (Anteil der höchsten Spannung)"),
+    "h0_mm": ("Specimen height h0 (mm)", "Probenhöhe h0 (mm)"),
+}
+
+
+def excel_cycle_columns(has_strain: bool) -> list[Column]:
+    """Cycles-sheet columns: Cycle, the stress step, then the six headline
+    properties, with total deformation also given in % when h0 is known."""
+    out: list[Column] = []
+    for col in user_facing_cycle_columns(has_strain):
+        out.append(col)
+        if col.key == "Cycle":
+            out.append(STRESS_STEP)
+        if col.key == "PermDef_cumulative_mm" and has_strain:
+            out.append(replace(CYCLE_BY_KEY["PermDef_cumulative_pct"], internal=False))
+    return out
+
+
+def _stress_step(peak: Any) -> Optional[float]:
+    try:
+        p = float(peak)
+    except (TypeError, ValueError):
+        return None
+    if p != p:
+        return None
+    return float(round(p / STRESS_STEP_MPA) * STRESS_STEP_MPA)
 
 
 def _t(key: str, lang: str, **kw) -> str:
@@ -107,14 +287,23 @@ def _t(key: str, lang: str, **kw) -> str:
 
 
 def _col_label(col: Column, lang: str) -> str:
-    return column_label_de(col) if lang == "de" else col.label
+    if lang == "de":
+        return _COL_TEXT.get(col.key, {}).get("label_de") or column_label_de(col)
+    return col.label
 
 
 def _col_header(col: Column, lang: str) -> str:
-    return column_header_de(col) if lang == "de" else col.header
+    if lang == "de":
+        if "label_de" in _COL_TEXT.get(col.key, {}):
+            return f"{_col_label(col, lang)} ({col.unit})" if col.unit else _col_label(col, lang)
+        return column_header_de(col)
+    return col.header
 
 
 def _col_desc(col: Column, lang: str) -> str:
+    text = _COL_TEXT.get(col.key)
+    if text:
+        return text[lang]
     return column_description_de(col) if lang == "de" else col.description
 
 
@@ -123,6 +312,9 @@ def _field_label(field: Field, lang: str) -> str:
 
 
 def _field_desc(field: Field, lang: str) -> str:
+    text = _FIELD_TEXT.get(field.key)
+    if text:
+        return text[lang]
     return specimen_description_de(field) if lang == "de" else field.description
 
 
@@ -176,6 +368,8 @@ def row_values(row: dict, cols: Sequence[Column]) -> list[Any]:
         elif col.key == UNLOAD_YIELD.key:
             out.append(unload_yield_frac(row.get("StressAtMaxDisp_MPa"),
                                          row.get("PeakStress_MPa")))
+        elif col.key == STRESS_STEP.key:
+            out.append(_stress_step(row.get("PeakStress_MPa")))
         elif col.key == HOLD_DISP_RATE.key:
             out.append(hold_disp_per_1000_samples(row.get("Creep_during_hold_mm"),
                                                   row.get("HoldPoints")))
@@ -198,7 +392,7 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
     merged: dict[str, Any] = {**spec, **analysis, "created_utc": payload.get("created_utc")}
     pairs: list[tuple[str, Any]] = []
     for field in SPECIMEN_FIELDS:
-        if field.key in merged:
+        if field.key in SUMMARY_KEYS and field.key in merged:
             value = merged[field.key]
             if field.key == "multi_stage":
                 value = bool(value)
@@ -214,11 +408,8 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
         vals = [c.get(key) for c in cycles if c.get(key) is not None]
         return sum(vals) if vals else None
 
-    holds = sum(1 for c in cycles if c.get("HoldDetected"))
-
     pairs.append(("", ""))
     pairs.append((_t("test_summary", lang), ""))
-    pairs.append((_t("cycles_with_hold", lang), _t("cycles_of", lang, held=holds, total=len(cycles))))
     pairs.append((_t("total_permdef_mm", lang), last_present("PermDef_cumulative_mm")))
     if analysis.get("has_strain"):
         pairs.append((_t("total_permdef_pct", lang), last_present("PermDef_cumulative_pct")))
@@ -227,21 +418,33 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
     # (fields that are no longer shown) -- both derived straight from those two columns
     # and had no purpose left once the fields themselves were gone.
     pairs.append((_t("total_hold_disp", lang), total_present("Creep_during_hold_mm")))
+    # Warnings are NOT appended here: with more than one specimen they would
+    # repeat the same paragraph once per column. _write_summary() writes them
+    # once, below the per-specimen fields, via diagnostics.distinct().
+    return pairs
 
+
+def traceability_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
+    """Fields that tie a result to its source file and analysis, kept off the
+    Summary sheet so the reader sees the results first."""
+    spec, analysis = payload.get("specimen", {}), payload.get("analysis", {})
+    merged: dict[str, Any] = {**spec, **analysis, "created_utc": payload.get("created_utc")}
+    pairs: list[tuple[str, Any]] = []
+    for field in SPECIMEN_FIELDS:
+        if field.key in TRACE_KEYS and field.key in merged:
+            value = merged[field.key]
+            if field.key == "multi_stage":
+                value = _t("yes" if value else "no", lang)
+            label = _field_label(field, lang)
+            pairs.append((f"{label} ({field.unit})" if field.unit else label, value))
     basis = analysis.get("strain_basis") or {}
     if analysis.get("has_strain"):
-        pairs.append(("", ""))
-        pairs.append((_t("strain_basis", lang), ""))
-        pairs.append((_t("gauge_length_h0", lang), basis.get("h0_mm")))
-        pairs.append((_t("measured_by_channel", lang), basis.get("displacement_channel")))
-        pairs.append((_t("gauge_length_confirmed", lang), bool(basis.get("gauge_length_confirmed"))))
+        pairs.append((_t("gauge_length_confirmed", lang),
+                      _t("yes" if basis.get("gauge_length_confirmed") else "no", lang)))
         pairs.append((
             _t("strain_status", lang),
             _t("validated", lang) if basis.get("strain_valid") else _t("provisional", lang),
         ))
-    # Warnings are NOT appended here: with more than one specimen they would
-    # repeat the same paragraph once per column. _write_summary() writes them
-    # once, below the per-specimen fields, via diagnostics.distinct().
     return pairs
 
 
@@ -253,7 +456,7 @@ def summary_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]:
 def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en") -> Path:
     """Write one workbook covering one or more specimens.
 
-    Sheets: Summary, Cycles, Data dictionary, Config. (A "Statistics"
+    Sheets: Summary, Cycles, Data dictionary, Config, Traceability. (A "Statistics"
     cross-specimen sheet used to sit between Cycles and Data dictionary --
     removed entirely, since it was covering the same headline
     metrics per-cycle bar charts already show, one abstraction layer up.
@@ -313,6 +516,7 @@ def write_workbook(payloads: Sequence[dict], path: str | Path, lang: str = "en")
     _write_cycles(book, f, numfmt, payloads, lang)
     _write_dictionary(book, f, payloads, lang)
     _write_config(book, f, payloads, lang)
+    _write_traceability(book, f, payloads, lang)
 
     book.close()
     os.replace(tmp, path)
@@ -380,7 +584,7 @@ def _write_cycles(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -
     sheet = book.add_worksheet(_t("cycles_sheet", lang))
     multi = len(payloads) > 1
     has_strain = any(p.get("analysis", {}).get("has_strain") for p in payloads)
-    cols = user_facing_cycle_columns(has_strain)
+    cols = excel_cycle_columns(has_strain)
 
     col0 = 1 if multi else 0
     if multi:
@@ -436,7 +640,7 @@ def _write_dictionary(book, f, payloads: Sequence[dict], lang: str = "en") -> No
 
     sheet.write(r, 0, _t("per_cycle_columns", lang), f["section"])
     r += 1
-    for col in user_facing_cycle_columns(has_strain):
+    for col in excel_cycle_columns(has_strain):
         sheet.write(r, 0, _col_label(col, lang), f["text"])
         sheet.write(r, 1, col.unit or "-", f["unit"])
         sheet.write(r, 2, _col_desc(col, lang), f["wrap"])
@@ -446,6 +650,25 @@ def _write_dictionary(book, f, payloads: Sequence[dict], lang: str = "en") -> No
     sheet.write(r, 0, _t("summary_fields", lang), f["section"])
     r += 1
     for field in SPECIMEN_FIELDS:
+        if field.key not in SUMMARY_KEYS:
+            continue
+        sheet.write(r, 0, _field_label(field, lang), f["text"])
+        sheet.write(r, 1, field.unit or "-", f["unit"])
+        sheet.write(r, 2, _field_desc(field, lang), f["wrap"])
+        r += 1
+    for key, unit in (("total_permdef_mm", "mm"), ("total_permdef_pct", "%"),
+                      ("total_hold_disp", "mm")):
+        sheet.write(r, 0, _t(key, lang).rsplit(" (", 1)[0], f["text"])
+        sheet.write(r, 1, unit, f["unit"])
+        sheet.write(r, 2, _SUMMARY_TOTAL_TEXT[key][lang], f["wrap"])
+        r += 1
+
+    r += 1
+    sheet.write(r, 0, _t("trace_fields", lang), f["section"])
+    r += 1
+    for field in SPECIMEN_FIELDS:
+        if field.key not in TRACE_KEYS:
+            continue
         sheet.write(r, 0, _field_label(field, lang), f["text"])
         sheet.write(r, 1, field.unit or "-", f["unit"])
         sheet.write(r, 2, _field_desc(field, lang), f["wrap"])
@@ -468,8 +691,11 @@ def _write_config(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
     cfg = payloads[0].get("config", {})
     r = 3
     for key, value in cfg.items():
-        sheet.write(r, 0, key, f["key"])
-        if value is None:
+        labels = _CONFIG_LABELS.get(key)
+        sheet.write(r, 0, (labels[1] if lang == "de" else labels[0]) if labels else key, f["key"])
+        if isinstance(value, bool):
+            sheet.write_string(r, 1, _t("yes" if value else "no", lang), f["text"])
+        elif value is None:
             # A None knob is not missing data: it means the engine derives the
             # level from the test itself.
             sheet.write_string(r, 1, _t("auto", lang), f["text"])
@@ -482,18 +708,30 @@ def _write_config(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
         r += 1
         sheet.write(r, 0, _t("differing_settings_warning", lang), f["section"])
 
-    r += 2
-    sheet.write(r, 0, _t("derived_reference_levels", lang), f["section"])
-    r += 1
-    for payload in payloads:
-        analysis = payload.get("analysis", {})
-        label = payload.get("specimen", {}).get("label", "")
-        sheet.write(r, 0, _t("reference_stress_for", lang, label=label), f["key"])
-        _write_value(sheet, r, 1, analysis.get("residual_stress_mpa"), f["text"], f["num"])
-        r += 1
-
     sheet.set_column(0, 0, 44)
     sheet.set_column(1, 1, 28)
+
+
+def _write_traceability(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
+    """Source file, check number and analysis time per specimen."""
+    sheet = book.add_worksheet(_t("trace_sheet", lang))
+    sheet.write(0, 0, _t("trace_title", lang), f["title"])
+    labels = [p.get("specimen", {}).get("label", _t("specimen_n", lang, n=i + 1))
+              for i, p in enumerate(payloads)]
+    columns = [traceability_pairs(p, lang) for p in payloads]
+    row0 = 2
+    sheet.write(row0, 0, _t("field", lang), f["head"])
+    for i, label in enumerate(labels):
+        sheet.write(row0, 1 + i, label, f["head"])
+    spine = max(columns, key=len)
+    for j, (key, _) in enumerate(spine):
+        sheet.write(row0 + 1 + j, 0, key, f["key"])
+        for i, pairs in enumerate(columns):
+            value = pairs[j][1] if j < len(pairs) else None
+            _write_value(sheet, row0 + 1 + j, 1 + i, value, f["text"], f["num"])
+    sheet.set_column(0, 0, 34)
+    sheet.set_column(1, len(labels), 34)
+    sheet.freeze_panes(row0 + 1, 1)
 
 
 # ----------------------------------------------------------------------------
@@ -578,7 +816,7 @@ def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False, l
     import pandas as pd
 
     has_strain = any(p.get("analysis", {}).get("has_strain") for p in payloads)
-    cols = user_facing_cycle_columns(has_strain)
+    cols = excel_cycle_columns(has_strain)
 
     rows = []
     for payload in payloads:
@@ -611,4 +849,6 @@ __all__ = [
     "cross_specimen_stats",
     "row_values",
     "summary_pairs",
+    "traceability_pairs",
+    "excel_cycle_columns",
 ]

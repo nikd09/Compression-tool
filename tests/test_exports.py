@@ -51,7 +51,7 @@ def single_payload(workspace, single_file):
 def test_workbook_has_the_expected_sheets(tmp_path, single_payload):
     path = write_workbook([single_payload], tmp_path / "out.xlsx")
     book = load_workbook(path)
-    assert book.sheetnames == ["Summary", "Cycles", "Data dictionary", "Config"]
+    assert book.sheetnames == ["Summary", "Cycles", "Data dictionary", "Config", "Traceability"]
 
 
 def test_cycle_headers_carry_units(tmp_path, single_payload):
@@ -64,6 +64,7 @@ def test_cycle_headers_carry_units(tmp_path, single_payload):
     # readings, the residual-displacement pair) was deleted on request.
     assert headers == [
         "Cycle",
+        "Stress step (MPa)",
         "Stiffness (common band) (MPa/mm)",
         "Stiffness (relative band) (MPa/mm)",
         "Maximum displacement (mm)",
@@ -147,10 +148,10 @@ def test_data_dictionary_explains_the_traps(tmp_path, single_payload):
         str(v) for row in sheet.iter_rows(values_only=True) for v in row if v
     )
 
-    assert "IDENTICAL stress window" in text
-    assert "NOT comparable across cycles" in text
+    assert "same stress range in every cycle" in text
+    assert "do not compare different cycles" in text
     assert "ASTM D395" in text
-    assert "a TOTAL, not a rate" in text
+    assert "A total, not a rate" in text
 
 
 def test_config_sheet_records_the_settings(tmp_path, single_payload):
@@ -161,9 +162,9 @@ def test_config_sheet_records_the_settings(tmp_path, single_payload):
         for r in range(4, sheet.max_row + 1)
     }
 
-    assert pairs["unload_frac"] == pytest.approx(0.5)
-    assert pairs["residual_stress_mpa"] == "auto"
-    assert any("reference stress (MPa)" in str(k) for k in pairs)
+    assert pairs["Unload sensitivity"] == pytest.approx(0.5)
+    assert pairs["Reference stress (MPa)"] == "auto"
+    assert not any("_frac" in str(k) for k in pairs)
 
 
 def test_strain_columns_are_absent_without_h0(tmp_path, single_payload):
@@ -175,16 +176,15 @@ def test_strain_columns_are_absent_without_h0(tmp_path, single_payload):
     assert not any(str(h).endswith("(%)") for h in headers if h)
 
 
-def test_strain_columns_stay_absent_even_with_h0(tmp_path, payloads):
-    """All the strain-normalised (%) columns are the internal twins of the
-    six headline metrics now -- having h0 available no longer adds any
-    columns to the Cycles sheet, since none of the six headline metrics is
-    itself a percentage."""
+def test_only_total_deformation_gets_a_percent_column_with_h0(tmp_path, payloads):
+    """With h0 known, total deformation is also given in % of h0 (the form
+    the app's chart uses); no other strain column is added."""
     assert payloads[0]["analysis"]["has_strain"] is True
     path = write_workbook(payloads, tmp_path / "run.xlsx")
     headers = [c.value for c in load_workbook(path)["Cycles"][1]]
 
-    assert not any(str(h).endswith("(%)") for h in headers if h)
+    assert [h for h in headers if h and str(h).endswith("(%)")] == ["Total deformation (%)"]
+    assert headers.index("Total deformation (%)") == headers.index("Total deformation (mm)") + 1
 
 
 # ----------------------------------------------------------------------------
@@ -294,7 +294,13 @@ def test_workbook_labels_filename_and_path_separately(tmp_path, single_payload):
     labels = {sheet.cell(row=r, column=1).value for r in range(1, sheet.max_row + 1)}
 
     assert "Source file" in labels
-    assert "Source path (ingest machine)" in labels
+    # The ingest machine's local path means nothing to another reader, and
+    # the check number / archived copy live on the Traceability sheet.
+    assert "Source path (ingest machine)" not in labels
+    assert "Source SHA-256" not in labels
+    trace = load_workbook(path)["Traceability"]
+    trace_labels = {trace.cell(row=r, column=1).value for r in range(1, trace.max_row + 1)}
+    assert {"Source SHA-256", "Archived copy", "Specimen ID"} <= trace_labels
 
 
 # ----------------------------------------------------------------------------
@@ -455,3 +461,13 @@ def test_single_specimen_run_does_not_duplicate_the_workbook(workspace, single_f
     result = ingest([single_file], workspace, material="TALCO50")
     assert result.run_xlsx == result.specimens[0].xlsx_path
     assert len(list(result.run_dir.glob("*.xlsx"))) == 1
+
+
+def test_cycles_sheet_gives_the_stress_step(tmp_path, payloads):
+    path = write_workbook(payloads, tmp_path / "run.xlsx")
+    sheet = load_workbook(path)["Cycles"]
+    headers = [c.value for c in sheet[1]]
+    col = headers.index("Stress step (MPa)")
+    peaks = [c["PeakStress_MPa"] for p in payloads for c in p["cycles"]]
+    steps = [row[col] for row in sheet.iter_rows(min_row=2, values_only=True)]
+    assert steps == [round(p / 5) * 5 for p in peaks]
