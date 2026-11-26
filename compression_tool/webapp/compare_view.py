@@ -52,9 +52,8 @@ div[data-testid="stElementToolbarButton"]:has(button[aria-label="Copy Vega-Lite 
 # (column_label_de for German); units are not translated.
 _T = {
     "header": {"en": "Compare", "de": "Vergleich"},
-    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesem Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
-    "no_specimens": {"en": "No specimens indexed yet.", "de": "Noch keine Proben indiziert."},
+    "no_data": {"en": 'Nothing saved in this library yet - use Ingest first.', "de": 'In dieser Bibliothek ist noch nichts gespeichert - zuerst unter „Einlesen“ eine Datei hinzufügen.'},
+    "no_specimens": {"en": "No specimens saved yet.", "de": "Noch keine Proben gespeichert."},
     "groups_label": {"en": "Groups to compare", "de": "Zu vergleichende Gruppen"},
     "groups_help": {
         "en": "A group is any set of specimens you pick - it does not have to "
@@ -63,16 +62,7 @@ _T = {
         "de": "Eine Gruppe ist eine beliebige Auswahl an Proben - sie muss kein "
               "ganzes Material sein. Zum Beispiel „Material A, nur gute Läufe“ als "
               "eine Gruppe und „Material B, S4+S5“ als eine andere."},
-    "caption_groups": {
-        "en": "Each group starts pre-filled with one material's specimens as a "
-              "shortcut. The material filter below narrows the specimen list to "
-              "one material at a time - useful once a workspace has many; pick "
-              "'All materials' to combine specimens across materials in one group.",
-        "de": "Jede Gruppe wird zunächst mit den Proben eines Materials "
-              "vorbefüllt. Der Materialfilter unten schränkt die Probenliste "
-              "jeweils auf ein Material ein - nützlich bei vielen Materialien im "
-              "Workspace; „Alle Materialien“ wählen, um Proben materialübergreifend "
-              "in einer Gruppe zu kombinieren."},
+    "caption_groups": {"en": "Each group starts with one material's specimens. Change the material in a group, or pick 'All materials' to mix specimens freely.", "de": 'Jede Gruppe beginnt mit den Proben eines Materials. Das Material einer Gruppe ändern, oder „Alle Materialien“ wählen, um Proben frei zu mischen.'},
     "all_materials": {"en": "All materials", "de": "Alle Materialien"},
     "group_n": {"en": "Group {n}", "de": "Gruppe {n}"},
     "name_help": {

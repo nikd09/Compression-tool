@@ -62,7 +62,7 @@ import numpy as np
 import pandas as pd
 
 from . import diagnostics
-from .core import Config, TestData
+from .core import METHOD_VERSION, Config, TestData
 from .schema import SCHEMA_VERSION
 
 RAW_DIRNAME = "Raw exports"
@@ -590,6 +590,7 @@ def write_manifest(
     """Index of one ingest run: what went in, under which settings, what came out."""
     manifest = {
         "schema_version": SCHEMA_VERSION,
+        "method_version": METHOD_VERSION,
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "material": material,
         "fingerprint": fingerprint,
@@ -598,6 +599,23 @@ def write_manifest(
         "specimens": specimens,
     }
     return write_json(manifest, run_dir / "run.json")
+
+
+def outdated_runs(ws: Workspace) -> list[str]:
+    """Run folders whose results were calculated with an older method than
+    the current one (core.METHOD_VERSION); a run saved before the version was
+    recorded counts as method 1."""
+    out = []
+    if not ws.processed.exists():
+        return out
+    for manifest in sorted(ws.processed.glob("*/run.json")):
+        try:
+            version = read_json(manifest).get("method_version", 1)
+        except (OSError, ValueError):
+            continue
+        if version < METHOD_VERSION:
+            out.append(manifest.parent.name)
+    return out
 
 
 def iter_specimen_jsons(ws: Workspace) -> list[Path]:

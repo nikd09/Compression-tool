@@ -27,6 +27,7 @@ from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..pipeline import ingest
 from ..reports_overview import build_overview
+from .common import _CONFIG_FORM_T as _FORM_T
 from .common import config_form, dashboard_lang, short_tag, with_utm_animation
 
 # EN/DE strings for this page's own chrome. Threaded through every helper as
@@ -35,20 +36,18 @@ from .common import config_form, dashboard_lang, short_tag, with_utm_animation
 # per page (see common.language_picker's own docstring for why).
 _T = {
     "header": {"en": "Config", "de": "Konfiguration"},
-    "subtitle": {"en": "What a run was actually ingested with, traced back per run, not the app's current form defaults.",
-        "de": "Womit ein Lauf tatsächlich eingelesen wurde, je Lauf zurückverfolgt, nicht die aktuellen Formularvorgaben der App."},
+    "subtitle": {"en": 'The settings and files behind each saved run, and tools to correct or tidy up the library.', "de": 'Einstellungen und Dateien hinter jedem gespeicherten Lauf, und Werkzeuge, um die Bibliothek zu korrigieren oder aufzuräumen.'},
     "run": {"en": "Run", "de": "Lauf"},
     "tab_run": {"en": "Run", "de": "Lauf"},
     "tab_reanalyze": {"en": "Re-analyse", "de": "Neu analysieren"},
     "tab_exports": {"en": "Exports", "de": "Exporte"},
     "tab_activity": {"en": "Activity", "de": "Aktivität"},
     "tab_admin": {"en": "Maintenance", "de": "Wartung"},
-    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
+    "no_data": {"en": 'Nothing saved in this library yet - use Ingest first.', "de": 'In dieser Bibliothek ist noch nichts gespeichert - zuerst unter „Einlesen“ eine Datei hinzufügen.'},
     # -- Run tab --
     "specimens": {"en": "Specimens", "de": "Proben"},
     "sources": {"en": "Sources", "de": "Quellen"},
-    "ingested_utc": {"en": "Ingested (UTC)", "de": "Eingelesen (UTC)"},
+    "ingested_utc": {"en": 'Saved', "de": 'Gespeichert'},
     "full_timestamp": {"en": "Full timestamp: {ts}", "de": "Vollständiger Zeitstempel: {ts}"},
     "sources_heading": {"en": "Sources", "de": "Quellen"},
     "none_recorded": {"en": "None recorded.", "de": "Keine erfasst."},
@@ -56,110 +55,40 @@ _T = {
     "col_file": {"en": "File", "de": "Datei"},
     "col_label": {"en": "Label", "de": "Bezeichnung"},
     "col_cycles": {"en": "Cycles", "de": "Zyklen"},
-    "col_json": {"en": "JSON", "de": "JSON"},
+    "col_json": {"en": 'Record file', "de": 'Datensatzdatei'},
     "settings_used": {"en": "Settings this run used", "de": "Von diesem Lauf verwendete Einstellungen"},
-    "full_manifest": {"en": "Full manifest", "de": "Vollständiges Manifest"},
-    "run_footer": {
-        "en": "This is what the run was actually ingested with, not the app's current "
-              "form defaults. The two can differ once someone changes a threshold on "
-              "the Ingest tab for a later run.",
-        "de": "Dies ist, womit der Lauf tatsächlich eingelesen wurde, nicht die "
-              "aktuellen Formularvorgaben der App. Beides kann voneinander abweichen, "
-              "sobald jemand für einen späteren Lauf einen Schwellenwert im "
-              "Einlesen-Tab ändert."},
+    "col_setting": {"en": "Setting", "de": "Einstellung"},
+    "col_value": {"en": "Value", "de": "Wert"},
+    "run_footer": {"en": 'These are the settings this run was saved with. A later run can use different ones.', "de": 'Mit diesen Einstellungen wurde dieser Lauf gespeichert. Ein späterer Lauf kann andere verwenden.'},
     # -- Exports tab --
     "combined_heading": {"en": "Combined across every run of this material",
         "de": "Zusammengeführt über alle Läufe dieses Materials"},
-    "combined_caption": {
-        "en": "Two workbooks (English and German -- Excel has no live "
-              "language switch, so it's two files, not one) and one "
-              "standalone dashboard (open the .html file directly in a "
-              "browser, no server needed, its own EN/DE toggle built in) "
-              "covering every specimen ever ingested for this material, not "
-              "just this run. Regenerated automatically on every Commit; "
-              "rebuild manually below if this predates that or looks stale.",
-        "de": "Zwei Arbeitsmappen (Englisch und Deutsch -- Excel hat keinen "
-              "Sprachwechsel zur Laufzeit, daher zwei Dateien statt einer) "
-              "und ein eigenständiges Dashboard (die .html-Datei "
-              "direkt im Browser öffnen, kein Server nötig, mit eigenem "
-              "EN/DE-Umschalter) für jede jemals für "
-              "dieses Material eingelesene Probe, nicht nur diesen Lauf. Wird bei "
-              "jedem Commit automatisch neu erzeugt; unten manuell neu erstellen, "
-              "falls dies älter ist oder veraltet wirkt."},
+    "combined_caption": {"en": 'An English and a German workbook plus one dashboard file (opens in any browser) with every specimen of this material. They are updated on every save; rebuild them here if they look out of date.', "de": 'Eine englische und eine deutsche Arbeitsmappe sowie eine Dashboard-Datei (öffnet in jedem Browser) mit allen Proben dieses Materials. Sie werden bei jedem Speichern aktualisiert; hier neu erstellen, falls sie veraltet wirken.'},
     "not_built_material": {"en": "Not built yet for this material.", "de": "Für dieses Material noch nicht erstellt."},
     "rebuild_now": {"en": "Rebuild now", "de": "Jetzt neu erstellen"},
     "rebuilding": {"en": "Rebuilding...", "de": "Wird neu erstellt…"},
-    "rebuilt_material": {"en": "Rebuilt from every indexed specimen of {material!r}.",
-        "de": "Neu erstellt aus allen indizierten Proben von {material!r}."},
-    "no_indexed_material": {"en": "No indexed specimens found for {material!r}.",
-        "de": "Keine indizierten Proben für {material!r} gefunden."},
+    "rebuilt_material": {"en": 'Rebuilt from every specimen of {material!r}.', "de": 'Neu erstellt aus allen Proben von {material!r}.'},
+    "no_indexed_material": {"en": 'No specimens found for {material!r}.', "de": 'Keine Proben für {material!r} gefunden.'},
     "overview_heading": {"en": "Overview across every material", "de": "Übersicht über alle Materialien"},
-    "overview_caption": {
-        "en": "One page listing every material in this workspace, with its "
-              "specimen/run counts, peak stress and thickness, and a link "
-              "into each material's own report. Open the .html file directly "
-              "in a browser, no server needed. Regenerated automatically on "
-              "every Commit, from any material.",
-        "de": "Eine Seite, die jedes Material in diesem Workspace auflistet, mit "
-              "Proben-/Laufzahlen, Spitzenspannung und Dicke, sowie einem Link zum "
-              "jeweiligen Materialbericht. Die .html-Datei direkt im Browser "
-              "öffnen, kein Server nötig. Wird bei jedem Commit, von jedem "
-              "Material aus, automatisch neu erzeugt."},
+    "overview_caption": {"en": "One page listing every material in this library with a link to each material's dashboard. Opens in any browser and is updated on every save.", "de": 'Eine Seite mit allen Materialien dieser Bibliothek und einem Link zum Dashboard jedes Materials. Öffnet in jedem Browser und wird bei jedem Speichern aktualisiert.'},
     "not_built": {"en": "Not built yet.", "de": "Noch nicht erstellt."},
-    "rebuilt_overview": {"en": "Rebuilt from every indexed material.", "de": "Aus allen indizierten Materialien neu erstellt."},
-    "no_indexed_workspace": {"en": "No indexed specimens found in this workspace.",
-        "de": "Keine indizierten Proben in diesem Workspace gefunden."},
+    "rebuilt_overview": {"en": 'Rebuilt from every material.', "de": 'Aus allen Materialien neu erstellt.'},
+    "no_indexed_workspace": {"en": 'No specimens found in this library.', "de": 'Keine Proben in dieser Bibliothek gefunden.'},
     # -- Activity tab --
     "no_activity": {"en": "No activity recorded yet.", "de": "Noch keine Aktivität erfasst."},
-    "activity_caption": {
-        "en": "Who ingested what, and when: one record per Commit, across the "
-              "whole workspace, not scoped to one run. The 15 most recent; every "
-              "record ever written is a small JSON file under audit/, or "
-              "`compression_tool audit` on the CLI.",
-        "de": "Wer was wann eingelesen hat: ein Eintrag je Commit, über den "
-              "gesamten Workspace, nicht auf einen Lauf beschränkt. Die 15 "
-              "neuesten; jeder jemals geschriebene Eintrag ist eine kleine "
-              "JSON-Datei unter audit/, oder `compression_tool audit` auf der "
-              "Kommandozeile."},
-    "col_time": {"en": "Time (UTC)", "de": "Zeit (UTC)"},
+    "activity_caption": {"en": 'Who saved what, and when. The 15 most recent saves in this library.', "de": 'Wer was wann gespeichert hat. Die 15 letzten Speichervorgänge in dieser Bibliothek.'},
+    "col_time": {"en": 'Time', "de": 'Zeit'},
     "col_user": {"en": "User", "de": "Benutzer"},
-    "col_host": {"en": "Host", "de": "Host"},
+    "col_host": {"en": 'Computer', "de": 'Computer'},
     "col_material": {"en": "Material", "de": "Material"},
     "col_specimens": {"en": "Specimens", "de": "Proben"},
     "col_skipped": {"en": "Skipped", "de": "Übersprungen"},
     "col_run": {"en": "Run", "de": "Lauf"},
     # -- Administration tab --
-    "index_heading": {"en": "Index", "de": "Index"},
-    "index_caption": {
-        "en": "The database every tab reads from, built from the JSON records "
-              "under Records/. It only ever grows or updates when this app "
-              "writes to it - if a record's file was deleted outside the app "
-              "(Explorer, the shared drive) the index still lists it until "
-              "reindexed, and a tab that then tries to open it will show an "
-              "error instead of the material. Rebuilding is always safe: the "
-              "JSON records are the source of truth, the index is only ever "
-              "derived from them.",
-        "de": "Die Datenbank, aus der jeder Tab liest, aufgebaut aus den "
-              "JSON-Datensätzen unter Records/. Sie wächst oder aktualisiert sich "
-              "nur, wenn diese App hineinschreibt - wurde die Datei eines "
-              "Datensatzes außerhalb der App gelöscht (Explorer, das gemeinsame "
-              "Laufwerk), listet der Index ihn bis zur Neuindizierung weiter, und "
-              "ein Tab, der ihn dann öffnen will, zeigt statt des Materials einen "
-              "Fehler. Neu erstellen ist immer sicher: die JSON-Datensätze sind "
-              "die maßgebliche Quelle, der Index wird nur aus ihnen abgeleitet."},
+    "index_heading": {"en": 'Sample list', "de": 'Probenliste'},
+    "index_caption": {"en": 'Rebuilds the list of samples from the files in the Records folder. Use it when Results says a record no longer exists, for example after files were deleted by hand. Always safe.', "de": 'Baut die Probenliste aus den Dateien im Ordner Records neu auf. Verwenden, wenn Ergebnisse meldet, dass ein Datensatz nicht mehr existiert, zum Beispiel nachdem Dateien von Hand gelöscht wurden. Immer gefahrlos.'},
     "reanalyze_all_heading": {"en": "Re-analyse all runs", "de": "Alle Läufe neu analysieren"},
-    "reanalyze_all_caption": {
-        "en": "Runs every saved test again from its archived original file, each "
-              "with the settings it was saved with, and replaces the stored "
-              "numbers. Use it once after a tool update that changes how values "
-              "are calculated, so every result in this library follows the same "
-              "method. Runs without an archived original are skipped.",
-        "de": "Wertet jede gespeicherte Prüfung erneut aus ihrer archivierten "
-              "Originaldatei aus, jeweils mit den Einstellungen, mit denen sie "
-              "gespeichert wurde, und ersetzt die gespeicherten Zahlen. Einmal nach "
-              "einem Tool-Update verwenden, das die Berechnung ändert, damit alle "
-              "Ergebnisse dieser Bibliothek derselben Methode folgen. Läufe ohne "
-              "archivierte Originaldatei werden übersprungen."},
+    "reanalyze_all_caption": {"en": 'Recalculates every saved run from its archived original file, each with its own settings. Use it once after a tool update that changes the calculation, so all results follow the same method.', "de": 'Berechnet jeden gespeicherten Lauf aus seiner archivierten Originaldatei neu, jeweils mit seinen eigenen Einstellungen. Einmal nach einem Tool-Update verwenden, das die Berechnung ändert, damit alle Ergebnisse derselben Methode folgen.'},
     "reanalyze_all_confirm": {"en": "I understand this replaces the stored analysis of every run",
         "de": "Mir ist klar, dass dies die gespeicherte Analyse aller Läufe ersetzt"},
     "reanalyze_all_button": {"en": "Re-analyse all runs", "de": "Alle Läufe neu analysieren"},
@@ -194,51 +123,23 @@ _T = {
               "It is harmless and can be deleted by hand later.",
         "de": "Der leere Ordner {run} konnte nicht entfernt werden (OneDrive synchronisiert "
               "ihn noch). Er ist harmlos und kann später von Hand gelöscht werden."},
-    "reindex": {"en": "Reindex from disk", "de": "Von der Festplatte neu indizieren"},
-    "reindexing": {"en": "Reindexing...", "de": "Wird neu indiziert…"},
-    "reindexed": {"en": "Reindexed {n} specimen record(s) from disk.",
-        "de": "{n} Probendatensatz/-sätze von der Festplatte neu indiziert."},
+    "reindex": {"en": "Rebuild sample list", "de": "Probenliste neu aufbauen"},
+    "reindexing": {"en": 'Rebuilding the list...', "de": 'Liste wird neu aufgebaut…'},
+    "reindexed": {"en": 'Rebuilt the list: {n} sample(s).', "de": 'Liste neu aufgebaut: {n} Probe(n).'},
     # -- Re-analyse tab --
-    "reanalyze_caption": {
-        "en": "Re-run this run's archived source file(s) with different "
-              "thresholds, without re-uploading anything. Change a value below "
-              "only if this run's numbers look wrong and a different setting "
-              "would fix it -- most runs never need this.",
-        "de": "Die archivierte(n) Quelldatei(en) dieses Laufs mit anderen "
-              "Schwellenwerten erneut auswerten, ohne etwas neu hochzuladen. "
-              "Einen Wert unten nur ändern, wenn die Zahlen dieses Laufs falsch "
-              "wirken und eine andere Einstellung das beheben würde -- die "
-              "meisten Läufe brauchen das nie."},
-    "reanalyze_unavailable": {
-        "en": "Not available - none of this run's source files were "
-              "archived (ingested with 'Archive a copy of the uploaded "
-              "file' unchecked on the Ingest tab), so there is nothing on "
-              "disk to re-run this from.",
-        "de": "Nicht verfügbar - keine der Quelldateien dieses Laufs wurde "
-              "archiviert (eingelesen mit deaktiviertem „Eine Kopie der "
-              "hochgeladenen Datei archivieren“ im Einlesen-Tab), daher gibt es "
-              "nichts auf der Festplatte, worauf das aufbauen könnte."},
+    "reanalyze_caption": {"en": 'Recalculate this run from its archived original with different thresholds, without uploading it again. Most runs never need this.', "de": 'Diesen Lauf aus seiner archivierten Originaldatei mit anderen Schwellenwerten neu berechnen, ohne ihn erneut hochzuladen. Die meisten Läufe brauchen das nie.'},
+    "reanalyze_unavailable": {"en": 'Not available: the original file of this run was not archived when it was saved.', "de": 'Nicht verfügbar: die Originaldatei dieses Laufs wurde beim Speichern nicht archiviert.'},
     "reanalyze_missing_warning": {
         "en": "{n} of {total} source file(s) for this run are missing from the "
               "archive and will be skipped: {names}",
         "de": "{n} von {total} Quelldatei(en) dieses Laufs fehlen im Archiv und "
               "werden übersprungen: {names}"},
-    "reanalyze_overwrite_note": {
-        "en": "This overwrites this run's stored numbers in place if the settings "
-              "below fingerprint the same as today's, or creates a new run "
-              "alongside it if they don't -- either way, nothing here touches the "
-              "original uploaded export.",
-        "de": "Dies überschreibt die gespeicherten Werte dieses Laufs direkt, "
-              "falls die Einstellungen unten denselben Fingerabdruck wie heute "
-              "ergeben, oder legt andernfalls einen neuen Lauf daneben an -- in "
-              "beiden Fällen bleibt der ursprünglich hochgeladene Export "
-              "unangetastet."},
+    "reanalyze_overwrite_note": {"en": 'The run is replaced by the new result; it is not saved a second time. The original export is never changed.', "de": 'Der Lauf wird durch das neue Ergebnis ersetzt, nicht ein zweites Mal gespeichert. Der ursprüngliche Export wird nie verändert.'},
     "reanalyze_confirm": {"en": "I understand this replaces this run's stored analysis",
         "de": "Mir ist klar, dass dies die gespeicherte Analyse dieses Laufs ersetzt"},
     "reanalyze_now": {"en": "Re-analyse now", "de": "Jetzt neu analysieren"},
     "reanalyzing": {"en": "Re-analysing...", "de": "Wird neu analysiert…"},
-    "reanalyzed_success": {"en": "Re-analysed into {run_dir} - {n} specimen(s).",
-        "de": "Neu analysiert nach {run_dir} - {n} Probe(n)."},
+    "reanalyzed_success": {"en": 'Re-analysed {run_dir} - {n} specimen(s).', "de": '{run_dir} neu analysiert - {n} Probe(n).'},
     "skipped_warning": {"en": "Skipped {name}: {why}", "de": "{name} übersprungen: {why}"},
 }
 
@@ -322,6 +223,31 @@ def _render_delete_run(ws: Workspace, run_dir: Path, L) -> None:
             st.rerun()
 
 
+# The settings a user can change on the Thresholds form, by the label they
+# carry there (not the internal field names).
+_SETTING_LABELS = (
+    ("unload_frac", "unload_sensitivity"),
+    ("major_cycle_frac", "min_cycle_size"),
+    ("stiff_lo_frac", "stiff_lo"),
+    ("stiff_hi_frac", "stiff_hi"),
+    ("residual_stress_frac", "reference_stress"),
+    ("hold_tol_frac", "hold_tol"),
+    ("h0_mm", "h0_override"),
+)
+
+
+def _settings_table(cfg: dict, L) -> pd.DataFrame:
+    lang = dashboard_lang()
+    rows = []
+    for key, label_key in _SETTING_LABELS:
+        value = cfg.get(key)
+        if key == "residual_stress_frac" and cfg.get("residual_stress_mpa"):
+            value = f"{cfg['residual_stress_mpa']:g} MPa"
+        rows.append({L("col_setting"): _FORM_T[label_key][lang],
+                     L("col_value"): "-" if value is None else (f"{value:g}" if isinstance(value, float) else str(value))})
+    return pd.DataFrame(rows)
+
+
 def _render_run(manifest: dict, L) -> None:
     with st.container(border=True, key="card_run_summary"):
         st.subheader(manifest.get("material", "-"))
@@ -373,9 +299,8 @@ def _render_run(manifest: dict, L) -> None:
         st.caption(L("none_recorded"))
 
     with st.expander(L("settings_used")):
-        st.json(manifest.get("config", {}), expanded=False)
-    with st.expander(L("full_manifest")):
-        st.json(manifest)
+        st.dataframe(_settings_table(manifest.get("config", {}), L),
+                     use_container_width=True, hide_index=True)
 
     st.caption(L("run_footer"))
 
@@ -470,7 +395,7 @@ def reanalyze_all(ws: Workspace) -> tuple[int, list[str], list[tuple[str, str]]]
             result = ingest(
                 found, ws, material=manifest.get("material", ""),
                 cfg=_manifest_config(manifest), when=_run_date(run_dir),
-                archive_originals=True, write_reports=True,
+                archive_originals=True, write_reports=_has_run_reports(run_dir),
                 label_stems=_reanalyze_label_stems(ws, manifest, run_dir),
                 allow_same_content=True,
             )
@@ -603,6 +528,37 @@ def _run_specimens(run_dir: Path | None) -> list[tuple[Path, dict]]:
     return out
 
 
+def _reanalyze_one(ws: Workspace, manifest: dict, run_dir: Path | None, found, material, cfg):
+    """Recalculate one run and put the result in its place. Changed settings
+    give the new result its own folder first (resolve_run_dir); once that
+    succeeded, the old run is deleted and the new folder takes its name, so
+    the material never holds the same specimens twice."""
+    result = ingest(
+        found, ws, material=material, cfg=cfg,
+        when=_run_date(run_dir) if run_dir is not None else None,
+        archive_originals=True, write_reports=_has_run_reports(run_dir),
+        label_stems=_reanalyze_label_stems(ws, manifest, run_dir),
+        allow_same_content=True,
+    )
+    _prune_stale_specimens(ws, result)
+    if result.specimens and run_dir is not None and result.run_dir.resolve() != run_dir.resolve():
+        delete_run(ws, run_dir)
+        try:
+            result.run_dir.rename(run_dir)
+            result.run_dir = run_dir
+        except OSError:
+            pass  # OneDrive holding the folder: the result keeps its own name
+        knowledge_base.rebuild(ws)
+        export_material(ws, result.material)
+    return result
+
+
+def _has_run_reports(run_dir: Path | None) -> bool:
+    """Whether a run was saved with the per-specimen Excel/CSV/HTML files, so a
+    re-analysis keeps them up to date rather than leaving stale copies."""
+    return bool(run_dir and run_dir.exists() and any(run_dir.glob("*.csv")))
+
+
 def _prune_stale_specimens(ws: Workspace, result) -> int:
     """After a re-analysis wrote a run, remove any other specimen in that
     same folder that came from the same source file but was not re-written:
@@ -663,15 +619,13 @@ def _render_reanalyze(ws: Workspace, manifest: dict, L, run_dir: Path | None = N
     ):
         result = with_utm_animation(
             L("reanalyzing"),
-            lambda: ingest(
-                found, ws, material=material, cfg=cfg,
-                archive_originals=True, write_reports=True,
-                label_stems=_reanalyze_label_stems(ws, manifest, run_dir),
-                allow_same_content=True,
-            ),
+            lambda: _reanalyze_one(ws, manifest, run_dir, found, material, cfg),
         )
-        _prune_stale_specimens(ws, result)
-        st.success(L("reanalyzed_success", run_dir=result.run_dir, n=len(result.specimens)))
-        for name, why in result.skipped:
-            st.warning(L("skipped_warning", name=name, why=why))
+        # Shown after the rerun (the run picker may now point at a renamed
+        # folder), at the top of the page.
+        st.session_state["cfg_flash"] = [
+            L("reanalyzed_success", run_dir=Path(result.run_dir).name, n=len(result.specimens)),
+            *(L("skipped_warning", name=name, why=why) for name, why in result.skipped),
+        ]
+        st.session_state.pop("cfg_run", None)
         st.rerun()

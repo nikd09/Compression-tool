@@ -43,26 +43,17 @@ _last_sweep = 0.0
 # same pattern as every other translated view.
 _T = {
     "header": {"en": "Ingest", "de": "Einlesen"},
-    "subtitle": {"en": "Upload one or more exports of the same series, look before committing, then archive and index them.",
-        "de": "Eine oder mehrere Exportdateien derselben Serie hochladen, vor dem Speichern prüfen, dann archivieren und indizieren."},
+    "subtitle": {"en": 'Upload the testXpert export(s) of one series, check the preview, then save.', "de": 'Die testXpert-Export(e) einer Serie hochladen, die Vorschau prüfen, dann speichern.'},
     "step1": {"en": "Upload", "de": "Hochladen"},
     "uploader_label": {"en": "Compression test export(s)", "de": "Druckversuchs-Exportdatei(en)"},
-    "uploader_help": {"en": "One or more .xlsx exports of the same series. Nothing is written to the workspace until Commit.",
-        "de": "Eine oder mehrere .xlsx-Exporte derselben Serie. Es wird nichts in den Workspace geschrieben, bis „Speichern“ gedrückt wird."},
+    "uploader_help": {"en": 'One or more .xlsx exports of the same series. Nothing is saved until you click Save to library.', "de": 'Eine oder mehrere .xlsx-Exporte derselben Serie. Gespeichert wird erst mit „In Bibliothek speichern“.'},
     "new_material": {"en": "+ Add new material…", "de": "+ Neues Material hinzufügen…"},
     "material_label": {"en": "Material", "de": "Material"},
-    "material_placeholder_empty": {"en": "e.g. PEEK-GF30, the first material in this workspace",
-        "de": "z. B. PEEK-GF30, das erste Material in diesem Workspace"},
+    "material_placeholder_empty": {"en": 'e.g. PEEK-GF30, the first material in this library', "de": 'z. B. PEEK-GF30, das erste Material in dieser Bibliothek'},
     "material_help_empty": {"en": "Every material typed here becomes a pickable option next time, so it never has to be retyped or matched exactly again.",
         "de": "Jedes hier eingetippte Material wird beim nächsten Mal auswählbar, sodass es nie wieder exakt eingetippt werden muss."},
     "material_placeholder_pick": {"en": "Pick a material, or add a new one", "de": "Ein Material auswählen, oder ein neues hinzufügen"},
-    "material_help_pick": {
-        "en": "Picking from this list, rather than retyping the name, is "
-              "what keeps \"SteelMesh\" and \"Steel Mesh\" from silently becoming "
-              "two materials that never compare against each other.",
-        "de": "Aus dieser Liste auszuwählen, statt den Namen neu einzutippen, "
-              "verhindert, dass „SteelMesh“ und „Steel Mesh“ stillschweigend zu "
-              "zwei Materialien werden, die nie miteinander verglichen werden."},
+    "material_help_pick": {"en": 'Pick from the list rather than retyping the name, so "SteelMesh" and "Steel Mesh" never become two separate materials.', "de": 'Aus der Liste wählen statt den Namen neu zu tippen, damit „SteelMesh“ und „Steel Mesh“ nie zu zwei getrennten Materialien werden.'},
     "new_material_name": {"en": "New material name", "de": "Name des neuen Materials"},
     "new_material_placeholder": {"en": "e.g. PEEK-GF30", "de": "z. B. PEEK-GF30"},
     "filename_warning": {
@@ -70,7 +61,7 @@ _T = {
               "code. A short code (e.g. 'T050LR1') reads far better as a "
               "Materials card and in Compare's legend - the file name itself "
               "is already kept, in full, on every specimen record. This can "
-              "still be fixed after Commit, from the Materials tab.",
+              "still be fixed after saving, from the Materials tab.",
         "de": "„{material}“ sieht wie der Dateiname des Exports aus, nicht wie "
               "ein Materialcode. Ein kurzer Code (z. B. „T050LR1“) liest sich "
               "als Materialkarte und in der Legende unter Vergleich deutlich besser "
@@ -111,49 +102,27 @@ _T = {
         "de": "Zeigt die {max} neuesten von {total} Proben; die Farbpalette des "
               "Dashboards hat ein hartes Limit von {max} Serien."},
     "open_in_new_tab": {"en": "Open dashboard in a new tab", "de": "Dashboard in neuem Tab öffnen"},
-    "step4": {"en": "Commit", "de": "Speichern"},
-    "step4_sub": {"en": "Archives the raw file and writes the record - re-running the same file is a no-op.",
-        "de": "Archiviert die Rohdatei und schreibt den Datensatz - dieselbe Datei erneut auszuführen bewirkt nichts."},
+    "step4": {"en": 'Save', "de": 'Speichern'},
+    "step4_sub": {"en": 'Saves the result in the library chosen in the sidebar. A file that is already saved is not saved again.', "de": 'Speichert das Ergebnis in der Bibliothek, die in der Seitenleiste gewählt ist. Eine bereits gespeicherte Datei wird nicht erneut gespeichert.'},
     "archive_checkbox": {"en": "Archive a copy of the uploaded file", "de": "Eine Kopie der hochgeladenen Datei archivieren"},
-    "archive_help": {
-        "en": "Copies the export into Raw exports/ before analysis, so a "
-              "result can always be traced back to the exact bytes that "
-              "produced it. Uncheck if you already keep your own copies "
-              "elsewhere and do not want a second one on disk. The file's "
-              "SHA-256 is still recorded either way, which is what a "
-              "re-ingest of the same file is detected from.",
-        "de": "Kopiert den Export vor der Analyse nach Raw exports/, damit ein "
-              "Ergebnis immer bis zu den exakten Bytes zurückverfolgt werden "
-              "kann, die es erzeugt haben. Deaktivieren, wenn bereits eigene "
-              "Kopien anderswo aufbewahrt werden und keine zweite auf der "
-              "Festplatte gewünscht ist. Der SHA-256-Wert der Datei wird in "
-              "jedem Fall erfasst, woran ein erneutes Einlesen derselben Datei "
-              "erkannt wird."},
-    "write_reports_checkbox": {"en": "Write per-run Excel/CSV/HTML", "de": "Excel/CSV/HTML je Lauf schreiben"},
+    "archive_help": {"en": 'Keeps a copy of the export in the Raw exports folder, so a result can always be traced back to its file and re-analysed later.', "de": 'Bewahrt eine Kopie des Exports im Ordner Raw exports auf, damit ein Ergebnis immer auf seine Datei zurückgeführt und später neu analysiert werden kann.'},
+    "write_reports_checkbox": {"en": "Also write Excel/CSV/HTML per specimen",
+        "de": "Zusätzlich Excel/CSV/HTML je Probe schreiben"},
     "write_reports_help": {
-        "en": "Writes a per-specimen and per-run Excel workbook, CSV and "
-              "HTML report alongside the JSON record. Uncheck if you only "
-              "open the combined report in reports/<material> (see Config) "
-              "and find these per-run copies redundant. The JSON record "
-              "and curve cache, which the combined report and every chart "
-              "are rebuilt from, are always written either way.",
-        "de": "Schreibt eine Excel-Arbeitsmappe, CSV und einen HTML-Bericht je "
-              "Probe und je Lauf, zusätzlich zum JSON-Datensatz. Deaktivieren, "
-              "wenn nur der zusammengeführte Bericht unter reports/<material> "
-              "(siehe Config) geöffnet wird und diese Kopien je Lauf "
-              "überflüssig sind. Der JSON-Datensatz und der Kurven-Cache, aus "
-              "denen der zusammengeführte Bericht und jedes Diagramm neu "
-              "erzeugt werden, werden in jedem Fall immer geschrieben."},
-    "commit_button": {"en": "Commit to workspace", "de": "In Workspace speichern"},
-    "commit_error_no_material": {"en": "Pick or type a material name above before committing.",
-        "de": "Vor dem Speichern oben einen Materialnamen auswählen oder eingeben."},
-    "committing": {"en": "Committing…", "de": "Wird gespeichert…"},
+        "en": "Extra files for each specimen and run in the Records folder. Usually "
+              "not needed: the material's combined Excel files and dashboard are "
+              "always written (see Config → Exports).",
+        "de": "Zusätzliche Dateien je Probe und Lauf im Ordner Records. Meist nicht "
+              "nötig: die zusammengefassten Excel-Dateien und das Dashboard des "
+              "Materials werden immer geschrieben (siehe Konfiguration → Exporte)."},
+    "commit_button": {"en": 'Save to library', "de": 'In Bibliothek speichern'},
+    "commit_error_no_material": {"en": 'Pick or type a material name above before saving.', "de": 'Vor dem Speichern oben einen Materialnamen auswählen oder eingeben.'},
+    "committing": {"en": 'Saving…', "de": 'Wird gespeichert…'},
     "matched_existing": {
         "en": "'{typed}' matched to the existing material '{actual}' instead of creating a near-duplicate.",
         "de": "„{typed}“ wurde dem bestehenden Material „{actual}“ zugeordnet, "
               "statt ein Fast-Duplikat anzulegen."},
-    "ingested_success": {"en": "Ingested {n} specimen(s) of '{material}' into {run_dir}",
-        "de": "{n} Probe(n) von „{material}“ in {run_dir} eingelesen"},
+    "ingested_success": {"en": "Saved {n} specimen(s) of '{material}' in {run_dir}", "de": '{n} Probe(n) von „{material}“ in {run_dir} gespeichert'},
 }
 
 
@@ -571,7 +540,10 @@ def render(ws: Workspace) -> None:
         )
     with c2:
         write_reports = st.checkbox(
-            L("write_reports_checkbox"), value=True,
+            # Off by default: five extra files per specimen slow OneDrive
+            # down and can lock folders; the combined workbook and
+            # dashboard of the material are always written.
+            L("write_reports_checkbox"), value=False,
             help=L("write_reports_help"),
         )
     if st.button(L("commit_button"), type="primary", icon=":material/save:"):

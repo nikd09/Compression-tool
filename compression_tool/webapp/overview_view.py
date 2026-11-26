@@ -37,18 +37,12 @@ _SEVERITY_ICON = {
 # numbers it describes) -- this dict is only this page's own chrome.
 _T = {
     "header": {"en": "Overview", "de": "Übersicht"},
-    "subtitle": {"en": "What's in this workspace, and what needs a look, before picking a task.",
-        "de": "Was in diesem Workspace steckt, und was einen Blick braucht, bevor eine Aufgabe gewählt wird."},
+    "subtitle": {"en": "What's in this library, and what needs a look.", "de": 'Was in dieser Bibliothek steckt, und was einen Blick braucht.'},
     "materials": {"en": "Materials", "de": "Materialien"},
     "specimens": {"en": "Specimens", "de": "Proben"},
     "runs": {"en": "Runs", "de": "Läufe"},
-    "empty_title": {"en": "Nothing ingested into this workspace yet",
-        "de": "In diesen Workspace wurde noch nichts eingelesen"},
-    "empty_caption": {
-        "en": "Bring in a test export to get started -- Preview shows what the "
-              "engine sees before anything is committed.",
-        "de": "Eine Test-Exportdatei hinzufügen, um zu starten -- die Vorschau "
-              "zeigt, was die Engine sieht, bevor etwas gespeichert wird."},
+    "empty_title": {"en": 'Nothing saved in this library yet', "de": 'In dieser Bibliothek ist noch nichts gespeichert'},
+    "empty_caption": {"en": 'Upload a test export on Ingest to get started. The preview shows the result before anything is saved.', "de": 'Unter „Einlesen“ eine Prüfdatei hochladen, um zu starten. Die Vorschau zeigt das Ergebnis, bevor etwas gespeichert wird.'},
     "go_to_ingest": {"en": "Go to Ingest", "de": "Zum Einlesen"},
     "needs_a_look": {"en": "Needs a look", "de": "Braucht einen Blick"},
     "no_open_warnings": {"en": "No open diagnostic warnings across the {n} most recently analysed specimen(s).",
@@ -63,7 +57,7 @@ _T = {
     "more": {"en": " (+{n} more)", "de": " (+{n} weitere)"},
     "recent_activity": {"en": "Recent activity", "de": "Letzte Aktivität"},
     "full_log": {"en": "Full log", "de": "Vollständiges Protokoll"},
-    "ingested_n_into": {"en": "{time} · {user} ingested {n} specimen(s) into **{material}**",
+    "ingested_n_into": {"en": "{time} · {user} saved {n} specimen(s) to **{material}**",
         "de": "{time} · {user} hat {n} Probe(n) in **{material}** eingelesen"},
 }
 
@@ -128,7 +122,12 @@ def _render_warnings(ws: Workspace, specimens, lang: str, L) -> None:
             # Results is where a missing record gets its own real error and
             # points at "Reindex from disk".
             continue
-        warnings = record.get("analysis", {}).get("warnings", [])
+        # Info notes (e.g. "seating cycle excluded") are normal on almost every
+        # test; only Critical and Caution need someone to look.
+        warnings = [
+            w for w in record.get("analysis", {}).get("warnings", [])
+            if w.get("severity") in ("critical", "caution")
+        ]
         if warnings:
             n_specimens_flagged += 1
             by_material.setdefault(row["material"], []).extend(warnings)

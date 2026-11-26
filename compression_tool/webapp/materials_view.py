@@ -26,10 +26,8 @@ from .common import dashboard_lang, inject_dashboard_lang
 _T = {
     "header": {"en": "Materials", "de": "Materialien"},
     "search_placeholder": {"en": "Search materials…", "de": "Materialien durchsuchen…"},
-    "caption": {"en": "Every material in this workspace, at a glance. Click one to open its full dashboard.",
-        "de": "Jedes Material in diesem Workspace auf einen Blick. Anklicken, um sein vollständiges Dashboard zu öffnen."},
-    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesen Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
+    "caption": {"en": 'Every material in this library. Click a name to open its full dashboard.', "de": 'Alle Materialien dieser Bibliothek. Auf einen Namen klicken, um sein vollständiges Dashboard zu öffnen.'},
+    "no_data": {"en": 'Nothing saved in this library yet - use Ingest first.', "de": 'In dieser Bibliothek ist noch nichts gespeichert - zuerst unter „Einlesen“ eine Datei hinzufügen.'},
     "no_match": {"en": "No materials match “{query}”.", "de": "Keine Materialien passen zu „{query}“."},
     "specimens": {"en": "Specimens", "de": "Proben"},
     "runs": {"en": "Runs", "de": "Läufe"},
@@ -90,7 +88,7 @@ _T = {
     "deleted_toast": {"en": "Deleted {specimens} specimen(s) across {runs} run(s).",
         "de": "{specimens} Probe(n) über {runs} Lauf/Läufe gelöscht."},
     "back_to_materials": {"en": "← Back to Materials", "de": "← Zurück zu Materialien"},
-    "no_dashboard": {"en": "No dashboard could be built for {material!r}: it may have no indexed specimens.",
+    "no_dashboard": {"en": "No dashboard could be built for {material!r}: it may have no saved specimens.",
         "de": "Für {material!r} konnte kein Dashboard erstellt werden: es hat möglicherweise keine indizierten Proben."},
 }
 

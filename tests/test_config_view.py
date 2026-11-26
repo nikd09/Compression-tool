@@ -188,7 +188,7 @@ def test_maintenance_tab_works_even_with_nothing_ingested(monkeypatch, workspace
     at = _run(monkeypatch, workspace)
 
     assert not at.exception
-    assert any(b.label == "Reindex from disk" for b in at.button)
+    assert any(b.label == "Rebuild sample list" for b in at.button)
     assert not any("admin" in (b.label or "").lower() for b in at.button)
 
 
@@ -350,3 +350,27 @@ def _series_copy(tmp_path):
     path = tmp_path / "series_src.xlsx"
     write_series_workbook(path, {"1": (s, x), "2": (s, x * 1.01)})
     return path
+
+
+def test_reanalysing_with_changed_settings_replaces_the_run(workspace, single_file):
+    """Changed thresholds used to save a second run next to the first, so the
+    material showed every specimen twice. The new result now takes the old
+    run's place."""
+    from datetime import datetime
+
+    from compression_tool.webapp.config_view import _reanalyze_one
+
+    ws = Workspace.at(workspace).ensure()
+    first = ingest([single_file], ws, material="TALCO50", when=datetime(2026, 1, 5))
+    manifest = read_json(first.run_dir / "run.json")
+    found, _ = _reanalyze_sources(ws, manifest)
+
+    result = _reanalyze_one(ws, manifest, first.run_dir, found, "TALCO50", Config(unload_frac=0.3))
+
+    runs = [p.parent.name for p in ws.processed.glob("*/run.json")]
+    assert runs == [first.run_dir.name]
+    assert read_json(first.run_dir / "run.json")["config"]["unload_frac"] == 0.3
+    conn = knowledge_base.connect(ws.db_path)
+    assert len(knowledge_base.list_specimens(conn, "TALCO50")) == len(first.specimens)
+    conn.close()
+    assert result.run_dir == first.run_dir

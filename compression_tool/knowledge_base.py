@@ -112,7 +112,7 @@ def _check_schema_version(conn: sqlite3.Connection) -> None:
     raise SchemaVersionMismatch(
         f"This index was built under schema {row[0]!r}; this version of the "
         f"tool expects schema {SCHEMA_VERSION!r}. Rebuild the index from "
-        f"disk (Config -> \"Reindex from disk\", or `compression-tool "
+        f"disk (Config -> \"Rebuild sample list\", or `compression-tool "
         f"rebuild` on the CLI) rather than using it as it is -- the JSON "
         f"records under Records/ are unaffected either way."
     )

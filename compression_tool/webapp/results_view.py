@@ -19,9 +19,8 @@ _TEMPLATE_PATH = Path(__file__).parent / "templates" / "results_dashboard.html"
 
 _T = {
     "header": {"en": "Results", "de": "Ergebnisse"},
-    "no_data": {"en": "Nothing ingested into this workspace yet - use Ingest first.",
-        "de": "In diesem Workspace wurde noch nichts eingelesen - zuerst unter „Einlesen“ eine Datei hinzufügen."},
-    "no_specimens": {"en": "No specimens indexed yet.", "de": "Noch keine Proben indiziert."},
+    "no_data": {"en": 'Nothing saved in this library yet - use Ingest first.', "de": 'In dieser Bibliothek ist noch nichts gespeichert - zuerst unter „Einlesen“ eine Datei hinzufügen.'},
+    "no_specimens": {"en": "No specimens saved yet.", "de": "Noch keine Proben gespeichert."},
     "material": {"en": "Material", "de": "Material"},
     "no_material_specimens": {"en": "No specimens for this material.", "de": "Keine Proben für dieses Material."},
     "specimens": {"en": "Specimens (1-{n})", "de": "Proben (1-{n})"},
@@ -45,12 +44,12 @@ _T = {
               "weniger Spalten, damit die Balken lesbar bleiben. Proben im Dashboard "
               "ausblenden, um es wieder kompakter zu machen."},
     "missing_record": {
-        "en": "The index still lists {names} but its record no longer exists on disk - "
-              "it was likely deleted outside the app. Go to Config and use \"Reindex "
-              "from disk\" to bring the index back in line with what is actually there.",
-        "de": "Der Index führt noch {names}, aber der Datensatz existiert nicht mehr - "
-              "vermutlich außerhalb der App gelöscht. Unter Konfiguration „Von der "
-              "Festplatte neu indizieren“ ausführen, damit der Index wieder stimmt."},
+        "en": "The sample list still shows {names} but its record no longer exists on disk - "
+              "it was likely deleted outside the app. Go to Config and use \"Rebuild "
+              "sample list\" to bring the list back in line with the files.",
+        "de": "Die Probenliste zeigt noch {names}, aber der Datensatz existiert nicht mehr - "
+              "vermutlich außerhalb der App gelöscht. Unter Konfiguration „Probenliste "
+              "neu aufbauen“ ausführen, damit die Liste wieder stimmt."},
     "missing_curve": {
         "en": "No curve cache found for: {names}. The stress-displacement panel will be "
               "empty for it; re-ingest to generate one. Every other chart is unaffected.",

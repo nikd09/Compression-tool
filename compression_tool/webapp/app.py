@@ -16,7 +16,7 @@ from pathlib import Path
 import streamlit as st
 
 from compression_tool.logging_config import configure_logging
-from compression_tool.persistence import default_index_root
+from compression_tool.persistence import default_index_root, outdated_runs
 from compression_tool.webapp import (
     compare_view,
     config_view,
@@ -26,7 +26,7 @@ from compression_tool.webapp import (
     results_view,
 )
 from compression_tool.webapp.auth import require_password
-from compression_tool.webapp.common import language_picker, polish, workspace_picker
+from compression_tool.webapp.common import dashboard_lang, language_picker, polish, workspace_picker
 
 st.set_page_config(page_title="CompressLab", page_icon="📊", layout="wide")
 
@@ -287,6 +287,26 @@ _NAV_CSS = """
 """
 
 
+_OUTDATED_T = {
+    "en": "{n} run(s) in this library were calculated with an older method, so "
+          "their numbers do not match newer runs. Go to Config → Maintenance → "
+          "Re-analyse all runs once.",
+    "de": "{n} Lauf/Läufe in dieser Bibliothek wurden mit einer älteren Methode "
+          "berechnet, ihre Zahlen passen daher nicht zu neueren Läufen. Einmal "
+          "unter Konfiguration → Wartung → Alle Läufe neu analysieren ausführen.",
+}
+
+
+def _outdated_banner(ws) -> None:
+    """One line at the top of every page while old-method runs remain."""
+    try:
+        runs = outdated_runs(ws)
+    except Exception:  # never let a status line stop the page
+        return
+    if runs:
+        st.warning(_OUTDATED_T[dashboard_lang()].format(n=len(runs)), icon=":material/update:")
+
+
 def main() -> None:
     # First thing after set_page_config, before anything else renders --
     # see auth.py. A no-op unless COMPRESSION_TOOL_PASSWORD is set.
@@ -352,6 +372,7 @@ def main() -> None:
         ws = workspace_picker()
 
     view = {name: fn for name, _, fn in NAV_ITEMS}[st.session_state["nav_view"]]
+    _outdated_banner(ws)
     view(ws)
 
     # Cosmetic rerun for the sidebar's own highlight, placed as the LAST

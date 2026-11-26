@@ -127,46 +127,23 @@ _CONFIG_FORM_T = {
     "expander": {"en": "Advanced: segmentation and reference thresholds",
         "de": "Erweitert: Segmentierungs- und Referenzschwellenwerte"},
     "intro": {
-        "en": "Every threshold is relative to the test's own peak stress, never "
-              "absolute: the same knobs `--unload-frac` etc. expose on the "
-              "command line. Cycle boundaries are found by locally-adaptive peak "
-              "detection, not by these numbers directly -- unload_frac and "
-              "major_cycle_frac are SAFETY FLOORS on that. The stiffness "
-              "window sets the relative-band stiffness of every cycle. "
-              "Defaults work unmodified for "
-              "most exports; change one only if Preview below shows a stage being "
-              "lost or a cycle miscounted.",
-        "de": "Jeder Schwellenwert ist relativ zur eigenen Spitzenspannung der "
-              "Prüfung, nie absolut: dieselben Regler, die `--unload-frac` usw. "
-              "auf der Kommandozeile bereitstellen. Zyklusgrenzen werden durch "
-              "lokal-adaptive Peak-Erkennung gefunden, nicht direkt durch diese "
-              "Zahlen -- unload_frac und major_cycle_frac sind "
-              "SICHERHEITSUNTERGRENZEN dafür. Das Steifigkeitsfenster legt die "
-              "Steifigkeit (eigenes Fenster) jedes Zyklus fest. Die Standardwerte "
-              "funktionieren unverändert für die meisten Exporte; einen Wert nur "
-              "ändern, wenn die Vorschau unten eine verlorene Stufe oder einen "
-              "falsch gezählten Zyklus zeigt."},
+        "en": "All values are fractions of the test's own highest stress, so the same "
+              "setting works for a 3 MPa and a 450 MPa test. The defaults suit most "
+              "tests; change one only if the preview shows a wrong number of cycles "
+              "or you need a different reference stress or thickness.",
+        "de": "Alle Werte sind Anteile der höchsten Spannung der jeweiligen Prüfung, "
+              "daher passt dieselbe Einstellung für eine 3-MPa- wie für eine "
+              "450-MPa-Prüfung. Die Standardwerte passen für die meisten Prüfungen; "
+              "einen Wert nur ändern, wenn die Vorschau eine falsche Zyklenzahl zeigt "
+              "oder eine andere Referenzspannung oder Dicke nötig ist."},
     "unload_sensitivity": {"en": "Unload sensitivity", "de": "Entlastungsempfindlichkeit"},
     "unload_sensitivity_help": {
-        "en": "A candidate cycle's bounding valley must give back at least this "
-              "fraction of the candidate's OWN peak stress to count as a real "
-              "load-unload separation, rather than a shoulder on the ramp toward "
-              "a taller neighbouring peak.",
-        "de": "Das umgebende Tal eines Kandidatenzyklus muss mindestens diesen "
-              "Anteil der EIGENEN Spitzenspannung des Kandidaten nachgeben, um "
-              "als echte Trennung zwischen Be- und Entlastung zu zählen, statt "
-              "als Schulter auf dem Weg zu einem höheren Nachbarn."},
+        "en": 'How far the stress must drop after a peak, as a share of that peak, to count as a real unload. Raise it if small wiggles are counted as extra cycles; lower it if real cycles are missed.',
+        "de": 'Wie weit die Spannung nach einer Spitze fallen muss, als Anteil dieser Spitze, damit es als echte Entlastung zählt. Erhöhen, wenn kleine Schwankungen als zusätzliche Zyklen zählen; senken, wenn echte Zyklen fehlen.'},
     "min_cycle_size": {"en": "Minimum cycle size", "de": "Mindestzyklusgröße"},
     "min_cycle_size_help": {
-        "en": "A candidate peaking below this fraction of the GLOBAL peak is "
-              "rejected outright, regardless of its neighbours -- catches "
-              "near-zero contact-finding blips. Kept low: real stages are judged "
-              "by unload_frac and local noise, not by this.",
-        "de": "Ein Kandidat mit einer Spitze unter diesem Anteil der GLOBALEN "
-              "Spitze wird unabhängig von seinen Nachbarn sofort verworfen -- "
-              "fängt Nahe-Null-Kontaktartefakte ab. Niedrig gehalten: echte "
-              "Stufen werden anhand von unload_frac und lokalem Rauschen "
-              "beurteilt, nicht hierdurch."},
+        "en": "Peaks smaller than this share of the test's highest stress are ignored. Catches small blips while the machine finds contact.",
+        "de": 'Spitzen unter diesem Anteil der höchsten Spannung der Prüfung werden ignoriert. Fängt kleine Ausschläge beim Anfahren ab.'},
     "stiff_lo": {"en": "Stiffness window start", "de": "Steifigkeitsfenster Anfang"},
     "stiff_lo_help": {
         "en": "Start of the relative-band stiffness window, as a fraction of each "
@@ -210,7 +187,7 @@ _CONFIG_FORM_T = {
 
 def config_form(detect_holds: bool = True) -> Config:
     """The "Advanced: segmentation and reference thresholds" expander --
-    every threshold knob the CLI also exposes, defaulted from a fresh
+    every threshold setting, defaulted from a fresh
     Config() and rendered as one form. Shared between Ingest (where a
     changed value is tried against a Preview before anything is committed)
     and Config's "Re-analyse this run" (where it is applied straight to a
@@ -226,46 +203,30 @@ def config_form(detect_holds: bool = True) -> Config:
     d = Config()
     with st.expander(L("expander")):
         st.caption(L("intro"))
-        # Every field pairs a plain-language label (what a materials engineer
-        # who has never opened core.py would call this) with the exact
-        # Config field name/CLI flag as a small caption underneath -- not
-        # replaced, since that name is still what --unload-frac etc. expect
-        # on the command line and what "Settings this run used" on Config
-        # prints back. Neither alone was right: the raw field name as the
-        # ONLY label assumes everyone reads this file's source; the plain
-        # label alone would silently break the link to the CLI/JSON name the
-        # same knob is addressed by everywhere else.
         c1, c2 = st.columns(2)
         with c1:
             unload_frac = st.number_input(
                 L("unload_sensitivity"), value=d.unload_frac, format="%.3f",
                 help=L("unload_sensitivity_help"))
-            st.caption("`unload_frac`")
             major_cycle_frac = st.number_input(
                 L("min_cycle_size"), value=d.major_cycle_frac, format="%.3f",
                 help=L("min_cycle_size_help"))
-            st.caption("`major_cycle_frac`")
             stiff_lo_frac = st.number_input(
                 L("stiff_lo"), value=d.stiff_lo_frac, format="%.2f",
                 help=L("stiff_lo_help"))
-            st.caption("`stiff_lo_frac`")
             stiff_hi_frac = st.number_input(
                 L("stiff_hi"), value=d.stiff_hi_frac, format="%.2f",
                 help=L("stiff_hi_help"))
-            st.caption("`stiff_hi_frac`")
         with c2:
             residual_stress_frac = st.number_input(
                 L("reference_stress"), value=d.residual_stress_frac, format="%.2f",
                 help=L("reference_stress_help"))
-            st.caption("`residual_stress_frac`")
             hold_tol_frac = st.number_input(
                 L("hold_tol"), value=d.hold_tol_frac, format="%.3f",
                 help=L("hold_tol_help"))
-            st.caption("`hold_tol_frac`")
             h0_text = st.text_input(
                 L("h0_override"), value="",
                 placeholder=L("h0_placeholder"))
-            st.caption("`h0_mm`")
     h0_mm = None
     if h0_text.strip():
         try:
@@ -511,13 +472,7 @@ _LIBRARY_T = {
     "locations": {"en": "Library locations", "de": "Speicherorte der Bibliotheken"},
     "shared_path": {"en": "Shared library folder", "de": "Ordner der gemeinsamen Bibliothek"},
     "local_path": {"en": "My local library folder", "de": "Ordner meiner lokalen Bibliothek"},
-    "path_help": {
-        "en": "Where Raw exports/, Records/ and reports/ live. Any folder you can "
-              "write to works; it is created on the first Commit. Saved on this PC "
-              "only, so every user sets their own.",
-        "de": "Wo Raw exports/, Records/ und reports/ liegen. Jeder beschreibbare "
-              "Ordner funktioniert; er wird beim ersten Commit angelegt. Nur auf "
-              "diesem PC gespeichert, jeder Benutzer stellt seinen eigenen ein."},
+    "path_help": {"en": 'The folder that holds the saved results. Any folder you can write to works; it is created on the first save. Remembered on this PC only, so every user sets their own.', "de": 'Der Ordner mit den gespeicherten Ergebnissen. Jeder beschreibbare Ordner funktioniert; er wird beim ersten Speichern angelegt. Nur auf diesem PC gespeichert, jeder Benutzer stellt seinen eigenen ein.'},
 }
 
 

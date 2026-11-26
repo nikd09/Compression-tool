@@ -714,3 +714,16 @@ def test_same_data_under_another_name_is_not_saved_twice(workspace, single_file,
     other = ingest([copy], workspace, material="OTHER")
     assert other.specimens
     assert not other.specimens[0].label.startswith("0123456789ab_")
+
+
+def test_runs_saved_with_an_older_method_are_reported(workspace, single_file):
+    from compression_tool.core import METHOD_VERSION
+    ws = Workspace.at(workspace).ensure()
+    result = ingest([single_file], ws, material="M")
+    manifest = result.run_dir / "run.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["method_version"] == METHOD_VERSION
+    assert persistence.outdated_runs(ws) == []
+    del data["method_version"]
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    assert persistence.outdated_runs(ws) == [result.run_dir.name]

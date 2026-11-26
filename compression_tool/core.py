@@ -848,6 +848,13 @@ def _energies(stress, disp) -> tuple[Optional[float], Optional[float], Optional[
     return w_in, w_out, w_in - w_out
 
 
+# Version of the calculation method, stored with every run. Raise it whenever
+# a change alters the numbers of an already saved test, so the app can say
+# which runs still carry results from an older method.
+#   1: up to Nov 2026 (relative band auto-located, seating cycle counted)
+#   2: PL-0087 alignment (relative band 25-75 %, seating cycle excluded)
+METHOD_VERSION = 2
+
 # A first cycle without a hold counts as the seating cycle only if its peak
 # is well below the next cycle's (PL-0087: 10 MPa before a 50 MPa step).
 SEATING_MAX_FRAC_OF_NEXT = 0.5

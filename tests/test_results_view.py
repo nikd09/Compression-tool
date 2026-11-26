@@ -47,7 +47,7 @@ def test_a_specimen_deleted_outside_the_app_shows_a_reindex_error_not_a_crash(
     at = _run(monkeypatch, workspace)
     assert not at.exception
     assert at.error
-    assert "Reindex from disk" in at.error[0].value
+    assert "Rebuild" in at.error[0].value
 
 
 def test_material_picker_honours_a_previously_active_material(monkeypatch, workspace, single_file):
