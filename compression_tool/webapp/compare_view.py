@@ -21,6 +21,11 @@ from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot, sh
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
 
+# Points the hover layer of the raw-curve chart may carry. The lines are drawn
+# from every stored point; only the invisible "nearest point" layer is thinned,
+# since the browser recomputes it on every mouse move.
+MAX_HOVER_POINTS = 1500
+
 # Each cycle is placed on the stress axis at its peak stress, rounded to this
 # step, so specimens of one group that reached 449.8 and 450.3 MPa share one
 # point, and a 6-cycle and a 9-cycle run line up at 50, 100 ... 300 MPa.
@@ -122,8 +127,9 @@ _T = {
         "de": "Jeder Punkt ist der Mittelwert der Gruppe auf dieser Laststufe; der "
               "senkrechte Strich ist ±1 Standardabweichung über ihre Proben."},
     "curves_heading": {"en": "Stress-displacement curves", "de": "Spannungs-Weg-Kurven"},
-    "curves_step": {"en": "Stress-displacement curves: steps shown",
-        "de": "Spannungs-Weg-Kurven: angezeigte Stufen"},
+    "curves_show": {"en": "Show stress-displacement curves",
+        "de": "Spannungs-Weg-Kurven anzeigen"},
+    "curves_step": {"en": "Steps shown", "de": "Angezeigte Stufen"},
     "curves_all_steps": {"en": "All steps", "de": "Alle Stufen"},
     "curves_step_option": {"en": "{mpa:g} MPa step", "de": "Stufe {mpa:g} MPa"},
     "curves_caption": {
@@ -156,7 +162,9 @@ _T = {
 
 
 def _default_group_count(n_materials: int) -> int:
-    return max(2, min(n_materials, MAX_GROUPS))
+    # Two groups to start with, not one per material: a library of many
+    # materials made the page draw all of them at once on every visit.
+    return 2 if n_materials >= 2 else 1
 
 
 def _decimals(fmt: str) -> int:
@@ -235,6 +243,13 @@ def _subtitle(unit: str, show_spread: bool, lang: str) -> str:
     return f"{unit} · {what}" if unit else what
 
 
+@st.cache_data(show_spinner=False, max_entries=512)
+def _read_curve(path: str, mtime: float) -> dict:
+    """One curve cache file, read once per version of the file (mtime is part
+    of the key so a re-analysed run is read again)."""
+    return read_curve_cache(path)
+
+
 def _curve_rows(
     ws: Workspace, specimens: pd.DataFrame, groups: list[dict], cycles: pd.DataFrame,
     level: float | None,
@@ -253,7 +268,7 @@ def _curve_rows(
             row = row_by_id.loc[sid]
             path = curve_cache_path_for(ws.root / row["json_path"])
             try:
-                cache = read_curve_cache(path)
+                cache = _read_curve(str(path), path.stat().st_mtime)
             except (FileNotFoundError, OSError, ValueError):
                 missing.append(str(row["label"]))
                 continue
@@ -294,13 +309,36 @@ def _local_stiffness(disp_mm: pd.Series, stress: pd.Series) -> pd.Series:
     return out
 
 
+def _common_top_level(cycles: pd.DataFrame, groups: list[dict]) -> float | None:
+    """The highest stress step every group reached -- the default step for
+    the raw curves, so all groups appear in it."""
+    tops = []
+    for g in groups:
+        lv = cycles.loc[cycles["specimen_id"].isin(g["ids"]), "StressLevel_MPa"].dropna()
+        if lv.empty:
+            continue
+        tops.append(lv.max())
+    if not tops:
+        return None
+    common = min(tops)
+    levels = sorted(cycles["StressLevel_MPa"].dropna().unique().tolist())
+    below = [v for v in levels if v <= common]
+    return below[-1] if below else None
+
+
 def _render_curves(ws, specimens, groups, cycles, group_order, color, L, lang) -> None:
+    # Off until asked for: drawing every curve of every group is the heaviest
+    # thing on this page, and most visits only need the property chart.
+    if not st.checkbox(L("curves_show"), value=False, key="cmp_curves_show"):
+        return
     # No separate section heading: the chart carries the title itself, so a
     # downloaded PNG is labelled too.
     levels = sorted(cycles["StressLevel_MPa"].dropna().unique().tolist())
     options = [None] + levels
+    default = _common_top_level(cycles, groups)
     level = st.selectbox(
-        L("curves_step"), options, key="cmp_curve_step", index=0,
+        L("curves_step"), options, key="cmp_curve_step",
+        index=options.index(default) if default in options else 0,
         format_func=lambda v: L("curves_all_steps") if v is None else L("curves_step_option", mpa=v),
     )
     data, missing = _curve_rows(ws, specimens, groups, cycles, level)
@@ -331,7 +369,8 @@ def _render_curves(ws, specimens, groups, cycles, group_order, color, L, lang) -
     lines = base.mark_line(strokeWidth=1.3, opacity=0.85).encode(
         x=x, y=y, color=color, detail="line:N", order="order:Q",
     )
-    points = base.mark_point(size=70, filled=True).encode(
+    every = max(1, -(-len(data) // MAX_HOVER_POINTS))
+    points = alt.Chart(data.iloc[::every]).mark_point(size=70, filled=True).encode(
         x=x, y=y, color=color, tooltip=tooltip,
         opacity=alt.condition(hover, alt.value(1.0), alt.value(0.0)),
     ).add_params(hover)

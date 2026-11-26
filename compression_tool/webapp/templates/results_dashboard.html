@@ -511,8 +511,6 @@ const UI = {
   cycleAxis:{en:"Cycle",de:"Zyklus"},
   stressStepAxis:{en:"Peak stress of the step (MPa)",de:"Spitzenspannung der Stufe (MPa)"},
   specimensLbl:{en:"Specimens",de:"Proben"},
-  forceKn:{en:"Force (kN)",de:"Kraft (kN)"},
-  localStiff:{en:"Local stiffness",de:"Lokale Steifigkeit"},
   stressAxis:{en:"Stress (MPa)",de:"Spannung (MPa)"},
   dispAxisUm:{en:"Displacement (µm)",de:"Verschiebung (µm)"},
   fewPoints:{en:"few points",de:"wenige Punkte"},
@@ -792,47 +790,14 @@ function loopChart(host, _spec, big=false, aspect=null){
   const yl=el("text",{x:0,y:0,class:"altl","text-anchor":"middle",
     transform:`translate(11 ${(m.t+H-m.b)/2}) rotate(-90)`},root);
   yl.textContent=L(UI.stressAxis);
-  // Every drawn point, kept with what the hover box needs. Local stiffness
-  // is the slope between a point's neighbours on the loading branch only
-  // (up to the cycle's highest stress); on the hold and the unloading branch
-  // a slope is not a stiffness, so none is shown there.
-  const hov=[];
   ser.forEach(s=>{
     SPS[s.key].cycles.forEach(c=>{
       if(!c.pts || !c.pts.length) return;
       const d=c.pts.map(p=>`${X(p[0]*DISP_SCALE).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(" L");
       el("path",{d:"M"+d,fill:"none",stroke:s.colour,"stroke-width":big?1.7:1.4,
         "stroke-linejoin":"round",opacity:.9,class:"loop-path"},root);
-      let top=0; c.pts.forEach((p,j)=>{ if(p[1]>c.pts[top][1]) top=j; });
-      c.pts.forEach((p,j)=>{
-        let kLoc=null;
-        if(j>0 && j<top){
-          const a=c.pts[j-1], b=c.pts[j+1], dx=b[0]-a[0];
-          if(dx>0) kLoc=(b[1]-a[1])/dx;
-        }
-        hov.push({x:X(p[0]*DISP_SCALE), y:Y(p[1]), p, kLoc, s, c});
-      });
     });
   });
-  const mark=el("circle",{r:big?5:4,fill:"none","stroke-width":2,style:"display:none;pointer-events:none"},root);
-  root.addEventListener("pointermove",ev=>{
-    const pt=root.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
-    const loc=pt.matrixTransform(root.getScreenCTM().inverse());
-    let best=null, bd=Infinity;
-    for(const h of hov){ const dd=(h.x-loc.x)**2+(h.y-loc.y)**2; if(dd<bd){bd=dd; best=h;} }
-    if(!best || bd>28*28){ mark.style.display="none"; hideTip(); return; }
-    mark.setAttribute("cx",best.x); mark.setAttribute("cy",best.y);
-    mark.setAttribute("stroke",best.s.colour); mark.style.display="";
-    const rowsTip=[
-      [L(UI.stressAxis), fmt(best.p[1],1)],
-      [L(UI.dispAxisUm), fmt(best.p[0]*DISP_SCALE,2)],
-    ];
-    if(best.p.length>2 && best.p[2]!=null) rowsTip.push([L(UI.forceKn), fmt(best.p[2],2)]);
-    if(best.kLoc!=null) rowsTip.push([L(UI.localStiff), fmt(best.kLoc,0)+" MPa/mm"]);
-    const lv=levelOf(best.c);
-    showTip(ev,`${best.s.name}${lv!=null?` · ${lv} MPa`:""}`,best.s.colour,rowsTip);
-  });
-  root.addEventListener("pointerleave",()=>{ mark.style.display="none"; hideTip(); });
 }
 
 /* the panels, in the order they are read.

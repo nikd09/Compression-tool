@@ -146,8 +146,26 @@ def test_raw_curves_can_be_narrowed_to_one_stress_step(
 
     at = _run(monkeypatch, workspace)
     assert not at.exception
-    step = at.selectbox(key="cmp_curve_step")
-    assert step.value is None  # all steps by default
-    assert len(step.options) > 2
-    step.set_value(step.options[-1]).run()
+    # Off by default: the heaviest part of the page is only drawn on request.
+    assert not [w for w in at.selectbox if w.key == "cmp_curve_step"]
+    at.checkbox(key="cmp_curves_show").check().run()
     assert not at.exception
+    step = at.selectbox(key="cmp_curve_step")
+    # Defaults to the highest step every group reached, not "all steps".
+    assert step.value is not None
+    assert len(step.options) > 2
+    step.set_value(step.options[0]).run()  # "All steps"
+    assert not at.exception
+
+
+def test_compare_starts_with_two_groups_however_many_materials(
+    monkeypatch, workspace, single_file, series_file, four_specimen_file
+):
+    ws = Workspace.at(workspace).ensure()
+    ingest([single_file], ws, material="MatA")
+    ingest([series_file], ws, material="MatB")
+    ingest([four_specimen_file], ws, material="MatC")
+
+    at = _run(monkeypatch, workspace)
+    assert not at.exception
+    assert at.number_input[0].value == 2
