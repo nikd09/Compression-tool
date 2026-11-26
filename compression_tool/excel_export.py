@@ -23,6 +23,8 @@ import pandas as pd
 import xlsxwriter
 
 from . import diagnostics
+from .naming import short_names
+from .timefmt import local_time
 from .schema import (
     CYCLE_BY_KEY,
     HOLD_DISP_RATE,
@@ -136,10 +138,10 @@ _COL_TEXT = {
               "und Materialien verwenden."},
     "Stiffness_relative_MPa_per_mm": {
         "en": "Slope of the loading curve between 25 % and 75 % of this cycle's "
-              "own peak stress (PL-0087). The range moves up with every step, so "
+              "own peak stress. The range moves up with every step, so "
               "do not compare different cycles on this value.",
         "de": "Steigung der Belastungskurve zwischen 25 % und 75 % der eigenen "
-              "Spitzenspannung dieses Zyklus (PL-0087). Der Bereich wandert mit "
+              "Spitzenspannung dieses Zyklus. Der Bereich wandert mit "
               "jeder Stufe nach oben, daher verschiedene Zyklen nicht über diesen "
               "Wert vergleichen."},
     "MaxDisp_mm": {
@@ -175,7 +177,7 @@ _COL_TEXT = {
 SUMMARY_KEYS = ("material", "source_filename", "displacement_channel", "h0_mm",
                 "d0_mm", "temperature_c", "n_cycles", "global_peak_mpa",
                 "residual_stress_mpa")
-TRACE_KEYS = ("specimen_id", "source_format", "source_sha256", "raw_input_path",
+TRACE_KEYS = ("label", "specimen_id", "source_format", "source_sha256", "raw_input_path",
               "n_points", "multi_stage", "created_utc")
 
 _FIELD_TEXT = {
@@ -205,6 +207,10 @@ _FIELD_TEXT = {
               "the permanent deformation is read.",
         "de": "Niedrige Spannung (standardmäßig 1 % der höchsten Spannung), bei "
               "der die bleibende Verformung abgelesen wird."},
+    "label": {"en": "Full specimen name as it is in the export. The other sheets "
+                    "use a short form of it.",
+              "de": "Vollständiger Probenname wie im Export. Die anderen Blätter "
+                    "verwenden eine Kurzform."},
     "specimen_id": {"en": "Fixed ID of the specimen in the library.",
                     "de": "Feste Kennung der Probe in der Bibliothek."},
     "source_format": {
@@ -224,8 +230,8 @@ _FIELD_TEXT = {
                  "de": "Anzahl verwendeter Messpunkte."},
     "multi_stage": {"en": "Yes when the cycles have different peak stresses (load steps).",
                     "de": "Ja, wenn die Zyklen unterschiedliche Spitzenspannungen haben (Laststufen)."},
-    "created_utc": {"en": "When the analysis was run (UTC).",
-                    "de": "Zeitpunkt der Auswertung (UTC)."},
+    "created_utc": {"en": "When the analysis was run (local time of the computer that saved it).",
+                    "de": "Zeitpunkt der Auswertung (Ortszeit des speichernden Rechners)."},
 }
 
 _SUMMARY_TOTAL_TEXT = {
@@ -269,6 +275,12 @@ def excel_cycle_columns(has_strain: bool) -> list[Column]:
         if col.key == "PermDef_cumulative_mm" and has_strain:
             out.append(replace(CYCLE_BY_KEY["PermDef_cumulative_pct"], internal=False))
     return out
+
+
+def _short_labels(payloads: Sequence[dict], lang: str) -> list[str]:
+    """Short specimen names for column headers and the Specimen column."""
+    return short_names(p.get("specimen", {}).get("label") or _t("specimen_n", lang, n=i + 1)
+                       for i, p in enumerate(payloads))
 
 
 def _stress_step(peak: Any) -> Optional[float]:
@@ -436,6 +448,9 @@ def traceability_pairs(payload: dict, lang: str = "en") -> list[tuple[str, Any]]
             if field.key == "multi_stage":
                 value = _t("yes" if value else "no", lang)
             label = _field_label(field, lang)
+            if field.key == "created_utc":
+                pairs.append((label, local_time(value)))
+                continue
             pairs.append((f"{label} ({field.unit})" if field.unit else label, value))
     basis = analysis.get("strain_basis") or {}
     if analysis.get("has_strain"):
@@ -530,8 +545,7 @@ def _write_summary(book, f, payloads: Sequence[dict], lang: str = "en") -> None:
     sheet.write(0, 0, _t("summary_title", lang), f["title"])
 
     columns = [summary_pairs(p, lang) for p in payloads]
-    labels = [p.get("specimen", {}).get("label", _t("specimen_n", lang, n=i + 1))
-              for i, p in enumerate(payloads)]
+    labels = _short_labels(payloads, lang)
 
     row0 = 2
     sheet.write(row0, 0, _t("field", lang), f["head"])
@@ -595,8 +609,8 @@ def _write_cycles(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -
 
     r = 1
     widths: dict[int, list[Any]] = {i: [] for i in range(len(cols))}
-    for payload in payloads:
-        label = payload.get("specimen", {}).get("label", "")
+    shorts = _short_labels(payloads, lang)
+    for payload, label in zip(payloads, shorts):
         for row in payload.get("cycles", []):
             if multi:
                 sheet.write(r, 0, label, f["text"])
@@ -616,7 +630,7 @@ def _write_cycles(book, f, numfmt, payloads: Sequence[dict], lang: str = "en") -
             r += 1
 
     if multi:
-        longest = max((len(p.get("specimen", {}).get("label", "")) for p in payloads), default=10)
+        longest = max((len(s) for s in shorts), default=10)
         sheet.set_column(0, 0, max(MIN_COL_WIDTH, min(MAX_COL_WIDTH, longest + 2)))
     for i, col in enumerate(cols):
         sheet.set_column(col0 + i, col0 + i, _width_for(_col_header(col, lang), widths[i]))
@@ -670,7 +684,8 @@ def _write_dictionary(book, f, payloads: Sequence[dict], lang: str = "en") -> No
         if field.key not in TRACE_KEYS:
             continue
         sheet.write(r, 0, _field_label(field, lang), f["text"])
-        sheet.write(r, 1, field.unit or "-", f["unit"])
+        unit = "-" if field.key == "created_utc" else (field.unit or "-")
+        sheet.write(r, 1, unit, f["unit"])
         sheet.write(r, 2, _field_desc(field, lang), f["wrap"])
         r += 1
 
@@ -716,8 +731,7 @@ def _write_traceability(book, f, payloads: Sequence[dict], lang: str = "en") -> 
     """Source file, check number and analysis time per specimen."""
     sheet = book.add_worksheet(_t("trace_sheet", lang))
     sheet.write(0, 0, _t("trace_title", lang), f["title"])
-    labels = [p.get("specimen", {}).get("label", _t("specimen_n", lang, n=i + 1))
-              for i, p in enumerate(payloads)]
+    labels = _short_labels(payloads, lang)
     columns = [traceability_pairs(p, lang) for p in payloads]
     row0 = 2
     sheet.write(row0, 0, _t("field", lang), f["head"])
@@ -819,8 +833,7 @@ def cycles_dataframe(payloads: Sequence[dict], *, with_specimen: bool = False, l
     cols = excel_cycle_columns(has_strain)
 
     rows = []
-    for payload in payloads:
-        label = payload.get("specimen", {}).get("label", "")
+    for payload, label in zip(payloads, _short_labels(payloads, lang)):
         for row in payload.get("cycles", []):
             record = {}
             if with_specimen:

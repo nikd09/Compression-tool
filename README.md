@@ -213,7 +213,7 @@ The JSON contract is frozen at schema_version 2 — see
   hold at peak" checkbox, or `--no-detect-holds` on the CLI -- for a test
   known to have no dwell, and every cycle reports no hold and no creep instead
   of a few false ones scattered through an otherwise hold-free test.
-- **Strain and modulus depend on the displacement channel.** PL-0087 always
+- **Strain and modulus depend on the displacement channel.** The test method always
   measures with the clip-on extensometer and a compliance correction, so that
   channel counts as confirmed. Every record carries a `strain_basis` block with
   `gauge_length_confirmed` and `strain_valid`, decided from the channel: the

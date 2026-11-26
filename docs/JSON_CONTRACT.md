@@ -100,7 +100,7 @@ meaning):
 | Code | Severity | Fires when |
 |---|---|---|
 | `machine_displacement_channel` | critical | Displacement comes from the machine travel (e.g. `Standardweg`), not the clip-on extensometer, so every displacement-based value includes the frame's own deformation. |
-| `seating_cycle_excluded` | info | A first, hold-free cycle well below the next step (the PL-0087 seating cycle) was left out of all results. Cycle 1 is the first programmed step. |
+| `seating_cycle_excluded` | info | A first, hold-free cycle well below the next step (the seating cycle) was left out of all results. Cycle 1 is the first programmed step. |
 | `gauge_length_unconfirmed` | critical | Retired, only in older records: the gauge length had not been confirmed. |
 | `no_gauge_length` | info | No h0, so strain keys are absent rather than estimated. |
 | `first_cycle_near_discard_threshold` | caution / critical | The smallest cycle clears `major_cycle_frac × global peak` by a thin margin. Losing cycle 1 rebases every cumulative figure. Escalates to `critical` within 5% of the cliff. |
@@ -145,7 +145,7 @@ itself a reading — see `StressAtMaxDisp_MPa` below.
 **Two stiffnesses, one comparable.** `Stiffness_common_*` uses an identical
 stress window in every cycle and may be compared across stages, specimens and
 materials. `Stiffness_relative_*` is fitted over 25–75 % of each cycle's own
-peak (PL-0087; `stiff_lo_frac`/`stiff_hi_frac` in the config) and rises as the
+peak (`stiff_lo_frac`/`stiff_hi_frac` in the config) and rises as the
 stages climb even when the material has not stiffened — never plot it across
 stages.
 

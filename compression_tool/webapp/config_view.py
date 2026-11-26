@@ -27,6 +27,7 @@ from ..material_export import export_material
 from ..persistence import Workspace, read_json, slugify
 from ..pipeline import ingest
 from ..reports_overview import build_overview
+from ..timefmt import local_time
 from .common import _CONFIG_FORM_T as _FORM_T
 from .common import config_form, dashboard_lang, short_tag, with_utm_animation
 
@@ -48,7 +49,7 @@ _T = {
     "specimens": {"en": "Specimens", "de": "Proben"},
     "sources": {"en": "Sources", "de": "Quellen"},
     "ingested_utc": {"en": 'Saved', "de": 'Gespeichert'},
-    "full_timestamp": {"en": "Full timestamp: {ts}", "de": "Vollständiger Zeitstempel: {ts}"},
+    "full_timestamp": {"en": "Saved on {ts}", "de": "Gespeichert am {ts}"},
     "sources_heading": {"en": "Sources", "de": "Quellen"},
     "none_recorded": {"en": "None recorded.", "de": "Keine erfasst."},
     "specimens_heading": {"en": "Specimens", "de": "Proben"},
@@ -261,8 +262,8 @@ def _render_run(manifest: dict, L) -> None:
         # column header via help text.
         created = manifest.get("created_utc", "-")
         c3.metric(
-            L("ingested_utc"), created[:10] if len(created) >= 10 else created,
-            help=L("full_timestamp", ts=created),
+            L("ingested_utc"), local_time(created, date_only=True),
+            help=L("full_timestamp", ts=local_time(created)),
         )
 
     st.markdown(f"##### {L('sources_heading')}")
@@ -351,7 +352,7 @@ def _render_activity(ws: Workspace, L) -> None:
     st.caption(L("activity_caption"))
     st.dataframe(
         pd.DataFrame({
-            L("col_time"): [e.get("timestamp_utc", "-") for e in entries],
+            L("col_time"): [local_time(e.get("timestamp_utc")) for e in entries],
             L("col_user"): [e.get("user", "-") for e in entries],
             L("col_host"): [e.get("host", "-") for e in entries],
             L("col_material"): [e.get("material", "-") for e in entries],

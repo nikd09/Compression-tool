@@ -17,7 +17,9 @@ from .. import knowledge_base
 from ..curve_cache import curve_cache_path_for, read_curve_cache
 from ..persistence import Workspace
 from ..schema import column_label_de, user_facing_cycle_columns
-from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot, short_tag
+from ..compare_export import compare_workbook
+from ..naming import short_name, short_names
+from .common import CATEGORICAL_LIGHT, connect_readonly, dashboard_lang, dot
 
 MAX_GROUPS = 6  # the categorical palette's practical ceiling for a compare view
 
@@ -95,6 +97,10 @@ _T = {
     "no_cycles": {"en": "No cycles for the selected specimens.",
         "de": "Keine Zyklen für die ausgewählten Proben."},
     "metric_label": {"en": "Metric", "de": "Kennzahl"},
+    "download_xlsx": {"en": "Download comparison (Excel)", "de": "Vergleich herunterladen (Excel)"},
+    "download_help": {
+        "en": "All six properties per group and stress step: mean, SD and number of values, plus which specimens are in each group.",
+        "de": "Alle sechs Kennwerte je Gruppe und Laststufe: Mittelwert, SD und Anzahl der Werte, dazu welche Proben in welcher Gruppe sind."},
     "no_values": {"en": "No values for {label} in the selected specimens.",
         "de": "Keine Werte für {label} in den ausgewählten Proben."},
     "spread_checkbox": {"en": "Show spread across specimens (±1 SD)",
@@ -262,7 +268,7 @@ def _curve_rows(
             except (FileNotFoundError, OSError, ValueError):
                 missing.append(str(row["label"]))
                 continue
-            tag = short_tag(str(row["label"]), 0)
+            tag = short_name(str(row["label"]))
             for cyc in cache.get("cycles", []):
                 n = int(cyc.get("cycle", 0))
                 lv = level_by_cycle.get((sid, n))
@@ -404,14 +410,10 @@ def render(ws: Workspace) -> None:
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
     material_by_id = dict(zip(specimens["specimen_id"], specimens["material"]))
     all_ids = list(specimens["specimen_id"])
-    tag_by_id = {
-        sid: short_tag(label_by_id[sid], i + 1) for i, sid in enumerate(all_ids)
-    }
+    short_by_id = dict(zip(all_ids, short_names(label_by_id[sid] for sid in all_ids)))
 
     def option_label(sid: str) -> str:
-        # Tag first, same reasoning as Results: it is what survives a
-        # truncated dropdown entry when specimens share a long filename.
-        return f"{tag_by_id[sid]} · {material_by_id.get(sid, '-')} - {label_by_id.get(sid, sid)}"
+        return f"{material_by_id.get(sid, '-')} · {short_by_id[sid]}"
 
     n_groups = st.number_input(
         L("groups_label"), min_value=1, max_value=MAX_GROUPS,
@@ -592,6 +594,13 @@ def render(ws: Workspace) -> None:
     st.dataframe(
         _headline_summary_table(df, groups, has_strain, L, lang),
         use_container_width=True, hide_index=True,
+    )
+    st.download_button(
+        L("download_xlsx"),
+        data=compare_workbook(df, groups, label_by_id, material_by_id, lang),
+        file_name="comparison_de.xlsx" if lang == "de" else "comparison.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help=L("download_help"), icon=":material/download:",
     )
 
     with st.expander(L("expander_title")):

@@ -16,6 +16,7 @@ from compression_tool import ingest
 from compression_tool.curve_cache import curve_cache_path_for, read_curve_cache
 from compression_tool.dashboard_data import MAX_SPECIMENS, build_dashboard_data
 from compression_tool.persistence import read_json
+from compression_tool.naming import short_name, short_names
 
 
 @pytest.fixture
@@ -34,10 +35,12 @@ def two_payloads(workspace, series_file):
     return out
 
 
-def test_single_specimen_gets_short_label_s1(one_payload):
+def test_single_specimen_gets_its_short_name(one_payload):
     payload, curve = one_payload
     data = build_dashboard_data([payload], [curve])
-    assert data["specimens"][0]["short"] == "S1"
+    label = payload["specimen"]["label"]
+    assert data["specimens"][0]["short"] == short_name(label)
+    assert data["specimens"][0]["label"] == label
 
 
 def test_two_specimens_get_s1_s2_in_order(two_payloads):
@@ -77,10 +80,12 @@ def test_four_specimens_ingest_and_index(four_payloads):
     assert len(four_payloads) == 4
 
 
-def test_four_specimens_get_sequential_short_labels(four_payloads):
+def test_four_specimens_get_distinct_short_names(four_payloads):
     data = build_dashboard_data([p for p, _ in four_payloads],
                                 [c for _, c in four_payloads])
-    assert [s["short"] for s in data["specimens"]] == ["S1", "S2", "S3", "S4"]
+    shorts = [s["short"] for s in data["specimens"]]
+    assert shorts == short_names(p["specimen"]["label"] for p, _ in four_payloads)
+    assert len(set(shorts)) == 4
 
 
 def test_every_one_of_four_keeps_its_own_cycles_and_curve(four_payloads):
@@ -107,7 +112,9 @@ def test_max_specimens_worth_of_records_is_accepted(one_payload):
     payload, curve = one_payload
     data = build_dashboard_data([payload] * MAX_SPECIMENS, [curve] * MAX_SPECIMENS)
     assert len(data["specimens"]) == MAX_SPECIMENS
-    assert data["specimens"][-1]["short"] == f"S{MAX_SPECIMENS}"
+    # The same record repeated: still a distinct name for every entry.
+    shorts = [s["short"] for s in data["specimens"]]
+    assert len(shorts) == MAX_SPECIMENS
 
 
 def test_no_payloads_is_rejected():

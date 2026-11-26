@@ -14,6 +14,7 @@ import streamlit as st
 from .. import audit
 from .. import knowledge_base
 from ..persistence import Workspace, read_json
+from ..timefmt import local_time
 from .common import connect_readonly, dashboard_lang
 
 # A diagnostic scan, not a full workspace audit: bounded to the most
@@ -171,6 +172,6 @@ def _render_recent_activity(ws: Workspace, L) -> None:
         for e in entries:
             st.caption(L(
                 "ingested_n_into",
-                time=e.get("timestamp_utc", "-"), user=e.get("user", "-"),
+                time=local_time(e.get("timestamp_utc")), user=e.get("user", "-"),
                 n=len(e.get("specimens", [])), material=e.get("material", "-"),
             ))

@@ -244,7 +244,7 @@ CYCLE_COLUMNS: tuple[Column, ...] = (
     Column(
         "Stiffness_relative_MPa_per_mm", "REAL", "Stiffness (relative band)", "MPa/mm",
         "Slope of the loading branch between 25 % and 75 % of THIS cycle's "
-        "own peak stress (the stiffness window in the thresholds; PL-0087). "
+        "own peak stress (the stiffness window in the thresholds). "
         "Describes each step at its own load level, so it is NOT comparable "
         "across cycles of a multi-stage test: the window moves up with each "
         "step's peak.",
@@ -640,7 +640,7 @@ COLUMN_DESCRIPTIONS_DE: dict[str, str] = {
         "gekrümmt war, sodass eine einzelne Steigung ihn nicht beschreibt.",
     "Stiffness_relative_MPa_per_mm": "Steigung des Belastungsastes zwischen "
         "25 % und 75 % der eigenen Spitzenspannung DIESES Zyklus (das "
-        "Steifigkeitsfenster in den Schwellenwerten; PL-0087). Beschreibt "
+        "Steifigkeitsfenster in den Schwellenwerten). Beschreibt "
         "jede Stufe auf ihrem eigenen Lastniveau und ist deshalb NICHT über "
         "Zyklen einer mehrstufigen Prüfung vergleichbar: das Fenster wandert "
         "mit der Spitze jeder Stufe nach oben.",

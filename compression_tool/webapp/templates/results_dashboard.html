@@ -842,12 +842,12 @@ const PANELS=[
    f:v=>v>=1000?(v/1000).toFixed(1)+"k":fmt(v,0), u2:"MPa/mm",
    q:{n:"kRelN", r2:"kRelR2"},
    why:{en:"Slope of the loading branch between the stiffness-window fractions (default "+
-       "25-75 %, PL-0087) of THIS cycle's own peak. Describes each step at its own load level, "+
+       "25-75 %) of THIS cycle's own peak. Describes each step at its own load level, "+
        "so it is NOT comparable across steps: the window moves up with each step's peak. A "+
        "hatched, dimmed bar means the fit behind it is thin or curved -- same rule as the "+
        "common band.",
    de:"Steigung des Belastungsastes zwischen den Anteilen des Steifigkeitsfensters (Standard "+
-       "25-75 %, PL-0087) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem "+
+       "25-75 %) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem "+
        "eigenen Lastniveau und ist deshalb NICHT über Stufen vergleichbar: das Fenster wandert "+
        "mit der Spitze jeder Stufe nach oben. Ein schraffierter, abgedunkelter Balken bedeutet dieselbe "+
        "Einschränkung wie beim gemeinsamen Fenster."}},
@@ -1256,8 +1256,8 @@ const DEFS=[
    {en:"Slope of the loading branch fitted over an IDENTICAL stress window in every cycle, located once on the smallest-peak cycle's most linear region (see Settings above). This is the form that may be compared across stages, specimens and materials.",
     de:"Steigung des Belastungsastes über ein IDENTISCHES Spannungsfenster in jedem Zyklus, einmalig im linearsten Bereich des Zyklus mit der kleinsten Spitze bestimmt (siehe Einstellungen oben). Diese Form darf über Stufen, Proben und Materialien hinweg verglichen werden."}],
   [{en:"Stiffness, relative band",de:"Steifigkeit, eigenes Fenster"},"MPa/mm",
-   {en:"Slope of the loading branch between the stiffness-window fractions (default 25-75 %, PL-0087) of THIS cycle's own peak. Describes each step at its own load level, so it is NOT comparable across cycles: the window moves up with each step's peak.",
-    de:"Steigung des Belastungsastes zwischen den Anteilen des Steifigkeitsfensters (Standard 25-75 %, PL-0087) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem eigenen Lastniveau und ist deshalb NICHT über Zyklen vergleichbar: das Fenster wandert mit der Spitze jeder Stufe nach oben."}],
+   {en:"Slope of the loading branch between the stiffness-window fractions (default 25-75 %) of THIS cycle's own peak. Describes each step at its own load level, so it is NOT comparable across cycles: the window moves up with each step's peak.",
+    de:"Steigung des Belastungsastes zwischen den Anteilen des Steifigkeitsfensters (Standard 25-75 %) der eigenen Spitze DIESES Zyklus. Beschreibt jede Stufe auf ihrem eigenen Lastniveau und ist deshalb NICHT über Zyklen vergleichbar: das Fenster wandert mit der Spitze jeder Stufe nach oben."}],
   [{en:"Maximum displacement",de:"Maximaler Weg"},"mm",
    {en:"Largest displacement reached in the cycle, and the point the energy integrals split the loop at. Exceeds the displacement at peak stress by however much the specimen crept while the load was held.",
     de:"Größter in diesem Zyklus erreichter Weg, und der Punkt, an dem die Energieintegrale die Schleife teilen. Übersteigt den Weg bei Spitzenspannung um so viel, wie die Probe während des Haltens weiterkroch."}],
@@ -1294,8 +1294,8 @@ function renderMethod(){
       <td>${L({en:"auto-located once on the reference (smallest-peak) cycle's own most-linear region, reused as this same absolute window on every cycle",
         de:"einmalig im linearsten Bereich des Referenzzyklus (kleinste Spitzenspannung) bestimmt, danach als dasselbe absolute Fenster auf jeden Zyklus angewendet"})}</td></tr>
     <tr><td>${L({en:"Stiffness window (relative band)",de:"Steifigkeitsfenster (eigenes Fenster)"})}</td><td>${(cfg.stiff_lo_frac*100).toFixed(0)}-${(cfg.stiff_hi_frac*100).toFixed(0)}%</td>
-      <td>${L({en:"of each cycle's own peak, the window the relative-band stiffness is fitted over (PL-0087)",
-        de:"der eigenen Spitze jedes Zyklus, das Fenster für die Steifigkeit im eigenen Fenster (PL-0087)"})}</td></tr>
+      <td>${L({en:"of each cycle's own peak, the window the relative-band stiffness is fitted over",
+        de:"der eigenen Spitze jedes Zyklus, das Fenster für die Steifigkeit im eigenen Fenster"})}</td></tr>
     <tr><td>${L({en:"Reference stress",de:"Referenzspannung"})}</td><td>${(cfg.residual_stress_frac*100).toFixed(0)}%</td>
       <td>${L({en:`of global peak = ${fmt(s.residStress,1)} MPa, above the contact-loss baseline -- the one reference stress, used both for permanent deformation and for cross-cycle comparison`,
         de:`der globalen Spitze = ${fmt(s.residStress,1)} MPa, oberhalb der Kontaktverlust-Grundlinie -- die eine Referenzspannung, verwendet sowohl für die bleibende Verformung als auch für den Zyklenvergleich`})}</td></tr>

@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .schema import hold_disp_per_1000_samples, unload_yield_frac
+from .naming import short_names
 
 # The template carries eight validated categorical slots, assigned to specimens
 # in fixed order. Past eight a slot would have to be reused, and two specimens
@@ -119,7 +120,8 @@ def build_dashboard_data(
             f"{len(curves)} curves"
         )
 
-    shorts = [f"S{i + 1}" for i in range(len(payloads))]
+    shorts = short_names(p.get("specimen", {}).get("label") or f"S{i + 1}"
+                         for i, p in enumerate(payloads))
     specimens = [
         _specimen_block(p, c, s) for p, c, s in zip(payloads, curves, shorts)
     ]

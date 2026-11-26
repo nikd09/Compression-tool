@@ -147,14 +147,14 @@ _CONFIG_FORM_T = {
     "stiff_lo": {"en": "Stiffness window start", "de": "Steifigkeitsfenster Anfang"},
     "stiff_lo_help": {
         "en": "Start of the relative-band stiffness window, as a fraction of each "
-              "cycle's own peak (PL-0087: 0.25).",
+              "cycle's own peak (default 0.25).",
         "de": "Anfang des Fensters für die Steifigkeit (eigenes Fenster), als "
-              "Anteil der eigenen Spitze jedes Zyklus (PL-0087: 0,25)."},
+              "Anteil der eigenen Spitze jedes Zyklus (Standard 0,25)."},
     "stiff_hi": {"en": "Stiffness window end", "de": "Steifigkeitsfenster Ende"},
     "stiff_hi_help": {"en": "End of the relative-band stiffness window, as a fraction of "
-              "each cycle's own peak (PL-0087: 0.75).",
+              "each cycle's own peak (default 0.75).",
         "de": "Ende des Fensters für die Steifigkeit (eigenes Fenster), als Anteil "
-              "der eigenen Spitze jedes Zyklus (PL-0087: 0,75)."},
+              "der eigenen Spitze jedes Zyklus (Standard 0,75)."},
     "reference_stress": {"en": "Reference stress", "de": "Referenzspannung"},
     "reference_stress_help": {
         "en": "The one low, test-wide reference stress (fraction of the global "

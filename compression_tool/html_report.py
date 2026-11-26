@@ -20,6 +20,7 @@ from typing import Any, Optional, Sequence
 from . import diagnostics
 from .excel_export import cross_specimen_stats, row_values, summary_pairs, traceability_pairs
 from .schema import STIFFNESS_QUALITY, user_facing_cycle_columns
+from .timefmt import local_time
 
 _CSS = """
 :root{--bg:#ffffff;--fg:#1a1d21;--muted:#5b6673;--line:#e3e7ec;--head:#1f3864;
@@ -95,7 +96,7 @@ def render(payloads: Sequence[dict], *, title: Optional[str] = None) -> str:
         f"<title>{_esc(heading)}</title><style>{_CSS}</style></head><body><div class='wrap'>",
         f"<h1>{_esc(heading)}</h1>",
         f"<p class='sub'>{len(payloads)} specimen{'s' if multi else ''}"
-        f" &middot; analysed {_esc(payloads[0].get('created_utc', ''))}</p>",
+        f" &middot; analysed {_esc(local_time(payloads[0].get('created_utc')))}</p>",
     ]
 
     # --- summary -------------------------------------------------------------

@@ -23,6 +23,7 @@ from compression_tool.excel_export import (
 )
 from compression_tool.html_report import render
 from compression_tool.persistence import read_json
+from compression_tool.naming import short_names
 from compression_tool.schema import (
     QUALITY_MIN_POINTS,
     QUALITY_MIN_R2,
@@ -120,7 +121,7 @@ def test_multi_specimen_workbook_labels_each_row(tmp_path, payloads):
 
     assert sheet.cell(row=1, column=1).value == "Specimen"
     labels = {sheet.cell(row=r, column=1).value for r in range(2, sheet.max_row + 1)}
-    assert labels == {p["specimen"]["label"] for p in payloads}
+    assert labels == set(short_names(p["specimen"]["label"] for p in payloads))
     assert sheet.max_row == 1 + sum(len(p["cycles"]) for p in payloads)
 
 
@@ -130,7 +131,7 @@ def test_summary_compares_specimens_side_by_side(tmp_path, payloads):
 
     header = [c.value for c in sheet[3]]
     assert header[0] == "Field"
-    assert set(header[1:]) == {p["specimen"]["label"] for p in payloads}
+    assert set(header[1:]) == set(short_names(p["specimen"]["label"] for p in payloads))
 
     fields = {sheet.cell(row=r, column=1).value for r in range(4, sheet.max_row + 1)}
     assert "Specimen height h0 (mm)" in fields

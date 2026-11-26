@@ -18,6 +18,7 @@ from ..material_admin import delete_material, rename_material
 from ..material_export import export_material
 from ..persistence import Workspace, slugify
 from ..reports_overview import material_rows
+from ..timefmt import local_time
 from .common import dashboard_lang, inject_dashboard_lang
 
 # EN/DE strings for this page's own chrome -- not the embedded dashboard
@@ -253,7 +254,7 @@ def render(ws: Workspace) -> None:
                             clicked_material = row["material"]
                     with added_col:
                         added = row["dateAdded"]
-                        added = added[:10] if len(added) >= 10 else added
+                        added = local_time(added, date_only=True)
                         # No "Added " prefix and white-space:nowrap -- with the
                         # label there, "Added 2026-08-26" wrapped inside this
                         # narrow a column (a grid cell now, not a full-width row),
