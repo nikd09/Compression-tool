@@ -84,7 +84,8 @@ def compare_workbook(
     for i, h in enumerate((t("group"), t("material"), t("specimen"), t("full_name"))):
         sheet.write(3, i, h, head)
     all_ids = list(dict.fromkeys(sid for g in groups for sid in g["ids"]))
-    short = dict(zip(all_ids, short_names(label_by_id.get(s, s) for s in all_ids)))
+    short = dict(zip(all_ids, short_names((label_by_id.get(s, s) for s in all_ids),
+                                          (material_by_id.get(s) for s in all_ids))))
     r = 4
     for g in groups:
         for sid in g["ids"]:

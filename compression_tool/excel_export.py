@@ -279,8 +279,9 @@ def excel_cycle_columns(has_strain: bool) -> list[Column]:
 
 def _short_labels(payloads: Sequence[dict], lang: str) -> list[str]:
     """Short specimen names for column headers and the Specimen column."""
-    return short_names(p.get("specimen", {}).get("label") or _t("specimen_n", lang, n=i + 1)
-                       for i, p in enumerate(payloads))
+    return short_names((p.get("specimen", {}).get("label") or _t("specimen_n", lang, n=i + 1)
+                        for i, p in enumerate(payloads)),
+                       (p.get("specimen", {}).get("material") for p in payloads))
 
 
 def _stress_step(peak: Any) -> Optional[float]:

@@ -53,10 +53,20 @@ def test_compare_workbook_gives_mean_sd_and_n_per_group_and_step():
     assert book.sheetnames == ["Groups", "Stiffness common", "Max displacement"]
 
     groups_sheet = [r for r in book["Groups"].iter_rows(min_row=5, values_only=True)]
-    assert groups_sheet[0][:3] == ("G1", "M1", "M1 · S1")
+    assert groups_sheet[0][:4] == ("G1", "M1", "S1", "M1 compression test_S1")
 
     rows = list(book["Stiffness common"].iter_rows(min_row=3, values_only=True))
     assert rows[0][:7] == ("Stress step (MPa)", "G1 mean", "G1 SD", "G1 n", "G2 mean", "G2 SD", "G2 n")
     assert rows[1][:7] == (50, 110, 10, 2, 200, 0, 1)
     assert rows[2][:4] == (100, 120, 10, 2)
     assert rows[2][4] is None  # G2 never reached 100 MPa
+
+
+def test_short_name_leaves_out_the_material_and_mehrstufen():
+    label = "Druckversuch Mehrstufen_TALC050AN1_S1"
+    assert short_name(label, "TALC050AN1") == "S1"
+    assert short_name(label) == "TALC050AN1 · S1"
+    # Only the whole material name is removed, never part of a longer one.
+    assert short_name("Mat-10 compression test_S2", "Mat-1") == "Mat-10 · S2"
+    # A second file of the same material keeps what tells it apart.
+    assert short_name("Druckversuch Mehrstufen_TALC050AN1_2_S1", "TALC050AN1") == "2 · S1"

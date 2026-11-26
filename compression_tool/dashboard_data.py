@@ -120,8 +120,9 @@ def build_dashboard_data(
             f"{len(curves)} curves"
         )
 
-    shorts = short_names(p.get("specimen", {}).get("label") or f"S{i + 1}"
-                         for i, p in enumerate(payloads))
+    shorts = short_names((p.get("specimen", {}).get("label") or f"S{i + 1}"
+                          for i, p in enumerate(payloads)),
+                         (p.get("specimen", {}).get("material") for p in payloads))
     specimens = [
         _specimen_block(p, c, s) for p, c, s in zip(payloads, curves, shorts)
     ]
@@ -132,5 +133,6 @@ def build_dashboard_data(
         "warnings": first["analysis"].get("warnings", []),
         "strainBasis": first["analysis"].get("strain_basis", {}),
         "sourceFilename": first["specimen"].get("source_filename"),
+        "material": first["specimen"].get("material"),
         "config": first["config"],
     }

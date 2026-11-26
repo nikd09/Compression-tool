@@ -93,10 +93,16 @@ def render(ws: Workspace) -> None:
         st.info(L("no_material_specimens"))
         return
 
+    # Newest run first, then S1, S2, ... S10 in number order within a run.
+    specimens = specimens.assign(
+        _day=specimens["created_utc"].astype(str).str[:10],
+        _num=specimens["label"].astype(str).str.extract(r"(\d+)\s*$")[0].astype(float),
+    ).sort_values(["_day", "_num", "label"], ascending=[False, True, True])
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
     # Short names ('Demo-A · S1'): the file part that tells files apart and
     # the specimen number, without the long words every export repeats.
-    short_by_id = dict(zip(label_by_id, short_names(label_by_id.values())))
+    short_by_id = dict(zip(label_by_id, short_names(label_by_id.values(),
+                                                    [material] * len(label_by_id))))
     default = list(label_by_id)[:COMFORTABLE_SPECIMENS]
     chosen = st.multiselect(
         L("specimens", n=MAX_SPECIMENS),

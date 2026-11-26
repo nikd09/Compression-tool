@@ -1339,7 +1339,7 @@ document.querySelectorAll('[role="tab"]').forEach(t=>{
 
 function renderHead(){
   const s=SPS[0];
-  $("#title").textContent = (DATA.sourceFilename||L(UI.defaultTitle)).replace(/\.xlsx$/i,"");
+  $("#title").textContent = DATA.material || (DATA.sourceFilename||L(UI.defaultTitle)).replace(/\.xlsx$/i,"");
   if(!s){ $("#meta").innerHTML=""; return; }
   const meta=[[L(UI.specimensLbl),SPS.length],[L(UI.cyclesLbl),NC],
     [L(UI.peakLbl),fmt(s.globalPeak,1)+" MPa"],["h₀",fmt(s.h0)+" mm"],["d₀",fmt(s.d0)+" mm"],

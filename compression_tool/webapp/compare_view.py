@@ -268,7 +268,7 @@ def _curve_rows(
             except (FileNotFoundError, OSError, ValueError):
                 missing.append(str(row["label"]))
                 continue
-            tag = short_name(str(row["label"]))
+            tag = f"{row['material']} · {short_name(str(row['label']), row['material'])}"
             for cyc in cache.get("cycles", []):
                 n = int(cyc.get("cycle", 0))
                 lv = level_by_cycle.get((sid, n))
@@ -410,7 +410,8 @@ def render(ws: Workspace) -> None:
     label_by_id = dict(zip(specimens["specimen_id"], specimens["label"]))
     material_by_id = dict(zip(specimens["specimen_id"], specimens["material"]))
     all_ids = list(specimens["specimen_id"])
-    short_by_id = dict(zip(all_ids, short_names(label_by_id[sid] for sid in all_ids)))
+    short_by_id = dict(zip(all_ids, short_names((label_by_id[sid] for sid in all_ids),
+                                                (material_by_id.get(sid) for sid in all_ids))))
 
     def option_label(sid: str) -> str:
         return f"{material_by_id.get(sid, '-')} · {short_by_id[sid]}"
